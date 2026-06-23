@@ -558,9 +558,11 @@ function renderStudents(){
   $('studentCount').textContent = state.students.length;
   $('rosterEmpty').style.display = state.students.length ? 'none' : 'block';
   const deskNo = deskNumbers();
+  const seatByName={};                       // name -> deskId, built once (avoids a scan per student)
+  for(const id in state.assignment) seatByName[state.assignment[id]]=id;
   for(const name of state.students){
     const li=document.createElement('li');
-    const seatId=seatOf(name);
+    const seatId=seatByName[name];
     const tag = seatId!=null ? `<span class="seat-tag">desk ${deskNo[seatId]||'?'}</span>` : '';
     li.innerHTML = `<span class="nm"></span>${tag}<button class="xbtn" title="Remove">×</button>`;
     li.querySelector('.nm').textContent=name;
@@ -758,6 +760,9 @@ function drawLinks(){
     svg.appendChild(ln);
   }
 }
+let _linkRAF=0;
+// Coalesce link redraws to one per frame while dragging / sliding.
+function scheduleLinks(){ if(_linkRAF) return; _linkRAF=requestAnimationFrame(()=>{ _linkRAF=0; drawLinks(); }); }
 
 /* ---- item interaction: drag-to-move / drag-to-swap / click-select ---- */
 function attachDragHandlers(el, item, kind){
@@ -787,7 +792,7 @@ function attachDragHandlers(el, item, kind){
         let nx=clamp(snapVal(ev.clientX-roomRect.left-offX),0,state.settings.roomW-sz.w);
         let ny=clamp(snapVal(ev.clientY-roomRect.top-offY),0,state.settings.roomH-sz.h);
         item.x=nx; item.y=ny; el.style.left=nx+'px'; el.style.top=ny+'px';
-        if(kind==='desk' && showLinks) drawLinks();
+        if(kind==='desk' && showLinks) scheduleLinks();
       }
     };
     const up=ev=>{
@@ -827,14 +832,32 @@ function deskAtPoint(cx,cy){
 function isSel(kind,id){ return sel && sel.kind===kind && sel.id===id; }
 function selectItem(kind,id){
   if(isSel(kind,id)) sel=null; else sel={kind,id};
-  renderRoom();
+  applySelectionStyles();
+}
+// Toggle the .selected outline on existing nodes instead of rebuilding the room.
+function applySelectionStyles(){
+  $('room').querySelectorAll('.desk,.feature').forEach(n=>{
+    const kind = n.classList.contains('feature') ? 'feature' : 'desk';
+    n.classList.toggle('selected', isSel(kind, n.dataset.id));
+  });
+  updateSelUI();
+}
+// Push one item's position/size to its existing node (used for nudge & rotate).
+function syncItemNode(kind,item){
+  const node=$('room').querySelector('.'+kind+'[data-id="'+item.id+'"]');
+  if(!node) return;
+  const s=sizeOf(kind,item);
+  node.style.left=item.x+'px'; node.style.top=item.y+'px';
+  node.style.width=s.w+'px'; node.style.height=s.h+'px';
 }
 function rotateSelected(){
   if(!sel) return;
   const list = sel.kind==='desk' ? state.desks : state.features;
   const item = list.find(x=>x.id===sel.id); if(!item) return;
   item.v=!item.v; clampItem(sel.kind,item);
-  renderRoom();
+  syncItemNode(sel.kind,item);
+  if(sel.kind==='desk' && showLinks) scheduleLinks();
+  updateSelUI();
 }
 function removeSelected(){
   if(!sel) return;
@@ -1170,7 +1193,7 @@ $('clearDesksBtn').addEventListener('click',()=>{
   if(sel && sel.kind==='desk') sel=null;
   renderRoom(); renderStatus(); renderStudents();
 });
-$('neighborDist').addEventListener('input',e=>{ state.settings.neighborDist=+e.target.value; $('ndVal').textContent=e.target.value; drawLinks(); });
+$('neighborDist').addEventListener('input',e=>{ state.settings.neighborDist=+e.target.value; $('ndVal').textContent=e.target.value; scheduleLinks(); });
 $('showLinks').addEventListener('change',e=>{ showLinks=e.target.checked; drawLinks(); });
 $('snap').addEventListener('change',e=>{ state.settings.snap=e.target.checked; });
 
@@ -1222,7 +1245,7 @@ $('room').addEventListener('dblclick',e=>{
   addDesk(e.clientX-r.left, e.clientY-r.top);
 });
 $('room').addEventListener('pointerdown',e=>{
-  if(!e.target.closest('.desk,.feature') && sel){ sel=null; renderRoom(); }
+  if(!e.target.closest('.desk,.feature') && sel){ sel=null; applySelectionStyles(); }
 });
 
 // keyboard: nudge / rotate / delete the selected item (desk or feature)
@@ -1241,7 +1264,9 @@ window.addEventListener('keydown',e=>{
   const s=sizeOf(sel.kind,item);
   item.x=clamp(item.x+dx,0,state.settings.roomW-s.w);
   item.y=clamp(item.y+dy,0,state.settings.roomH-s.h);
-  renderRoom(); e.preventDefault();
+  syncItemNode(sel.kind,item);
+  if(sel.kind==='desk' && showLinks) scheduleLinks();
+  e.preventDefault();
 });
 
 /* ---------------- Init ---------------- */
