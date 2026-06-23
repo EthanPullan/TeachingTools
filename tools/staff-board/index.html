@@ -182,10 +182,19 @@
     display:flex;align-items:center;justify-content:center;padding:0;}
   .cal-day:hover{background:var(--panel-2);}
   .cal-day.dim{color:rgba(40,24,8,.3);}
+  /* hardcoded school calendar: closed days shaded grey (like the source PDF) */
+  .cal-day.closed{background:#e4ded2;color:rgba(40,24,8,.5);}
+  .cal-day.closed:hover{background:#dcd5c6;}
+  .cal-day.closed.dim{background:#eee9e0;color:rgba(40,24,8,.28);}
+  /* first / last day of school — small green flag */
+  .cal-day.school-hi{color:var(--ok);font-weight:700;}
+  .cal-day.school-hi::before{content:"";position:absolute;top:3px;left:50%;transform:translateX(-50%);
+    width:5px;height:5px;border-radius:50%;background:var(--ok);}
   .cal-day.today{box-shadow:inset 0 0 0 2px var(--accent);font-weight:700;}
   .cal-day.marked::after{content:"";position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
     width:5px;height:5px;border-radius:50%;background:var(--danger);}
-  .cal-foot{display:flex;align-items:center;gap:8px;margin-top:9px;flex:none;
+  .cal-hint{font-size:9.5px;color:var(--muted);margin-top:7px;flex:none;letter-spacing:.02em;}
+  .cal-foot{display:flex;align-items:center;gap:8px;margin-top:6px;flex:none;
     font-size:10.5px;color:var(--muted);}
   .cal-foot .lab{letter-spacing:.06em;text-transform:uppercase;font-weight:700;}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
@@ -299,8 +308,10 @@
    • The calendar's first day of week follows the BROWSER/system default
      (Intl.Locale weekInfo) — Monday in much of the world, Sunday in the
      US etc. Each calendar's Auto/Sun/Mon toggle can override it.
-   • The countdown counts whole calendar days to a hardcoded target
-     (COUNTDOWN_TARGET); school-day-only counting is a future TODO.
+   • The countdown counts INSTRUCTIONAL days remaining to the last day of
+     school, using the hardcoded CBE 2026–27 calendar (holidays/breaks/PD
+     days). A day that has begun no longer counts. Those closures are also
+     shaded grey on the month calendar.
    • State auto-saves to this browser (localStorage). No network, no
      accounts. Export/Import moves a board between machines as a file.
    ===================================================================== */
@@ -321,9 +332,73 @@ const PINS = [
   {c:'#7a52c0', d:'#553a87'}, // violet
 ];
 
-// Hardcoded countdown target. Month is 0-based, so 5 = June.
-// TODO: per-card date picker + school-day-only counting (skip weekends/holidays).
-const COUNTDOWN_TARGET = new Date(2027, 5, 25);   // 25 June 2027
+/* ---- CBE 2026–2027 Instructional Calendar (hardcoded from the official PDF) ----
+   School runs Mon 31 Aug 2026 → Fri 25 Jun 2027 = 181 instructional days.
+   The countdown counts instructional days only; a day that has already begun
+   no longer counts (we start from tomorrow). To roll this forward to a new
+   school year, edit SCHOOL_START / SCHOOL_END / SCHOOL_CLOSURES below. */
+const SCHOOL_START = new Date(2026, 7, 31);   // 31 Aug 2026 — first day of school
+const SCHOOL_END   = new Date(2027, 5, 25);   // 25 Jun 2027 — last day of school
+const COUNTDOWN_TARGET = SCHOOL_END;          // the countdown's destination
+
+// Closed / non-instructional days — single date or inclusive {from,to} range.
+// (Aug 26–28 and Jun 28–29 sit outside the student instructional window, so
+//  they only shade the calendar — they never affect the day count.)
+const SCHOOL_CLOSURES = [
+  { from:'2026-08-26', to:'2026-08-28', name:'Non-instruction days' },
+  { from:'2026-09-07', name:'Labour Day' },
+  { from:'2026-09-25', name:'Non-instruction day' },
+  { from:'2026-09-30', name:'National Day for Truth and Reconciliation' },
+  { from:'2026-10-12', name:'Thanksgiving Day' },
+  { from:'2026-10-19', name:'Non-instruction day' },
+  { from:'2026-11-11', to:'2026-11-15', name:'Fall Break' },            // incl. Remembrance Day
+  { from:'2026-11-27', name:'Non-instruction day' },
+  { from:'2026-12-19', to:'2027-01-03', name:'Winter Break' },
+  { from:'2027-01-29', name:'System Professional Learning day' },
+  { from:'2027-02-11', to:'2027-02-12', name:'Non-instruction days' },
+  { from:'2027-02-15', name:'Family Day' },
+  { from:'2027-02-26', name:'Non-instruction day' },
+  { from:'2027-03-19', name:'Non-instruction day' },
+  { from:'2027-03-20', to:'2027-03-29', name:'Spring Break' },          // incl. Good Friday
+  { from:'2027-04-30', name:'MaatoomsiPookaiks / Professional Learning day' },
+  { from:'2027-05-21', name:'Non-instruction day' },
+  { from:'2027-05-24', name:'Victoria Day' },
+  { from:'2027-06-28', to:'2027-06-29', name:'Non-instruction days' },
+];
+// Notable instructional days to highlight on the calendar.
+const SCHOOL_HIGHLIGHTS = { '2026-7-31':'First day of school', '2027-5-25':'Last day of school' };
+
+// dateKey uses a 0-based month so it matches the calendar grid's own keys.
+const dkey = d => d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
+const isoToDate = s => { const [Y,M,D]=s.split('-').map(Number); return new Date(Y,M-1,D); };
+// Expand the closures into dateKey -> label.
+const SCHOOL_CLOSED = (()=>{
+  const m = new Map();
+  for(const c of SCHOOL_CLOSURES){
+    const a=isoToDate(c.from), b=c.to?isoToDate(c.to):isoToDate(c.from);
+    for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)) m.set(dkey(d), c.name);
+  }
+  return m;
+})();
+
+// Is `d` a school instructional day? (in range, a weekday, not a closure)
+function isInstructional(d){
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if(x < SCHOOL_START || x > SCHOOL_END) return false;
+  const wd = x.getDay();
+  if(wd===0 || wd===6) return false;
+  return !SCHOOL_CLOSED.has(dkey(x));
+}
+// Instructional days remaining: strictly AFTER today (today has begun, so it's
+// no longer counted), through the last day of school.
+function instructionalDaysLeft(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  let d = new Date(today); d.setDate(d.getDate()+1);     // start counting tomorrow
+  if(d < SCHOOL_START) d = new Date(SCHOOL_START);
+  let n = 0;
+  for(; d <= SCHOOL_END; d.setDate(d.getDate()+1)) if(isInstructional(d)) n++;
+  return n;
+}
 
 // Default + minimum sizes per item type (used by create + resize). h:null = grow
 // to fit content until the user drags the corner.
@@ -471,7 +546,7 @@ function addCal(){
 function addCount(){
   const pos = nextPos();
   const item = { id:uid(), type:'count', x:pos.x, y:pos.y, w:SIZE.count.w, h:SIZE.count.h,
-    rot:rand(-2.4,2.4), z:++state.z, pin:pickPin(), title:'Countdown' };
+    rot:rand(-2.4,2.4), z:++state.z, pin:pickPin(), title:'Last day of school' };
   state.items.push(item);
   mountCard(item, true);
   updateStatus(); save();
@@ -646,6 +721,10 @@ function buildCal(item, inner){
   const grid = document.createElement('div'); grid.className='cal-grid';
   inner.appendChild(grid);
 
+  const hint = document.createElement('div'); hint.className='cal-hint';
+  hint.textContent = 'Grey = no school · CBE 2026–27';
+  inner.appendChild(hint);
+
   const foot = document.createElement('div'); foot.className='cal-foot';
   const lab = document.createElement('span'); lab.className='lab'; lab.textContent='Week starts';
   const seg = document.createElement('div'); seg.className='seg';
@@ -703,9 +782,18 @@ function buildCal(item, inner){
       const inMonth = d.getMonth()===item.month;
       if(!inMonth) cell.classList.add('dim');
       if(+d===+today) cell.classList.add('today');
-      const key = d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
+      const key = dkey(d);
       if(item.marks[key]) cell.classList.add('marked');
-      cell.setAttribute('aria-label', d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'}));
+      // hardcoded school calendar: shade closures grey, flag first/last day
+      const closedName = SCHOOL_CLOSED.get(key);
+      const highlight  = SCHOOL_HIGHLIGHTS[key];
+      if(closedName) cell.classList.add('closed');
+      if(highlight)  cell.classList.add('school-hi');
+      let label = d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'});
+      if(closedName) label += ' — ' + closedName;
+      else if(highlight) label += ' — ' + highlight;
+      cell.setAttribute('aria-label', label);
+      if(closedName || highlight) cell.title = closedName || highlight;
       cell.addEventListener('click', ()=>{
         if(item.marks[key]){ delete item.marks[key]; cell.classList.remove('marked'); }
         else { item.marks[key]=true; cell.classList.add('marked'); }
@@ -717,13 +805,7 @@ function buildCal(item, inner){
   render();
 }
 
-/* ---------------- day countdown ---------------- */
-// Whole days from local "today" to the target (rounded so DST can't add a day).
-function daysUntil(target){
-  const now = new Date(); now.setHours(0,0,0,0);
-  const t = new Date(target); t.setHours(0,0,0,0);
-  return Math.round((t - now) / 86400000);
-}
+/* ---------------- day countdown (instructional days) ---------------- */
 const countdownEls = new Set();   // refreshed by a ticker so it stays current
 
 function buildCount(item, inner){
@@ -743,16 +825,16 @@ function buildCount(item, inner){
   inner.appendChild(body);
 
   const foot = document.createElement('div'); foot.className='foot';
-  foot.textContent = 'calendar days for now · school days soon';
+  foot.textContent = 'instructional days · CBE 2026–27';
   inner.appendChild(foot);
 
   function render(){
-    const n = daysUntil(COUNTDOWN_TARGET);
-    big.classList.toggle('past', n < 0);
-    if(n > 0){ big.textContent = n; unit.textContent = (n===1 ? 'day to go' : 'days to go'); }
-    else if(n === 0){ big.textContent = '🎉'; unit.textContent = 'the day is here'; }
-    else { big.textContent = Math.abs(n); unit.textContent = (n===-1 ? 'day ago' : 'days ago'); }
-    date.textContent = COUNTDOWN_TARGET.toLocaleDateString(undefined,
+    const n = instructionalDaysLeft();
+    const today = new Date(); today.setHours(0,0,0,0);
+    big.classList.toggle('past', n === 0);
+    if(n > 0){ big.textContent = n; unit.textContent = (n===1 ? 'school day to go' : 'school days to go'); }
+    else { big.textContent = '🎉'; unit.textContent = (today >= SCHOOL_END ? 'school’s out!' : 'last day — school’s out!'); }
+    date.textContent = 'Last day · ' + SCHOOL_END.toLocaleDateString(undefined,
       { weekday:'short', day:'numeric', month:'short', year:'numeric' });
   }
   render();
@@ -944,9 +1026,9 @@ function seed(){
   ];
   // a calendar
   const cal = addCal();
-  // a day countdown (target is hardcoded — see COUNTDOWN_TARGET)
+  // a day countdown (instructional days to the last day of school)
   const count = addCount();
-  count.title = 'End of year';
+  count.title = 'Last day of school';
   // lay them out across the board
   els.get(list.id)  && place(list,  Math.min(w-260, 250), 26);
   els.get(cal.id)   && place(cal,   Math.min(w-340, 520), 22);
