@@ -63,7 +63,7 @@
   .time.done{color:#fff;animation:pulse 1s ease infinite;}
   @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.05);}}
   .sub{color:rgba(255,255,255,.85);font-size:14px;font-weight:600;letter-spacing:.03em;
-    text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.5);min-height:1em;}
+    text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.5);}
 
   .bar{width:min(560px,82%);height:9px;border-radius:20px;background:rgba(255,255,255,.18);overflow:hidden;}
   .bar-fill{height:100%;width:100%;border-radius:20px;background:linear-gradient(90deg,var(--accent),#ffd27a);}
@@ -101,9 +101,6 @@
   .flash.go{animation:flash .65s ease;}
   @keyframes flash{0%{opacity:0;}14%{opacity:.85;}100%{opacity:0;}}
 
-  .hint-fs{position:absolute;left:0;right:0;bottom:14px;text-align:center;color:rgba(255,255,255,.55);
-    font-size:12px;z-index:2;pointer-events:none;text-shadow:0 1px 4px rgba(0,0,0,.5);}
-
   @media (max-width:720px){
     .bg-label{display:none;}
     .toolbar{gap:8px;padding:8px 12px;}
@@ -120,14 +117,13 @@
 <div class="app">
 
   <header class="toolbar">
-    <div class="brand"><span class="mark"></span>Class Timer <small>timer &amp; stopwatch</small></div>
+    <div class="brand"><span class="mark"></span>Class Timer</div>
     <div class="seg" id="modeToggle">
       <button data-mode="timer" class="active">Timer</button>
       <button data-mode="stopwatch">Stopwatch</button>
     </div>
     <div class="spacer"></div>
     <div class="bg-group">
-      <span class="bg-label">Background</span>
       <div class="seg" id="bgPicker">
         <button data-scene="plain">Plain</button>
         <button data-scene="aurora" class="active">Aurora</button>
@@ -147,7 +143,7 @@
       <section class="view" id="timerView">
         <div class="time" id="display">05:00</div>
         <div class="bar"><div class="bar-fill" id="barFill"></div></div>
-        <div class="sub" id="timerSub">Ready</div>
+        <div class="sub" id="timerSub"></div>
         <div class="controls">
           <button class="big-btn primary" id="startBtn">▶ Start</button>
           <button class="big-btn" id="resetBtn">Reset</button>
@@ -175,7 +171,7 @@
       <!-- STOPWATCH -->
       <section class="view" id="swView" hidden>
         <div class="time" id="swDisplay">00:00.00</div>
-        <div class="sub" id="swSub">Ready</div>
+        <div class="sub" id="swSub"></div>
         <div class="controls">
           <button class="big-btn primary" id="swStartBtn">▶ Start</button>
           <button class="big-btn" id="lapBtn">Lap</button>
@@ -186,7 +182,6 @@
     </div>
 
     <div class="flash" id="flash"></div>
-    <div class="hint-fs">Space start/pause · R reset · F fullscreen · L lap</div>
   </main>
 </div>
 
@@ -286,7 +281,7 @@ function renderTimer(force){
   const pct = timer.duration>0 ? clamp(timer.remaining/timer.duration,0,1) : 0;
   if(force || Math.abs(pct-lastPct)>0.001){ $('barFill').style.width=(pct*100)+'%'; lastPct=pct; }
 }
-function setTimerSub(t){ $('timerSub').textContent=t; }
+function setTimerSub(t){ $('timerSub').textContent = t==="Time's up!" ? t : ''; }
 
 /* ---------------- Stopwatch ---------------- */
 const sw = { elapsed:0, running:false, startAt:0, laps:[] };
@@ -309,7 +304,7 @@ function renderSW(force){
   const str=fmtSW(sw.elapsed);
   if(force || str!==lastSwStr){ $('swDisplay').textContent=str; lastSwStr=str; }
 }
-function setSwSub(t){ $('swSub').textContent = sw.laps.length ? `${t} · ${sw.laps.length} lap${sw.laps.length>1?'s':''}` : t; }
+function setSwSub(){ $('swSub').textContent=''; }
 function renderLaps(){
   const box=$('laps'); box.hidden = sw.laps.length===0;
   box.innerHTML='';
