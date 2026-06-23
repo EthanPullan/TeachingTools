@@ -289,7 +289,7 @@
 
   <!-- Toolbar -->
   <header class="toolbar">
-    <div class="brand"><span class="mark"></span>Seating Chart <small>generator</small></div>
+    <div class="brand"><span class="mark"></span>Seating Chart</div>
     <div class="sep"></div>
     <div class="class-switch">
       <div class="class-bar" id="classBar"></div>
@@ -297,7 +297,7 @@
       <input id="className" type="text" placeholder="Class name" title="Rename the current class" aria-label="Current class name">
     </div>
     <div class="spacer"></div>
-    <button class="btn primary" id="genBtn"><span class="ic">⚄</span> Generate seating</button>
+    <button class="btn primary" id="genBtn"><span class="ic">⚄</span> Generate</button>
     <button class="btn" id="printBtn"><span class="ic">⎙</span> Print</button>
   </header>
 
@@ -317,19 +317,18 @@
         <!-- Students -->
         <section class="tabpanel active" data-panel="students">
           <h3 class="section-title">Class list <span class="count-pill" id="studentCount">0</span></h3>
-          <textarea id="addBox" placeholder="Paste names here — one per line (or comma-separated)"></textarea>
+          <textarea id="addBox" placeholder="Paste names, one per line"></textarea>
           <div class="field-row" style="margin-top:10px;">
             <button class="btn small primary" id="addStudentsBtn">Add to list</button>
             <button class="btn small danger" id="clearStudentsBtn">Clear all</button>
           </div>
           <ul class="roster" id="roster"></ul>
-          <div id="rosterEmpty" class="empty">No students yet. Paste your class list above — one name per line — or import a file from the Data tab.</div>
+          <div id="rosterEmpty" class="empty">No students yet.</div>
         </section>
 
         <!-- Pairs -->
         <section class="tabpanel" data-panel="pairs">
-          <h3 class="section-title">Constrain who sits where</h3>
-          <p class="hint" style="margin:-2px 0 12px;">Keep two students apart (never next to each other) or together (seated as neighbours).</p>
+          <h3 class="section-title">Pairs</h3>
           <div class="field-row">
             <select id="pairA" style="flex:1;min-width:0;"></select>
             <select id="pairB" style="flex:1;min-width:0;"></select>
@@ -359,21 +358,19 @@
             <label class="hint">Cols</label><input type="number" id="gridCols" value="6" min="1" max="12">
             <button class="btn small primary" id="addGridBtn">Add grid</button>
           </div>
-          <label class="check"><input type="checkbox" id="gridReplace"> Replace current desks when adding grid</label>
+          <label class="check"><input type="checkbox" id="gridReplace"> Replace existing</label>
           <div class="field-row">
-            <label class="hint">New desk shape</label>
+            <label class="hint">Shape</label>
             <div class="seg" id="shapeSeg">
               <button data-shape="wide" class="active">Wide</button>
               <button data-shape="tall">Tall</button>
             </div>
           </div>
           <div class="field-row">
-            <button class="btn small" id="addDeskBtn">+ Add one desk</button>
+            <button class="btn small" id="addDeskBtn">+ Desk</button>
             <button class="btn small" id="clearSeatsBtn">Clear seats</button>
             <button class="btn small danger" id="clearDesksBtn">Remove all desks</button>
           </div>
-          <p class="hint" style="margin-top:4px;">Drag to arrange. Double-click empty floor to drop a desk. Click an item, then nudge with arrow keys, rotate with <b>R</b>, or remove with Delete.</p>
-
           <h3 class="section-title stack">Selected item</h3>
           <div class="field-row">
             <span class="hint" id="selInfo" style="flex:1;">Nothing selected.</span>
@@ -386,25 +383,20 @@
             <button class="btn small" data-feat="whiteboard">+ Whiteboard</button>
             <button class="btn small" data-feat="door">+ Door</button>
             <button class="btn small" data-feat="window">+ Window</button>
-            <button class="btn small" data-feat="teacher">+ Teacher desk</button>
+            <button class="btn small" data-feat="teacher">+ Teacher</button>
           </div>
-          <p class="hint">Add furniture and openings to picture the real room. Features are reference only — they don't affect seating. Drag, rotate (R), or Delete them just like desks.</p>
-
           <h3 class="section-title stack">Room size</h3>
           <div class="field-row">
             <label class="hint">Width</label><input type="number" id="roomWIn" min="400" max="2400" step="20">
             <label class="hint">Height</label><input type="number" id="roomHIn" min="300" max="2000" step="20">
           </div>
-          <p class="hint" style="margin-top:-2px;">Shrink the room to fit your screen, or grow it for a bigger layout.</p>
-
           <h3 class="section-title stack">Neighbours</h3>
           <div class="slider-row">
-            <div class="lab"><span>How close counts as “next to”</span><b id="ndVal">130</b></div>
+            <div class="lab"><span>Neighbour distance</span><b id="ndVal">130</b></div>
             <input type="range" id="neighborDist" min="60" max="260" value="130">
           </div>
           <label class="check"><input type="checkbox" id="showLinks"> Show neighbour links</label>
           <label class="check"><input type="checkbox" id="snap" checked> Snap to grid</label>
-          <p class="hint">“Next to” drives both keep-apart enforcement and seatmate rotation. Turn on links to see exactly who counts as neighbours.</p>
         </section>
 
         <!-- History -->
@@ -414,11 +406,9 @@
             <div class="lab"><span>Avoid recent seatmates</span><b id="rsVal">70%</b></div>
             <input type="range" id="rotationStrength" min="0" max="100" value="70">
           </div>
-          <p class="hint" style="margin-top:-4px;">Each chart you generate is remembered. Higher means the generator works harder to give students new neighbours; recent pairings count most.</p>
-
           <h3 class="section-title stack">Saved charts <span class="count-pill" id="histCount">0</span></h3>
           <ul class="hist-list" id="histList"></ul>
-          <div id="histEmpty" class="empty">No saved charts yet. Generate a seating chart and it’ll be remembered here so seatmates rotate next time.</div>
+          <div id="histEmpty" class="empty">No saved charts yet.</div>
           <div class="freq" id="freqBox"></div>
           <div class="field-row" style="margin-top:12px;">
             <button class="btn small danger" id="clearHistBtn">Clear history</button>
@@ -428,10 +418,9 @@
         <!-- Data -->
         <section class="tabpanel" data-panel="data">
           <h3 class="section-title">Classes</h3>
-          <p class="hint" style="margin:-2px 0 10px;">Each class keeps its own roster, pairs, seating and history but shares this room. Switch between them from the top bar.</p>
           <div class="field-row">
             <button class="btn small" id="addClassBtn">+ Add class</button>
-            <button class="btn small danger" id="removeClassBtn">Remove current class</button>
+            <button class="btn small danger" id="removeClassBtn">Remove class</button>
           </div>
 
           <h3 class="section-title stack">Class list</h3>
@@ -439,21 +428,17 @@
             <button class="btn small" id="impNamesBtn">Import names…</button>
             <button class="btn small" id="expNamesBtn">Export names</button>
           </div>
-          <p class="hint">A plain .txt / .csv file, one name per line. Importing adds to your current list.</p>
-
           <h3 class="section-title stack">Room layout</h3>
           <div class="field-row">
             <button class="btn small" id="impLayoutBtn">Import layout…</button>
             <button class="btn small" id="expLayoutBtn">Export layout</button>
           </div>
-          <p class="hint">Just the desk arrangement — reuse the same room across your classes.</p>
-
           <h3 class="section-title stack">Full backup</h3>
           <div class="field-row">
             <button class="btn small primary" id="impSnapBtn">Load backup…</button>
             <button class="btn small primary" id="expSnapBtn">Save backup</button>
           </div>
-          <p class="hint">Everything — class list, pairs, layout, current chart, and history — in one file. Nothing is stored automatically, so save a backup to keep your work between sessions.</p>
+          <p class="hint">Nothing is saved automatically — back up to keep your work.</p>
         </section>
 
       </div>
@@ -466,7 +451,6 @@
           <button data-mode="move" class="active">Move desks</button>
           <button data-mode="swap">Swap seats</button>
         </div>
-        <span class="hint" id="modeHint">Drag desks to rearrange the room.</span>
       </div>
       <div class="canvas-scroll">
         <div id="printHeader"><h1 id="printTitle">Seating chart</h1><div class="pmeta" id="printMeta"></div></div>
@@ -1244,9 +1228,6 @@ $('modeToggle').addEventListener('click',e=>{
   mode=b.dataset.mode;
   $('modeToggle').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));
   document.body.classList.toggle('mode-swap',mode==='swap');
-  $('modeHint').textContent = mode==='move'
-    ? 'Drag desks to rearrange the room.'
-    : 'Drag a student onto another desk to swap them. Desks stay put.';
 });
 
 // toolbar
