@@ -56,11 +56,26 @@
   .btn[disabled]{opacity:.45;cursor:not-allowed;}
   .btn .ic{font-size:15px;line-height:1;}
 
-  /* ---- board (corkboard work surface) ---- */
+  /* zoom / view controls */
+  .zoom{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:9px;
+    overflow:hidden;background:var(--panel);}
+  .zoom button{border:none;background:none;cursor:pointer;color:var(--ink);font-weight:700;
+    font-size:15px;line-height:1;padding:7px 10px;}
+  .zoom button:hover{background:var(--panel-2);}
+  .zoom .lvl{font-family:var(--mono);font-size:12px;font-weight:600;min-width:44px;text-align:center;
+    border-left:1px solid var(--line);border-right:1px solid var(--line);}
+  .zoom .fit,.zoom .fs{font-size:13px;}
+
+  /* ---- board (scroll viewport) + surface (the zoomable cork) ----
+     The board is a sizing/scroll box; the surface holds the cork + items and
+     is scaled by the zoom. Sizing both in JS lets the canvas grow as needed
+     and lets the scrollbars track the scaled content. */
   .board-wrap{flex:1;overflow:auto;position:relative;min-height:0;
     padding:14px;background:linear-gradient(var(--wood),var(--wood-2));}
-  .board{position:relative;width:100%;height:100%;min-width:640px;min-height:560px;
-    border-radius:6px;
+  .board-wrap.dragging{cursor:grabbing;}
+  .board{position:relative;width:100%;height:100%;}
+  .surface{position:absolute;top:0;left:0;width:100%;height:100%;
+    transform-origin:0 0;border-radius:6px;
     background-color:var(--cork);
     /* speckled cork grain from layered radial-gradients */
     background-image:
@@ -74,7 +89,6 @@
     box-shadow:inset 0 0 0 1px rgba(70,40,14,.35),
       inset 0 0 38px rgba(54,30,10,.45), inset 0 0 120px rgba(54,30,10,.22);
   }
-  .board.dragging{cursor:grabbing;}
 
   /* ---- pinned card (paper) ---- */
   /* transform-origin:top-left keeps the top-left pinned while resizing the
@@ -191,8 +205,9 @@
   .cal-day.school-hi::before{content:"";position:absolute;top:3px;left:50%;transform:translateX(-50%);
     width:5px;height:5px;border-radius:50%;background:var(--ok);}
   .cal-day.today{box-shadow:inset 0 0 0 2px var(--accent);font-weight:700;}
-  .cal-day.marked::after{content:"";position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
-    width:5px;height:5px;border-radius:50%;background:var(--danger);}
+  /* a day with a note gets an amber dot; click any day to add/edit a note */
+  .cal-day.noted::after{content:"";position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
+    width:5px;height:5px;border-radius:50%;background:var(--accent-deep);}
   .cal-hint{font-size:9.5px;color:var(--muted);margin-top:7px;flex:none;letter-spacing:.02em;}
   .cal-foot{display:flex;align-items:center;gap:8px;margin-top:6px;flex:none;
     font-size:10.5px;color:var(--muted);}
@@ -213,20 +228,40 @@
   .count .date{font-family:var(--mono);font-size:11.5px;color:var(--ink);margin-top:6px;}
   .count .foot{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4;flex:none;text-align:center;}
 
+  /* ---- agenda (iPhone-style list of days with notes) ---- */
+  .card.agenda{min-width:200px;min-height:150px;}
+  .agenda-list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:1px;margin:0;padding:0;list-style:none;}
+  .agenda-row{display:flex;gap:9px;align-items:flex-start;padding:6px 4px;border-radius:7px;cursor:pointer;
+    border-top:1px solid var(--line);}
+  .agenda-row:first-child{border-top:none;}
+  .agenda-row:hover{background:var(--panel-2);}
+  .agenda-row .ad{flex:none;width:42px;text-align:center;line-height:1.1;}
+  .agenda-row .ad .dnum{font-family:var(--mono);font-weight:700;font-size:16px;color:var(--ink);}
+  .agenda-row .ad .dwd{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .agenda-row .ax{flex:1;min-width:0;}
+  .agenda-row .ax .atx{font-size:12.5px;color:var(--ink);line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere;}
+  .agenda-row .ax .amo{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-deep);}
+  .agenda-row.past{opacity:.5;}
+  .agenda-row.istoday .ad .dnum{color:var(--accent-deep);}
+  .agenda-empty{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;
+    color:var(--muted);font-size:12px;line-height:1.5;padding:10px;}
+
+  /* ---- day-note popover (click a calendar day) ---- */
+  .daypop{position:fixed;z-index:1200;width:208px;background:#fff59d;border-radius:6px;
+    box-shadow:0 8px 26px rgba(40,24,8,.4),0 2px 4px rgba(40,24,8,.25);padding:10px 11px 9px;
+    background-image:linear-gradient(160deg,rgba(255,255,255,.4),rgba(0,0,0,.04));}
+  .daypop .dp-date{font-weight:700;font-size:12px;color:#33270f;margin-bottom:5px;letter-spacing:.02em;}
+  .daypop textarea{width:100%;min-height:74px;border:none;background:transparent;resize:vertical;
+    font-family:"Bradley Hand","Segoe Print",var(--sans);font-size:15px;line-height:1.45;color:#33270f;padding:0;}
+  .daypop textarea:focus{outline:none;}
+  .daypop textarea::placeholder{color:rgba(51,39,15,.4);}
+  .daypop .dp-hint{font-size:9.5px;color:rgba(51,39,15,.55);margin-top:4px;text-align:right;}
+
   /* ---- empty hint ---- */
   .emptyhint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
     text-align:center;color:rgba(255,255,255,.85);text-shadow:0 1px 2px rgba(40,24,8,.5);
     font-size:14px;line-height:1.7;pointer-events:none;}
   .emptyhint b{font-weight:700;}
-
-  /* ---- status bar ---- */
-  .statusbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:0 16px;height:40px;
-    border-top:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--muted);}
-  .statusbar .stat b{font-family:var(--mono);font-weight:600;color:var(--ink);}
-  .statusbar .dotline{width:1px;height:16px;background:var(--line);}
-  .statusbar .stamp{margin-left:auto;font-family:var(--mono);font-size:11.5px;
-    display:inline-flex;align-items:center;gap:6px;}
-  .statusbar .saved{width:7px;height:7px;border-radius:50%;background:var(--ok);}
 
   /* ---- toast ---- */
   .toast-wrap{position:fixed;left:50%;bottom:54px;transform:translateX(-50%);z-index:1000;
@@ -249,9 +284,9 @@
     .card.pop{animation:none;} .btn:active{transform:none;} *{scroll-behavior:auto;}
   }
   @media print{
-    .toolbar,.statusbar,.toast-wrap,.pin,.x,.swatches{display:none !important;}
+    .toolbar,.toast-wrap,.pin,.x,.swatches,.rs,.daypop{display:none !important;}
     body{overflow:visible;} .board-wrap{overflow:visible;background:#fff;padding:0;}
-    .board{box-shadow:none;background:#fff;}
+    .surface{box-shadow:none;background:#fff;transform:none !important;}
     .card{box-shadow:0 0 0 1px #ccc;}
   }
 </style>
@@ -265,6 +300,14 @@
     <button class="btn" id="addList"><span class="ic">✓</span><span class="lbl">Checklist</span></button>
     <button class="btn" id="addCal"><span class="ic">📅</span><span class="lbl">Calendar</span></button>
     <button class="btn" id="addCount"><span class="ic">⏳</span><span class="lbl">Countdown</span></button>
+    <button class="btn" id="addAgenda"><span class="ic">📋</span><span class="lbl">Agenda</span></button>
+    <div class="zoom" role="group" aria-label="Zoom">
+      <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+      <button class="lvl" id="zoomLvl" title="Reset to 100%" aria-label="Reset zoom">100%</button>
+      <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+      <button class="fit" id="fitBtn" title="Fit everything on screen" aria-label="Fit to screen">⤢</button>
+      <button class="fs" id="fsBtn" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
+    </div>
     <button class="btn small" id="exportBtn" title="Download this board as a file">Export</button>
     <button class="btn small" id="importBtn" title="Load a board file">Import</button>
     <button class="btn small danger" id="clearBtn" title="Clear the whole board">Clear</button>
@@ -273,23 +316,21 @@
 
   <div class="board-wrap" id="boardWrap">
     <div class="board" id="board">
-      <div class="emptyhint" id="emptyHint">
-        <b>The board is empty.</b><br>
-        Add a sticky note, checklist, calendar or countdown — or double-click the cork.
+      <div class="surface" id="surface">
+        <div class="emptyhint" id="emptyHint">
+          <b>The board is empty.</b><br>
+          Add a sticky note, checklist, calendar, countdown or agenda — or double-click the cork.
+        </div>
       </div>
     </div>
   </div>
+</div>
 
-  <footer class="statusbar">
-    <span class="stat"><b id="cNotes">0</b> notes</span>
-    <span class="dotline"></span>
-    <span class="stat"><b id="cLists">0</b> checklists</span>
-    <span class="dotline"></span>
-    <span class="stat"><b id="cCals">0</b> calendars</span>
-    <span class="dotline"></span>
-    <span class="stat"><b id="cCounts">0</b> countdowns</span>
-    <span class="stamp"><span class="saved" id="savedDot"></span><span id="savedTxt">Saved locally</span></span>
-  </footer>
+<!-- click a calendar day to write a note for it -->
+<div id="dayPop" class="daypop" style="display:none">
+  <div class="dp-date"></div>
+  <textarea placeholder="Note for this day…" aria-label="Day note" rows="3"></textarea>
+  <div class="dp-hint">Esc / click away to save</div>
 </div>
 
 <div class="toast-wrap" id="toastWrap"></div>
@@ -301,10 +342,16 @@
    A digital corkboard for the staff room: pin sticky notes, checklists,
    a month calendar and a day countdown to a cork surface and arrange them.
 
-   • Items are absolutely positioned on the cork. The push pin doubles as
-     a drag handle (grab the pin or the paper margins; click into text to
-     edit). Arrow keys nudge a focused pin for keyboard users. Drag the
-     bottom-right corner to resize; content reflows to fit.
+   • Items live on a zoomable, auto-growing cork SURFACE inside a scroll
+     viewport. The surface stays viewport-sized by default and grows to fit
+     items as they spread out; a zoom control scales everything so it reads
+     well on a TV at any resolution (drag/resize math divides by the zoom).
+   • The push pin doubles as a drag handle (grab the pin or the paper
+     margins; click into text to edit). Drag near an edge to auto-pan and
+     extend the board. Arrow keys nudge a focused pin. Drag the bottom-right
+     corner to resize; content reflows to fit.
+   • Click a calendar day to write a sticky note for it; an Agenda card
+     lists every noted day chronologically (iPhone-style).
    • The calendar's first day of week follows the BROWSER/system default
      (Intl.Locale weekInfo) — Monday in much of the world, Sunday in the
      US etc. Each calendar's Auto/Sun/Mon toggle can override it.
@@ -321,6 +368,7 @@ const STORE_KEY = 'teachingtools.staffboard.v1';
 
 const board    = $('board');
 const boardWrap = $('boardWrap');
+const surface  = $('surface');
 
 /* ---- palettes ---- */
 const NOTE_COLORS = ['#fff59d','#ffd3e0','#bfe3ff','#caf0c2','#ffd9a8','#e7d9ff'];
@@ -403,17 +451,25 @@ function instructionalDaysLeft(){
 // Default + minimum sizes per item type (used by create + resize). h:null = grow
 // to fit content until the user drags the corner.
 const SIZE = {
-  note:  { w:196, h:188, minW:130, minH:110 },
-  list:  { w:236, h:null, minW:180, minH:120 },
-  cal:   { w:308, h:300, minW:252, minH:248 },
-  count: { w:226, h:188, minW:172, minH:132 },
+  note:   { w:196, h:188, minW:130, minH:110 },
+  list:   { w:236, h:null, minW:180, minH:120 },
+  cal:    { w:308, h:300, minW:252, minH:248 },
+  count:  { w:226, h:188, minW:172, minH:132 },
+  agenda: { w:248, h:300, minW:200, minH:150 },
 };
 
 /* ---- state ---- */
-let state = { items:[], z:10, seq:1 };
+let state = { items:[], z:10, seq:1, zoom:1 };
 const els = new Map();           // id -> card element
 let saveTimer = null;
 let placeIx = 0;                 // cascade counter for new items
+
+// live-update registries (cleaned up via item._reg on remove/rebuild)
+const countdownEls = new Set();  // {render} — refreshed across midnight
+const calEls       = new Set();  // {render} — re-render dots when notes change
+const agendaEls    = new Set();  // {render} — re-list when notes change
+function refreshCalendars(){ calEls.forEach(c=>c.render()); }
+function refreshAgendas(){ agendaEls.forEach(a=>a.render()); }
 
 /* ---------------- locale week start ---------------- */
 // Returns 0..6 (0 = Sunday) for the browser/system's first day of week.
@@ -445,14 +501,9 @@ const SYS_WEEK_START = systemWeekStart();
 function save(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
-    try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); flashSaved(); }
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
     catch(e){ /* storage may be unavailable (private mode) — keep working in memory */ }
   }, 200);
-}
-function flashSaved(){
-  const t = $('savedTxt'), d = $('savedDot');
-  t.textContent = 'Saved · ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-  d.style.opacity = '0'; requestAnimationFrame(()=>{ d.style.transition='opacity .5s'; d.style.opacity='1'; });
 }
 function load(){
   let raw=null;
@@ -461,7 +512,8 @@ function load(){
     try{
       const s = JSON.parse(raw);
       if(s && Array.isArray(s.items)){
-        state = Object.assign({items:[],z:10,seq:1}, s);
+        state = Object.assign({items:[],z:10,seq:1,zoom:1}, s);
+        state.zoom = clamp(state.zoom||1, ZOOM_MIN, ZOOM_MAX);
         return true;
       }
     }catch(e){}
@@ -497,11 +549,7 @@ function nextPos(){
   return { x, y };
 }
 
-function updateStatus(){
-  let n=0,l=0,c=0,d=0;
-  state.items.forEach(it=>{ if(it.type==='note')n++; else if(it.type==='list')l++;
-    else if(it.type==='cal')c++; else if(it.type==='count')d++; });
-  $('cNotes').textContent=n; $('cLists').textContent=l; $('cCals').textContent=c; $('cCounts').textContent=d;
+function updateEmpty(){
   $('emptyHint').style.display = state.items.length ? 'none' : 'block';
 }
 
@@ -512,6 +560,61 @@ function applySize(item, el){
   el.style.height = (item.h != null) ? item.h + 'px' : '';
 }
 
+/* ---------------- zoom + auto-growing canvas ---------------- */
+const ZOOM_MIN = 0.4, ZOOM_MAX = 3, BIG = 100000;
+
+// Screen point -> surface (board) coordinates, accounting for zoom + scroll.
+function toSurface(clientX, clientY){
+  const r = surface.getBoundingClientRect();
+  const z = state.zoom || 1;
+  return { x: (clientX - r.left)/z, y: (clientY - r.top)/z };
+}
+function applyZoom(){
+  surface.style.transform = 'scale(' + (state.zoom||1) + ')';
+  const lvl = $('zoomLvl'); if(lvl) lvl.textContent = Math.round((state.zoom||1)*100) + '%';
+}
+// Size the surface to hold every item (+ breathing room), never smaller than
+// the viewport; size the scroll box to the scaled surface so scrollbars track
+// it. "Current size by default, larger as needed."
+function fitBoard(){
+  const z = state.zoom || 1, pad = 160;
+  let maxR = 0, maxB = 0;
+  state.items.forEach(it=>{
+    const el = els.get(it.id); if(!el) return;
+    maxR = Math.max(maxR, it.x + el.offsetWidth);
+    maxB = Math.max(maxB, it.y + el.offsetHeight);
+  });
+  const floorW = (boardWrap.clientWidth  - 28) / z;   // 28 = board-wrap padding
+  const floorH = (boardWrap.clientHeight - 28) / z;
+  const W = Math.max(floorW, maxR + pad);
+  const H = Math.max(floorH, maxB + pad);
+  surface.style.width  = W + 'px';
+  surface.style.height = H + 'px';
+  board.style.width    = (W * z) + 'px';
+  board.style.height   = (H * z) + 'px';
+}
+function setZoom(z){
+  state.zoom = clamp(z, ZOOM_MIN, ZOOM_MAX);
+  applyZoom(); fitBoard(); save();
+}
+function fitToScreen(){
+  let maxR = 200, maxB = 200;
+  state.items.forEach(it=>{
+    const el = els.get(it.id); if(!el) return;
+    maxR = Math.max(maxR, it.x + el.offsetWidth);
+    maxB = Math.max(maxB, it.y + el.offsetHeight);
+  });
+  const availW = boardWrap.clientWidth - 28, availH = boardWrap.clientHeight - 28;
+  const z = clamp(Math.min(availW/(maxR+60), availH/(maxB+60)), ZOOM_MIN, 1);
+  state.zoom = z; applyZoom(); fitBoard(); boardWrap.scrollTo(0,0); save();
+}
+function toggleFullscreen(){
+  try{
+    if(document.fullscreenElement) document.exitFullscreen();
+    else if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+  }catch(e){}
+}
+
 /* ---------------- create items ---------------- */
 function addNote(x, y, text, color){
   const pos = (x==null) ? nextPos() : {x,y};
@@ -520,7 +623,7 @@ function addNote(x, y, text, color){
     color: color || NOTE_COLORS[Math.floor(rand(0,NOTE_COLORS.length))], text: text || '' };
   state.items.push(item);
   mountCard(item, true);
-  updateStatus(); save();
+  updateEmpty(); fitBoard(); save();
   return item;
 }
 function addList(){
@@ -529,7 +632,7 @@ function addList(){
     rot:rand(-2.4,2.4), z:++state.z, pin:pickPin(), title:'Checklist', items:[] };
   state.items.push(item);
   mountCard(item, true);
-  updateStatus(); save();
+  updateEmpty(); fitBoard(); save();
   return item;
 }
 function addCal(){
@@ -537,10 +640,10 @@ function addCal(){
   const now = new Date();
   const item = { id:uid(), type:'cal', x:pos.x, y:pos.y, w:SIZE.cal.w, h:SIZE.cal.h,
     rot:rand(-2,2), z:++state.z, pin:pickPin(), year:now.getFullYear(), month:now.getMonth(),
-    weekStart:null /* null = system/browser default */, marks:{} };
+    weekStart:null /* null = system/browser default */, dayNotes:{} };
   state.items.push(item);
   mountCard(item, true);
-  updateStatus(); save();
+  updateEmpty(); fitBoard(); refreshAgendas(); save();
   return item;
 }
 function addCount(){
@@ -549,7 +652,16 @@ function addCount(){
     rot:rand(-2.4,2.4), z:++state.z, pin:pickPin(), title:'Last day of school' };
   state.items.push(item);
   mountCard(item, true);
-  updateStatus(); save();
+  updateEmpty(); fitBoard(); save();
+  return item;
+}
+function addAgenda(){
+  const pos = nextPos();
+  const item = { id:uid(), type:'agenda', x:pos.x, y:pos.y, w:SIZE.agenda.w, h:SIZE.agenda.h,
+    rot:rand(-2,2), z:++state.z, pin:pickPin(), title:'Agenda' };
+  state.items.push(item);
+  mountCard(item, true);
+  updateEmpty(); fitBoard(); save();
   return item;
 }
 
@@ -557,9 +669,11 @@ function removeItem(item){
   const el = els.get(item.id);
   if(el) el.remove();
   els.delete(item.id);
-  if(item._tick){ countdownEls.delete(item._tick); item._tick=null; }
+  if(item._reg){ item._reg.set.delete(item._reg.entry); item._reg=null; }
+  const wasCal = item.type==='cal';
   state.items = state.items.filter(i=>i!==item);
-  updateStatus(); save();
+  if(wasCal) refreshAgendas();
+  updateEmpty(); fitBoard(); save();
 }
 
 /* ---------------- card scaffolding ---------------- */
@@ -595,10 +709,11 @@ function mountCard(item, animate){
   inner.appendChild(x);
 
   // body
-  if(item.type==='note')       buildNote(item, inner);
-  else if(item.type==='list')  buildList(item, inner);
-  else if(item.type==='cal')   buildCal(item, inner);
-  else if(item.type==='count') buildCount(item, inner);
+  if(item.type==='note')        buildNote(item, inner);
+  else if(item.type==='list')   buildList(item, inner);
+  else if(item.type==='cal')    buildCal(item, inner);
+  else if(item.type==='count')  buildCount(item, inner);
+  else if(item.type==='agenda') buildAgenda(item, inner);
 
   // resize grip (bottom-right corner)
   const rs = document.createElement('div');
@@ -607,7 +722,7 @@ function mountCard(item, animate){
   inner.appendChild(rs);
 
   el.appendChild(inner);
-  board.appendChild(el);
+  surface.appendChild(el);
   els.set(item.id, el);
 
   attachDrag(item, el, pin);
@@ -783,31 +898,135 @@ function buildCal(item, inner){
       if(!inMonth) cell.classList.add('dim');
       if(+d===+today) cell.classList.add('today');
       const key = dkey(d);
-      if(item.marks[key]) cell.classList.add('marked');
+      const noteText = item.dayNotes && item.dayNotes[key];
+      if(noteText) cell.classList.add('noted');
       // hardcoded school calendar: shade closures grey, flag first/last day
       const closedName = SCHOOL_CLOSED.get(key);
       const highlight  = SCHOOL_HIGHLIGHTS[key];
       if(closedName) cell.classList.add('closed');
       if(highlight)  cell.classList.add('school-hi');
       let label = d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'});
-      if(closedName) label += ' — ' + closedName;
+      if(noteText) label += ' — note: ' + noteText;
+      else if(closedName) label += ' — ' + closedName;
       else if(highlight) label += ' — ' + highlight;
       cell.setAttribute('aria-label', label);
-      if(closedName || highlight) cell.title = closedName || highlight;
-      cell.addEventListener('click', ()=>{
-        if(item.marks[key]){ delete item.marks[key]; cell.classList.remove('marked'); }
-        else { item.marks[key]=true; cell.classList.add('marked'); }
-        save();
-      });
+      const tip = noteText || closedName || highlight;
+      if(tip) cell.title = tip;
+      const cd = new Date(d);
+      cell.addEventListener('click', ()=> openDayNote(item, key, cd, cell));
       grid.appendChild(cell);
     }
   }
   render();
+  const entry = { render };
+  calEls.add(entry);
+  item._reg = { set: calEls, entry };   // re-render dots when notes change
+}
+
+/* ---------------- day-note popover (click a calendar day) ---------------- */
+let dayPop = null;   // { item, key }
+function openDayNote(calItem, key, dateObj, anchor){
+  closeDayNote();
+  if(!calItem.dayNotes) calItem.dayNotes = {};
+  const pop = $('dayPop');
+  const ta = pop.querySelector('textarea');
+  pop.querySelector('.dp-date').textContent =
+    dateObj.toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long'});
+  ta.value = calItem.dayNotes[key] || '';
+  dayPop = { item:calItem, key };
+  pop.style.display = 'block';
+  // fixed positioning = screen space, so the popover is zoom-independent
+  const r = anchor.getBoundingClientRect();
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  pop.style.left = clamp(r.left, 8, window.innerWidth  - pw - 8) + 'px';
+  let top = r.bottom + 6;
+  if(top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 6);
+  pop.style.top = top + 'px';
+  ta.focus(); ta.select();
+  ta.oninput = ()=>{
+    if(ta.value.trim()) dayPop.item.dayNotes[dayPop.key] = ta.value;
+    else delete dayPop.item.dayNotes[dayPop.key];
+    refreshAgendas(); save();
+  };
+  setTimeout(()=> document.addEventListener('pointerdown', dayPopOutside, true), 0);
+}
+function dayPopOutside(e){ if(!e.target.closest('#dayPop')) closeDayNote(); }
+function closeDayNote(){
+  if(!dayPop) return;
+  const ta = $('dayPop').querySelector('textarea');
+  if(ta.value.trim()) dayPop.item.dayNotes[dayPop.key] = ta.value.trim();
+  else delete dayPop.item.dayNotes[dayPop.key];
+  dayPop = null; ta.oninput = null;
+  $('dayPop').style.display = 'none';
+  document.removeEventListener('pointerdown', dayPopOutside, true);
+  refreshCalendars(); refreshAgendas(); save();
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && dayPop) closeDayNote(); });
+
+/* ---------------- agenda (iPhone-style list of days with notes) ---------------- */
+function collectAgenda(){
+  const out = [];
+  state.items.forEach(it=>{
+    if(it.type!=='cal' || !it.dayNotes) return;
+    for(const key in it.dayNotes){
+      const text = it.dayNotes[key];
+      if(!text) continue;
+      const [Y,M,D] = key.split('-').map(Number);
+      out.push({ date:new Date(Y,M,D), key, text, cal:it });
+    }
+  });
+  out.sort((a,b)=> a.date - b.date);
+  return out;
+}
+function buildAgenda(item, inner){
+  const head = document.createElement('div'); head.className='head';
+  const title = document.createElement('input');
+  title.className='title'; title.value=item.title||''; title.placeholder='Agenda';
+  title.setAttribute('aria-label','Agenda title');
+  title.addEventListener('input', ()=>{ item.title=title.value; save(); });
+  head.appendChild(title);
+  inner.appendChild(head);
+
+  const list = document.createElement('div'); list.className='agenda-list';
+  inner.appendChild(list);
+
+  function render(){
+    const entries = collectAgenda();
+    list.innerHTML='';
+    if(!entries.length){
+      const e=document.createElement('div'); e.className='agenda-empty';
+      e.textContent='No day notes yet. Click a day on a calendar to jot one down.';
+      list.appendChild(e); return;
+    }
+    const today = new Date(); today.setHours(0,0,0,0);
+    const wdF = new Intl.DateTimeFormat(undefined,{weekday:'short'});
+    const moF = new Intl.DateTimeFormat(undefined,{month:'short'});
+    entries.forEach(en=>{
+      const row=document.createElement('div'); row.className='agenda-row';
+      if(en.date < today) row.classList.add('past');
+      if(+en.date===+today) row.classList.add('istoday');
+      const ad=document.createElement('div'); ad.className='ad';
+      ad.innerHTML='<div class="dwd"></div><div class="dnum"></div>';
+      ad.querySelector('.dwd').textContent = wdF.format(en.date);
+      ad.querySelector('.dnum').textContent = en.date.getDate();
+      const ax=document.createElement('div'); ax.className='ax';
+      const mo=document.createElement('div'); mo.className='amo';
+      mo.textContent = moF.format(en.date)+' '+en.date.getFullYear();
+      const tx=document.createElement('div'); tx.className='atx'; tx.textContent = en.text;
+      ax.appendChild(mo); ax.appendChild(tx);
+      row.appendChild(ad); row.appendChild(ax);
+      row.title = 'Click to edit this note';
+      row.addEventListener('click', ()=> openDayNote(en.cal, en.key, en.date, row));
+      list.appendChild(row);
+    });
+  }
+  render();
+  const entry={render};
+  agendaEls.add(entry);
+  item._reg={ set:agendaEls, entry };
 }
 
 /* ---------------- day countdown (instructional days) ---------------- */
-const countdownEls = new Set();   // refreshed by a ticker so it stays current
-
 function buildCount(item, inner){
   const head = document.createElement('div'); head.className='head';
   const title = document.createElement('input');
@@ -820,8 +1039,7 @@ function buildCount(item, inner){
   const body = document.createElement('div'); body.className='cbody';
   const big = document.createElement('div'); big.className='big';
   const unit = document.createElement('div'); unit.className='unit';
-  const date = document.createElement('div'); date.className='date';
-  body.appendChild(big); body.appendChild(unit); body.appendChild(date);
+  body.appendChild(big); body.appendChild(unit);
   inner.appendChild(body);
 
   const foot = document.createElement('div'); foot.className='foot';
@@ -834,19 +1052,43 @@ function buildCount(item, inner){
     big.classList.toggle('past', n === 0);
     if(n > 0){ big.textContent = n; unit.textContent = (n===1 ? 'school day to go' : 'school days to go'); }
     else { big.textContent = '🎉'; unit.textContent = (today >= SCHOOL_END ? 'school’s out!' : 'last day — school’s out!'); }
-    date.textContent = 'Last day · ' + SCHOOL_END.toLocaleDateString(undefined,
-      { weekday:'short', day:'numeric', month:'short', year:'numeric' });
   }
   render();
   // keep this card's number live while the board is open (see the ticker below)
   const entry = { render };
   countdownEls.add(entry);
-  item._tick = entry;   // removeItem / rebuild drop this from the ticker set
+  item._reg = { set: countdownEls, entry };
 }
 
 /* ---------------- dragging ---------------- */
 function attachDrag(item, el, pin){
   let downX=0,downY=0,offX=0,offY=0,moved=false,dragging=false;
+  let lastX=0,lastY=0,zoomAtDown=1,panRAF=0;
+
+  // place the item under the (possibly stationary) pointer, in surface coords
+  function applyFromPointer(){
+    const p = toSurface(lastX, lastY);
+    item.x = Math.round(clamp(p.x - offX, 0, BIG));
+    item.y = Math.round(clamp(p.y - offY, 0, BIG));
+    el.style.left=item.x+'px'; el.style.top=item.y+'px';
+    fitBoard();
+  }
+  // auto-pan the viewport when dragging near an edge (lets the canvas grow)
+  function panLoop(){
+    if(!dragging){ panRAF=0; return; }
+    const wr = boardWrap.getBoundingClientRect(), EDGE=48, MAX=22;
+    let sx=0, sy=0;
+    if(lastX > wr.right-EDGE)     sx =  MAX*Math.min(1,(lastX-(wr.right-EDGE))/EDGE);
+    else if(lastX < wr.left+EDGE) sx = -MAX*Math.min(1,((wr.left+EDGE)-lastX)/EDGE);
+    if(lastY > wr.bottom-EDGE)    sy =  MAX*Math.min(1,(lastY-(wr.bottom-EDGE))/EDGE);
+    else if(lastY < wr.top+EDGE)  sy = -MAX*Math.min(1,((wr.top+EDGE)-lastY)/EDGE);
+    if(sx||sy){
+      boardWrap.scrollLeft = Math.max(0, boardWrap.scrollLeft + sx);
+      boardWrap.scrollTop  = Math.max(0, boardWrap.scrollTop  + sy);
+      applyFromPointer();
+    }
+    panRAF = requestAnimationFrame(panLoop);
+  }
 
   el.addEventListener('pointerdown', e=>{
     if(e.button!=null && e.button!==0) return;
@@ -857,35 +1099,33 @@ function attachDrag(item, el, pin){
     if(t.closest('input,textarea,select,.swatch,.cal-day,.cal-nav,.mtitle,.add,.rm,.seg') && !t.closest('.pin')) return;
 
     bringToFront(item, el);
-    moved=false; dragging=true;
-    downX=e.clientX; downY=e.clientY;
+    moved=false; dragging=true; zoomAtDown = state.zoom||1;
+    downX=e.clientX; downY=e.clientY; lastX=e.clientX; lastY=e.clientY;
     const r = el.getBoundingClientRect();
-    offX = e.clientX - r.left; offY = e.clientY - r.top;
+    offX = (e.clientX - r.left)/zoomAtDown; offY = (e.clientY - r.top)/zoomAtDown;
     el.setPointerCapture(e.pointerId);
     el.classList.add('lift','dragging-this');
-    board.classList.add('dragging');
+    boardWrap.classList.add('dragging');
     e.preventDefault();
 
     const move = ev=>{
       if(!dragging) return;
-      if(Math.abs(ev.clientX-downX)+Math.abs(ev.clientY-downY) > 3) moved=true;
-      if(!moved) return;
-      const br = board.getBoundingClientRect();
-      const w = el.offsetWidth, h = el.offsetHeight;
-      let nx = clamp(ev.clientX - br.left - offX, 6, Math.max(6, board.clientWidth - w - 6));
-      let ny = clamp(ev.clientY - br.top  - offY, 6, Math.max(6, board.clientHeight - h - 6));
-      item.x=Math.round(nx); item.y=Math.round(ny);
-      el.style.left=item.x+'px'; el.style.top=item.y+'px';
+      lastX=ev.clientX; lastY=ev.clientY;
+      if(!moved && Math.abs(ev.clientX-downX)+Math.abs(ev.clientY-downY) > 3){
+        moved=true; if(!panRAF) panRAF=requestAnimationFrame(panLoop);
+      }
+      if(moved) applyFromPointer();
     };
     const up = ()=>{
       dragging=false;
+      if(panRAF){ cancelAnimationFrame(panRAF); panRAF=0; }
       el.releasePointerCapture(e.pointerId);
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', up);
       el.removeEventListener('pointercancel', up);
       el.classList.remove('lift','dragging-this');
-      board.classList.remove('dragging');
-      if(moved) save();
+      boardWrap.classList.remove('dragging');
+      if(moved){ fitBoard(); save(); }
     };
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
@@ -900,11 +1140,10 @@ function attachDrag(item, el, pin){
     else if(e.key==='ArrowUp') dy=-step; else if(e.key==='ArrowDown') dy=step; else return;
     e.preventDefault();
     bringToFront(item, el);
-    const w=el.offsetWidth, h=el.offsetHeight;
-    item.x = clamp(item.x+dx, 6, Math.max(6, board.clientWidth - w - 6));
-    item.y = clamp(item.y+dy, 6, Math.max(6, board.clientHeight - h - 6));
+    item.x = Math.round(clamp(item.x+dx, 0, BIG));
+    item.y = Math.round(clamp(item.y+dy, 0, BIG));
     el.style.left=item.x+'px'; el.style.top=item.y+'px';
-    save();
+    fitBoard(); save();
   });
 }
 
@@ -915,24 +1154,24 @@ function attachResize(item, el, handle){
     e.preventDefault(); e.stopPropagation();          // never start a drag
     bringToFront(item, el);
     const def = SIZE[item.type] || { minW:120, minH:90 };
+    const z = state.zoom || 1;
     const startX=e.clientX, startY=e.clientY;
     const startW=el.offsetWidth, startH=el.offsetHeight;
-    // Map the screen-space drag onto the card's own axes so resizing stays
-    // true even with the slight pinned rotation.
+    // Map the screen-space drag onto the card's own axes (divide by zoom first)
+    // so resizing stays true even with the slight pinned rotation.
     const rad=(item.rot||0)*Math.PI/180, cos=Math.cos(rad), sin=Math.sin(rad);
     handle.setPointerCapture(e.pointerId);
     el.classList.add('lift');
 
     const move = ev=>{
-      const dx=ev.clientX-startX, dy=ev.clientY-startY;
+      const dx=(ev.clientX-startX)/z, dy=(ev.clientY-startY)/z;
       const ldx = dx*cos + dy*sin;        // rotate the delta by -θ
       const ldy = -dx*sin + dy*cos;
-      const maxW = Math.max(def.minW, board.clientWidth  - item.x - 6);
-      const maxH = Math.max(def.minH, board.clientHeight - item.y - 6);
-      item.w = Math.round(clamp(startW + ldx, def.minW, maxW));
-      item.h = Math.round(clamp(startH + ldy, def.minH, maxH));
+      item.w = Math.round(clamp(startW + ldx, def.minW, BIG));
+      item.h = Math.round(clamp(startH + ldy, def.minH, BIG));
       el.style.width  = item.w + 'px';
       el.style.height = item.h + 'px';
+      fitBoard();
     };
     const up = ()=>{
       handle.releasePointerCapture(e.pointerId);
@@ -940,7 +1179,7 @@ function attachResize(item, el, handle){
       handle.removeEventListener('pointerup', up);
       handle.removeEventListener('pointercancel', up);
       el.classList.remove('lift');
-      save();
+      fitBoard(); save();
     };
     handle.addEventListener('pointermove', move);
     handle.addEventListener('pointerup', up);
@@ -974,7 +1213,7 @@ function importBoard(file){
 }
 function clearBoard(){
   if(!state.items.length){ toast('The board is already empty.'); return; }
-  if(!confirm('Clear the whole board? This removes every note, checklist, calendar and countdown.')) return;
+  if(!confirm('Clear the whole board? This removes every item on it.')) return;
   state.items = [];
   renderAll(); save();
   toast('Board cleared.','ok');
@@ -984,9 +1223,10 @@ function clearBoard(){
 function renderAll(){
   els.forEach(el=>el.remove());
   els.clear();
-  countdownEls.clear();                       // re-populated as countdowns re-mount
+  countdownEls.clear(); calEls.clear(); agendaEls.clear();
   // keep the z counter ahead of any restored item
   state.z = Math.max(10, ...state.items.map(i=>i.z||0));
+  state.zoom = clamp(state.zoom||1, ZOOM_MIN, ZOOM_MAX);
   state.items.forEach(item=>{
     // backfill anything an older/partial file might be missing
     if(!item.pin) item.pin = pickPin();
@@ -994,18 +1234,18 @@ function renderAll(){
     const def = SIZE[item.type] || {};
     if(item.w==null) item.w = def.w;           // boards saved before resizing existed
     if(!('h' in item)) item.h = (def.h!==undefined ? def.h : null);
+    if(item.type==='cal'){
+      if(!item.dayNotes) item.dayNotes = {};
+      // migrate older "marks" dots into notes so nothing is lost
+      if(item.marks){ for(const k in item.marks){ if(item.marks[k] && !item.dayNotes[k]) item.dayNotes[k]='•'; } delete item.marks; }
+    }
+    item.x = Math.max(0, item.x||0); item.y = Math.max(0, item.y||0);
     mountCard(item, false);
   });
-  // clamp any item that lands outside the current board
-  requestAnimationFrame(()=>{
-    state.items.forEach(item=>{
-      const el = els.get(item.id); if(!el) return;
-      item.x = clamp(item.x, 6, Math.max(6, board.clientWidth - el.offsetWidth - 6));
-      item.y = clamp(item.y, 6, Math.max(6, board.clientHeight - el.offsetHeight - 6));
-      el.style.left=item.x+'px'; el.style.top=item.y+'px';
-    });
-  });
-  updateStatus();
+  applyZoom();
+  fitBoard();
+  refreshAgendas();
+  updateEmpty();
 }
 
 /* ---------------- first-run seed ---------------- */
@@ -1024,24 +1264,31 @@ function seed(){
     {text:'Mark Set B essays', done:false},
     {text:'Book the hall', done:false},
   ];
-  // a calendar
+  // a calendar, with a couple of sample day-notes so the agenda has content
   const cal = addCal();
+  const t0 = new Date(); t0.setHours(0,0,0,0);
+  const t2 = new Date(t0); t2.setDate(t2.getDate()+2);
+  cal.dayNotes[dkey(t0)] = 'Staff meeting · 3:30';
+  cal.dayNotes[dkey(t2)] = 'Fire drill';
   // a day countdown (instructional days to the last day of school)
   const count = addCount();
   count.title = 'Last day of school';
+  // an agenda (lists the calendar's day-notes, iPhone-style)
+  const agenda = addAgenda();
   // lay them out across the board
-  els.get(list.id)  && place(list,  Math.min(w-260, 250), 26);
-  els.get(cal.id)   && place(cal,   Math.min(w-340, 520), 22);
-  els.get(count.id) && place(count, 32, 250);
+  els.get(list.id)   && place(list,   Math.min(w-260, 250), 26);
+  els.get(cal.id)    && place(cal,    Math.min(w-360, 540), 22);
+  els.get(count.id)  && place(count,  32, 250);
+  els.get(agenda.id) && place(agenda, 250, 250);
   // rebuild the ones we mutated after creation
-  rebuild(list); rebuild(cal); rebuild(count);
-  updateStatus(); save();
+  rebuild(list); rebuild(cal); rebuild(count); rebuild(agenda);
+  updateEmpty(); fitBoard(); refreshAgendas(); save();
 }
 function place(item, x, y){ item.x=x; item.y=y; const el=els.get(item.id); if(el){ el.style.left=x+'px'; el.style.top=y+'px'; } }
 function rebuild(item){
   const old = els.get(item.id);
   if(old){ old.remove(); els.delete(item.id); }
-  if(item._tick){ countdownEls.delete(item._tick); item._tick=null; }
+  if(item._reg){ item._reg.set.delete(item._reg.entry); item._reg=null; }
   mountCard(item, false);
 }
 
@@ -1050,21 +1297,33 @@ $('addNote').addEventListener('click', ()=> addNote());
 $('addList').addEventListener('click', ()=> addList());
 $('addCal').addEventListener('click', ()=> addCal());
 $('addCount').addEventListener('click', ()=> addCount());
+$('addAgenda').addEventListener('click', ()=> addAgenda());
 $('exportBtn').addEventListener('click', exportBoard);
 $('importBtn').addEventListener('click', ()=> $('importFile').click());
 $('importFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importBoard(f); e.target.value=''; });
 $('clearBtn').addEventListener('click', clearBoard);
 
+// zoom / view controls
+$('zoomOut').addEventListener('click', ()=> setZoom((state.zoom||1) - 0.1));
+$('zoomIn').addEventListener('click',  ()=> setZoom((state.zoom||1) + 0.1));
+$('zoomLvl').addEventListener('click', ()=> setZoom(1));
+$('fitBtn').addEventListener('click', fitToScreen);
+$('fsBtn').addEventListener('click', toggleFullscreen);
+window.addEventListener('resize', fitBoard);
+document.addEventListener('fullscreenchange', ()=> setTimeout(fitBoard, 60));
+
 // double-click the bare cork to drop a note where you clicked
-board.addEventListener('dblclick', e=>{
-  if(e.target!==board) return;
-  const br = board.getBoundingClientRect();
-  addNote(Math.round(e.clientX-br.left-90), Math.round(e.clientY-br.top-20));
+surface.addEventListener('dblclick', e=>{
+  if(e.target!==surface) return;
+  const p = toSurface(e.clientX, e.clientY);
+  addNote(Math.round(p.x-90), Math.round(p.y-20));
 });
 
 /* ---------------- boot ---------------- */
 if(load()){ renderAll(); }
 else { seed(); }
+applyZoom();
+fitBoard();
 
 // keep day countdowns current if the board is left open across midnight
 setInterval(()=>{ countdownEls.forEach(c=>c.render()); }, 60000);
