@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A digital staff-room corkboard — pin sticky notes, checklists and a month calendar. Runs offline, saves to your browser.">
+<meta name="theme-color" content="#1f3d35">
+<title>Staff-Room Board</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23c0904f'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23c43d35'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    /* corkboard furniture (per-tool decorative palette) */
+    --cork:#c19153; --cork-2:#b07f3f; --wood:#8a5a30; --wood-2:#6f471f;
+    --paper-shadow:0 1px 1px rgba(40,24,8,.18),0 10px 18px rgba(40,24,8,.30);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;overflow:hidden;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* ---- toolbar ---- */
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);z-index:5;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.danger{color:var(--danger);border-color:var(--danger-soft);background:#fff;}
+  .btn.danger:hover{background:var(--danger-soft);}
+  .btn.small{padding:5px 9px;font-size:12px;border-radius:7px;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:15px;line-height:1;}
+
+  /* ---- board (corkboard work surface) ---- */
+  .board-wrap{flex:1;overflow:auto;position:relative;min-height:0;
+    padding:14px;background:linear-gradient(var(--wood),var(--wood-2));}
+  .board{position:relative;width:100%;height:100%;min-width:640px;min-height:560px;
+    border-radius:6px;
+    background-color:var(--cork);
+    /* speckled cork grain from layered radial-gradients */
+    background-image:
+      radial-gradient(rgba(120,72,28,.30) 16%, transparent 17%),
+      radial-gradient(rgba(86,50,18,.26) 14%, transparent 15%),
+      radial-gradient(rgba(255,236,200,.20) 12%, transparent 13%),
+      radial-gradient(rgba(150,98,42,.22) 11%, transparent 12%),
+      radial-gradient(rgba(70,40,14,.18) 10%, transparent 11%);
+    background-size:13px 13px, 17px 17px, 9px 9px, 21px 21px, 7px 7px;
+    background-position:0 0, 8px 6px, 3px 7px, 11px 13px, 5px 2px;
+    box-shadow:inset 0 0 0 1px rgba(70,40,14,.35),
+      inset 0 0 38px rgba(54,30,10,.45), inset 0 0 120px rgba(54,30,10,.22);
+  }
+  .board.dragging{cursor:grabbing;}
+
+  /* ---- pinned card (paper) ---- */
+  .card{position:absolute;top:0;left:0;border-radius:3px;
+    box-shadow:var(--paper-shadow);transform:rotate(var(--rot,0deg));
+    transition:box-shadow .12s;will-change:left,top;touch-action:none;}
+  .card.lift{box-shadow:0 3px 4px rgba(40,24,8,.22),0 18px 30px rgba(40,24,8,.40);}
+  .card .inner{position:relative;padding:18px 12px 12px;}
+
+  /* push pin = drag handle */
+  .pin{position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+    width:22px;height:22px;border:none;padding:0;border-radius:50%;cursor:grab;z-index:3;
+    background:
+      radial-gradient(circle at 36% 30%, rgba(255,255,255,.85), rgba(255,255,255,0) 42%),
+      radial-gradient(circle at 50% 55%, var(--pin,#c43d35), var(--pin-deep,#8f2a24));
+    box-shadow:0 3px 4px rgba(0,0,0,.4),inset 0 -2px 3px rgba(0,0,0,.30),
+      inset 0 2px 3px rgba(255,255,255,.5);}
+  .pin::after{content:"";position:absolute;left:50%;top:50%;width:5px;height:5px;
+    border-radius:50%;transform:translate(-50%,-50%);
+    background:radial-gradient(circle at 40% 40%, rgba(255,255,255,.7), rgba(0,0,0,.25));}
+  .pin:active{cursor:grabbing;}
+  .card.dragging-this .pin{cursor:grabbing;}
+
+  /* remove (×) — appears on hover/focus */
+  .x{position:absolute;top:3px;right:3px;width:22px;height:22px;border:none;border-radius:6px;
+    background:rgba(255,255,255,.0);color:rgba(40,24,8,.55);cursor:pointer;font-size:17px;
+    line-height:1;display:flex;align-items:center;justify-content:center;opacity:0;
+    transition:opacity .12s,background .12s,color .12s;z-index:3;}
+  .card:hover .x,.card:focus-within .x{opacity:1;}
+  .x:hover{background:var(--danger-soft);color:var(--danger);}
+
+  /* ---- sticky note ---- */
+  .card.note{width:196px;background:var(--note,#fff59d);
+    background-image:linear-gradient(160deg, rgba(255,255,255,.35), rgba(0,0,0,.04));}
+  .card.note .inner{padding:20px 13px 26px;}
+  .note textarea{width:100%;min-height:128px;border:none;background:transparent;resize:none;
+    font-family:"Bradley Hand","Segoe Print",var(--sans);font-size:15px;line-height:1.5;
+    color:#33270f;padding:0;}
+  .note textarea:focus{outline:none;}
+  .note textarea::placeholder{color:rgba(51,39,15,.4);}
+
+  /* color swatches footer (notes) */
+  .swatches{position:absolute;left:10px;bottom:7px;display:flex;gap:5px;opacity:0;
+    transition:opacity .12s;}
+  .card:hover .swatches,.card:focus-within .swatches{opacity:1;}
+  .swatch{width:14px;height:14px;border-radius:50%;border:1px solid rgba(40,24,8,.25);
+    cursor:pointer;padding:0;}
+  .swatch.on{box-shadow:0 0 0 2px rgba(40,24,8,.55);}
+
+  /* ---- paper cards (list / calendar) ---- */
+  .card.paper{background:#fffdf7;background-image:linear-gradient(160deg,rgba(255,255,255,.5),rgba(0,0,0,.03));}
+  .card.list{width:236px;}
+  .card .head{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .card .head .title{flex:1;border:none;background:transparent;font-weight:700;font-size:13.5px;
+    color:var(--ink);padding:2px 2px;border-radius:5px;letter-spacing:.01em;}
+  .card .head .title:focus{outline:none;background:var(--panel-2);}
+  .card .head .count{font-family:var(--mono);font-size:10.5px;color:var(--muted);
+    background:var(--panel-2);border:1px solid var(--line);border-radius:20px;padding:1px 7px;flex:none;}
+
+  .checks{list-style:none;margin:0 0 6px;padding:0;display:flex;flex-direction:column;gap:3px;}
+  .checks li{display:flex;align-items:center;gap:7px;padding:2px 2px;border-radius:6px;}
+  .checks li:hover{background:rgba(40,24,8,.05);}
+  .checks input[type=checkbox]{width:15px;height:15px;accent-color:var(--board);flex:none;cursor:pointer;}
+  .checks .it{flex:1;border:none;background:transparent;font-size:13px;color:var(--ink);padding:1px 2px;border-radius:5px;}
+  .checks .it:focus{outline:none;background:var(--panel-2);}
+  .checks li.done .it{text-decoration:line-through;color:var(--muted);}
+  .checks .rm{border:none;background:none;color:rgba(40,24,8,.4);cursor:pointer;font-size:15px;
+    line-height:1;padding:0 3px;border-radius:5px;opacity:0;transition:opacity .12s;}
+  .checks li:hover .rm{opacity:1;}
+  .checks .rm:hover{color:var(--danger);background:var(--danger-soft);}
+  .additem{display:flex;align-items:center;gap:6px;}
+  .additem input{flex:1;border:1px solid var(--line);border-radius:7px;padding:5px 8px;
+    background:var(--panel-2);font-size:12.5px;}
+  .additem .add{border:1px solid var(--line);background:var(--panel);border-radius:7px;cursor:pointer;
+    width:28px;height:28px;flex:none;font-size:17px;line-height:1;color:var(--board);}
+  .additem .add:hover{background:var(--panel-2);}
+
+  /* ---- calendar ---- */
+  .card.cal{width:308px;}
+  .cal-head{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .cal-head .mtitle{flex:1;text-align:center;font-weight:700;font-size:13.5px;cursor:pointer;
+    border:none;background:transparent;color:var(--ink);border-radius:6px;padding:3px;letter-spacing:.01em;}
+  .cal-head .mtitle:hover{background:var(--panel-2);}
+  .cal-nav{border:1px solid var(--line);background:var(--panel);border-radius:7px;cursor:pointer;
+    width:26px;height:26px;flex:none;font-size:14px;line-height:1;color:var(--ink);}
+  .cal-nav:hover{background:var(--panel-2);}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+  .cal-grid .dow{font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--muted);text-align:center;padding:2px 0 4px;}
+  .cal-day{border:none;background:transparent;font-family:var(--mono);font-size:11.5px;
+    color:var(--ink);aspect-ratio:1/1;border-radius:6px;cursor:pointer;position:relative;
+    display:flex;align-items:center;justify-content:center;padding:0;}
+  .cal-day:hover{background:var(--panel-2);}
+  .cal-day.dim{color:rgba(40,24,8,.3);}
+  .cal-day.today{box-shadow:inset 0 0 0 2px var(--accent);font-weight:700;}
+  .cal-day.marked::after{content:"";position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
+    width:5px;height:5px;border-radius:50%;background:var(--danger);}
+  .cal-foot{display:flex;align-items:center;gap:8px;margin-top:9px;
+    font-size:10.5px;color:var(--muted);}
+  .cal-foot .lab{letter-spacing:.06em;text-transform:uppercase;font-weight:700;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:3px 9px;cursor:pointer;font-size:11px;font-weight:600;
+    color:var(--muted);}
+  .seg button.active{background:var(--board);color:#fff;}
+
+  /* ---- empty hint ---- */
+  .emptyhint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    text-align:center;color:rgba(255,255,255,.85);text-shadow:0 1px 2px rgba(40,24,8,.5);
+    font-size:14px;line-height:1.7;pointer-events:none;}
+  .emptyhint b{font-weight:700;}
+
+  /* ---- status bar ---- */
+  .statusbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:0 16px;height:40px;
+    border-top:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--muted);}
+  .statusbar .stat b{font-family:var(--mono);font-weight:600;color:var(--ink);}
+  .statusbar .dotline{width:1px;height:16px;background:var(--line);}
+  .statusbar .stamp{margin-left:auto;font-family:var(--mono);font-size:11.5px;
+    display:inline-flex;align-items:center;gap:6px;}
+  .statusbar .saved{width:7px;height:7px;border-radius:50%;background:var(--ok);}
+
+  /* ---- toast ---- */
+  .toast-wrap{position:fixed;left:50%;bottom:54px;transform:translateX(-50%);z-index:1000;
+    display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .toast{background:var(--ink);color:#fff;padding:10px 15px;border-radius:10px;font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,560px);
+    border-left:3px solid var(--accent);animation:tin .2s ease both;}
+  .toast.err{border-left-color:var(--danger);}
+  .toast.ok{border-left-color:var(--ok);}
+  @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  @keyframes pop{from{opacity:0;transform:rotate(var(--rot,0deg)) scale(.9);}to{opacity:1;}}
+  .card.pop{animation:pop .26s cubic-bezier(.2,.7,.3,1);}
+
+  @media (max-width:620px){
+    .toolbar{gap:7px;} .brand small{display:none;}
+    .btn .lbl{display:none;} .btn{padding:8px 10px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .card.pop{animation:none;} .btn:active{transform:none;} *{scroll-behavior:auto;}
+  }
+  @media print{
+    .toolbar,.statusbar,.toast-wrap,.pin,.x,.swatches{display:none !important;}
+    body{overflow:visible;} .board-wrap{overflow:visible;background:#fff;padding:0;}
+    .board{box-shadow:none;background:#fff;}
+    .card{box-shadow:0 0 0 1px #ccc;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Staff-Room Board <small>corkboard · notes &amp; lists</small></div>
+    <div class="spacer"></div>
+    <button class="btn" id="addNote"><span class="ic">📝</span><span class="lbl">Sticky note</span></button>
+    <button class="btn" id="addList"><span class="ic">✓</span><span class="lbl">Checklist</span></button>
+    <button class="btn" id="addCal"><span class="ic">📅</span><span class="lbl">Calendar</span></button>
+    <button class="btn small" id="exportBtn" title="Download this board as a file">Export</button>
+    <button class="btn small" id="importBtn" title="Load a board file">Import</button>
+    <button class="btn small danger" id="clearBtn" title="Clear the whole board">Clear</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+  </header>
+
+  <div class="board-wrap" id="boardWrap">
+    <div class="board" id="board">
+      <div class="emptyhint" id="emptyHint">
+        <b>The board is empty.</b><br>
+        Add a sticky note, checklist or calendar — or double-click the cork.
+      </div>
+    </div>
+  </div>
+
+  <footer class="statusbar">
+    <span class="stat"><b id="cNotes">0</b> notes</span>
+    <span class="dotline"></span>
+    <span class="stat"><b id="cLists">0</b> checklists</span>
+    <span class="dotline"></span>
+    <span class="stat"><b id="cCals">0</b> calendars</span>
+    <span class="stamp"><span class="saved" id="savedDot"></span><span id="savedTxt">Saved locally</span></span>
+  </footer>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* =====================================================================
+   Staff-Room Board — single-file, offline.
+
+   A digital corkboard for the staff room: pin sticky notes, checklists
+   and a month calendar to a cork surface and drag them around.
+
+   • Items are absolutely positioned on the cork. The push pin doubles as
+     a drag handle (grab the pin or the paper margins; click into text to
+     edit). Arrow keys nudge a focused pin for keyboard users.
+   • The calendar's first day of week follows the SYSTEM/locale default
+     (Intl.Locale weekInfo) — Monday in much of the world, Sunday in the
+     US etc. Each calendar can be flipped Sun/Mon independently.
+   • State auto-saves to this browser (localStorage). No network, no
+     accounts. Export/Import moves a board between machines as a file.
+   ===================================================================== */
+
+const $ = id => document.getElementById(id);
+const STORE_KEY = 'teachingtools.staffboard.v1';
+
+const board    = $('board');
+const boardWrap = $('boardWrap');
+
+/* ---- palettes ---- */
+const NOTE_COLORS = ['#fff59d','#ffd3e0','#bfe3ff','#caf0c2','#ffd9a8','#e7d9ff'];
+const PINS = [
+  {c:'#c43d35', d:'#8f2a24'}, // red
+  {c:'#2f6f9f', d:'#1f4d70'}, // blue
+  {c:'#3f9e6b', d:'#2a6e49'}, // green
+  {c:'#e0982e', d:'#b9781f'}, // amber
+  {c:'#7a52c0', d:'#553a87'}, // violet
+];
+
+/* ---- state ---- */
+let state = { items:[], z:10, seq:1 };
+const els = new Map();           // id -> card element
+let saveTimer = null;
+let placeIx = 0;                 // cascade counter for new items
+
+/* ---------------- locale week start ---------------- */
+// Returns 0..6 (0 = Sunday) for the system locale's first day of week.
+function systemWeekStart(){
+  try{
+    const loc = new Intl.Locale(navigator.language || 'en-US');
+    const wi = (typeof loc.getWeekInfo === 'function') ? loc.getWeekInfo() : loc.weekInfo;
+    if(wi && wi.firstDay) return wi.firstDay % 7;   // CLDR 1..7 (Mon..Sun) -> 1..6,0
+  }catch(e){}
+  // Fallback: infer a region and guess (most of the world starts Monday).
+  const sundayFirst = ['US','CA','AU','NZ','JP','IL','KR','IN','ZA','BR','MX','PH','CO',
+    'EG','SA','HK','TW','CN','ID','TH','PE','VE','CL','GT','PR','PA','CR','DO','HN','NI','BO','EC'];
+  try{
+    const region = new Intl.Locale(navigator.language || 'en-US').maximize().region;
+    if(region && sundayFirst.includes(region)) return 0;
+  }catch(e){}
+  return 1; // Monday
+}
+const SYS_WEEK_START = systemWeekStart();
+
+/* ---------------- persistence ---------------- */
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); flashSaved(); }
+    catch(e){ /* storage may be unavailable (private mode) — keep working in memory */ }
+  }, 200);
+}
+function flashSaved(){
+  const t = $('savedTxt'), d = $('savedDot');
+  t.textContent = 'Saved · ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  d.style.opacity = '0'; requestAnimationFrame(()=>{ d.style.transition='opacity .5s'; d.style.opacity='1'; });
+}
+function load(){
+  let raw=null;
+  try{ raw = localStorage.getItem(STORE_KEY); }catch(e){}
+  if(raw){
+    try{
+      const s = JSON.parse(raw);
+      if(s && Array.isArray(s.items)){
+        state = Object.assign({items:[],z:10,seq:1}, s);
+        return true;
+      }
+    }catch(e){}
+  }
+  return false;
+}
+
+/* ---------------- helpers ---------------- */
+function uid(){ return 'i' + (state.seq++) + '_' + Math.random().toString(36).slice(2,6); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function rand(a,b){ return a + Math.random()*(b-a); }
+function pickPin(){ return PINS[Math.floor(Math.random()*PINS.length)]; }
+
+function toast(msg, kind){
+  const t = document.createElement('div');
+  t.className = 'toast' + (kind ? ' '+kind : '');
+  t.textContent = msg;
+  $('toastWrap').appendChild(t);
+  setTimeout(()=>{ t.style.transition='opacity .3s'; t.style.opacity='0'; setTimeout(()=>t.remove(),300); }, 3400);
+}
+
+function bringToFront(item, el){
+  item.z = ++state.z;
+  el.style.zIndex = item.z;
+}
+
+// A sensible spot for a new item: cascade diagonally near the top-left of
+// whatever part of the board is currently in view.
+function nextPos(){
+  const i = placeIx++;
+  const x = 24 + (i % 6) * 30 + Math.floor(i/6) * 12;
+  const y = 24 + (i % 6) * 26 + boardWrap.scrollTop;
+  return { x, y };
+}
+
+function updateStatus(){
+  let n=0,l=0,c=0;
+  state.items.forEach(it=>{ if(it.type==='note')n++; else if(it.type==='list')l++; else if(it.type==='cal')c++; });
+  $('cNotes').textContent=n; $('cLists').textContent=l; $('cCals').textContent=c;
+  $('emptyHint').style.display = state.items.length ? 'none' : 'block';
+}
+
+/* ---------------- create items ---------------- */
+function addNote(x, y, text, color){
+  const pos = (x==null) ? nextPos() : {x,y};
+  const item = { id:uid(), type:'note', x:pos.x, y:pos.y, rot:rand(-3.2,3.2),
+    z:++state.z, pin:pickPin(), color: color || NOTE_COLORS[Math.floor(rand(0,NOTE_COLORS.length))],
+    text: text || '' };
+  state.items.push(item);
+  mountCard(item, true);
+  updateStatus(); save();
+  return item;
+}
+function addList(){
+  const pos = nextPos();
+  const item = { id:uid(), type:'list', x:pos.x, y:pos.y, rot:rand(-2.4,2.4),
+    z:++state.z, pin:pickPin(), title:'Checklist', items:[] };
+  state.items.push(item);
+  mountCard(item, true);
+  updateStatus(); save();
+  return item;
+}
+function addCal(){
+  const pos = nextPos();
+  const now = new Date();
+  const item = { id:uid(), type:'cal', x:pos.x, y:pos.y, rot:rand(-2,2),
+    z:++state.z, pin:pickPin(), year:now.getFullYear(), month:now.getMonth(),
+    weekStart:null /* null = system default */, marks:{} };
+  state.items.push(item);
+  mountCard(item, true);
+  updateStatus(); save();
+  return item;
+}
+
+function removeItem(item){
+  const el = els.get(item.id);
+  if(el) el.remove();
+  els.delete(item.id);
+  state.items = state.items.filter(i=>i!==item);
+  updateStatus(); save();
+}
+
+/* ---------------- card scaffolding ---------------- */
+function mountCard(item, animate){
+  const el = document.createElement('div');
+  el.className = 'card ' + (item.type==='note' ? 'note' : 'paper ' + item.type);
+  if(animate) el.classList.add('pop');
+  el.dataset.id = item.id;
+  el.style.left = item.x + 'px';
+  el.style.top  = item.y + 'px';
+  el.style.zIndex = item.z;
+  el.style.setProperty('--rot', (item.rot||0)+'deg');
+  if(item.type==='note') el.style.setProperty('--note', item.color);
+
+  const inner = document.createElement('div');
+  inner.className = 'inner';
+
+  // push pin (drag handle)
+  const pin = document.createElement('button');
+  pin.className = 'pin';
+  pin.type = 'button';
+  pin.setAttribute('aria-label','Move this item (drag, or use arrow keys)');
+  pin.style.setProperty('--pin', item.pin.c);
+  pin.style.setProperty('--pin-deep', item.pin.d);
+  inner.appendChild(pin);
+
+  // remove
+  const x = document.createElement('button');
+  x.className = 'x'; x.type='button'; x.innerHTML='&times;';
+  x.setAttribute('aria-label','Remove this item');
+  x.addEventListener('click', ()=> removeItem(item));
+  inner.appendChild(x);
+
+  // body
+  if(item.type==='note')      buildNote(item, inner);
+  else if(item.type==='list') buildList(item, inner);
+  else if(item.type==='cal')  buildCal(item, inner);
+
+  el.appendChild(inner);
+  board.appendChild(el);
+  els.set(item.id, el);
+
+  attachDrag(item, el, pin);
+  return el;
+}
+
+/* ---------------- sticky note ---------------- */
+function buildNote(item, inner){
+  const ta = document.createElement('textarea');
+  ta.value = item.text || '';
+  ta.placeholder = 'Write a note…';
+  ta.rows = 5;
+  ta.setAttribute('aria-label','Sticky note text');
+  ta.addEventListener('input', ()=>{ item.text = ta.value; save(); });
+  inner.appendChild(ta);
+
+  // colour swatches
+  const sw = document.createElement('div');
+  sw.className = 'swatches';
+  NOTE_COLORS.forEach(c=>{
+    const b = document.createElement('button');
+    b.className = 'swatch' + (c===item.color?' on':'');
+    b.type='button'; b.style.background=c;
+    b.setAttribute('aria-label','Note colour');
+    b.addEventListener('click', ()=>{
+      item.color = c;
+      els.get(item.id).style.setProperty('--note', c);
+      sw.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('on', s===b));
+      save();
+    });
+    sw.appendChild(b);
+  });
+  inner.appendChild(sw);
+}
+
+/* ---------------- checklist ---------------- */
+function buildList(item, inner){
+  const head = document.createElement('div');
+  head.className = 'head';
+  const title = document.createElement('input');
+  title.className='title'; title.value=item.title||''; title.placeholder='Checklist';
+  title.setAttribute('aria-label','Checklist title');
+  title.addEventListener('input', ()=>{ item.title=title.value; save(); });
+  const count = document.createElement('span'); count.className='count';
+  head.appendChild(title); head.appendChild(count);
+  inner.appendChild(head);
+
+  const ul = document.createElement('ul'); ul.className='checks';
+  inner.appendChild(ul);
+
+  const addRow = document.createElement('div'); addRow.className='additem';
+  const inp = document.createElement('input');
+  inp.placeholder='Add item…'; inp.setAttribute('aria-label','New checklist item');
+  const addBtn = document.createElement('button'); addBtn.className='add'; addBtn.type='button';
+  addBtn.innerHTML='+'; addBtn.setAttribute('aria-label','Add item');
+  const doAdd = ()=>{
+    const v = inp.value.trim(); if(!v) return;
+    item.items.push({ text:v, done:false });
+    inp.value=''; renderChecks();
+    save(); inp.focus();
+  };
+  addBtn.addEventListener('click', doAdd);
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doAdd(); } });
+  addRow.appendChild(inp); addRow.appendChild(addBtn);
+  inner.appendChild(addRow);
+
+  function renderChecks(){
+    ul.innerHTML='';
+    item.items.forEach((row, idx)=>{
+      const li = document.createElement('li');
+      if(row.done) li.classList.add('done');
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=!!row.done;
+      cb.setAttribute('aria-label','Mark done');
+      cb.addEventListener('change', ()=>{ row.done=cb.checked; li.classList.toggle('done',row.done); updateCount(); save(); });
+      const tx = document.createElement('input'); tx.className='it'; tx.value=row.text;
+      tx.setAttribute('aria-label','Item text');
+      tx.addEventListener('input', ()=>{ row.text=tx.value; save(); });
+      tx.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.focus(); } });
+      const rm = document.createElement('button'); rm.className='rm'; rm.type='button'; rm.innerHTML='&times;';
+      rm.setAttribute('aria-label','Remove item');
+      rm.addEventListener('click', ()=>{ item.items.splice(idx,1); renderChecks(); save(); });
+      li.appendChild(cb); li.appendChild(tx); li.appendChild(rm);
+      ul.appendChild(li);
+    });
+    updateCount();
+  }
+  function updateCount(){
+    const done = item.items.filter(i=>i.done).length;
+    count.textContent = done + '/' + item.items.length;
+  }
+  renderChecks();
+}
+
+/* ---------------- calendar ---------------- */
+function effWeekStart(item){ return (item.weekStart==null) ? SYS_WEEK_START : item.weekStart; }
+
+function buildCal(item, inner){
+  const head = document.createElement('div'); head.className='cal-head';
+  const prev = document.createElement('button'); prev.className='cal-nav'; prev.type='button'; prev.innerHTML='&lsaquo;';
+  prev.setAttribute('aria-label','Previous month');
+  const title = document.createElement('button'); title.className='mtitle'; title.type='button';
+  title.setAttribute('aria-label','Jump to current month');
+  const next = document.createElement('button'); next.className='cal-nav'; next.type='button'; next.innerHTML='&rsaquo;';
+  next.setAttribute('aria-label','Next month');
+  head.appendChild(prev); head.appendChild(title); head.appendChild(next);
+  inner.appendChild(head);
+
+  const grid = document.createElement('div'); grid.className='cal-grid';
+  inner.appendChild(grid);
+
+  const foot = document.createElement('div'); foot.className='cal-foot';
+  const lab = document.createElement('span'); lab.className='lab'; lab.textContent='Week starts';
+  const seg = document.createElement('div'); seg.className='seg';
+  const bSun = document.createElement('button'); bSun.type='button'; bSun.textContent='Sun';
+  const bMon = document.createElement('button'); bMon.type='button'; bMon.textContent='Mon';
+  bSun.addEventListener('click', ()=>{ item.weekStart=0; render(); save(); });
+  bMon.addEventListener('click', ()=>{ item.weekStart=1; render(); save(); });
+  seg.appendChild(bSun); seg.appendChild(bMon);
+  foot.appendChild(lab); foot.appendChild(seg);
+  inner.appendChild(foot);
+
+  prev.addEventListener('click', ()=>{ shift(-1); });
+  next.addEventListener('click', ()=>{ shift(1); });
+  title.addEventListener('click', ()=>{ const n=new Date(); item.year=n.getFullYear(); item.month=n.getMonth(); render(); save(); });
+
+  function shift(d){
+    let m = item.month + d, y = item.year;
+    if(m<0){ m=11; y--; } else if(m>11){ m=0; y++; }
+    item.month=m; item.year=y; render(); save();
+  }
+
+  function render(){
+    const ws = effWeekStart(item);
+    bSun.classList.toggle('active', ws===0);
+    bMon.classList.toggle('active', ws===1);
+
+    title.textContent = new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'})
+      .format(new Date(item.year, item.month, 1));
+
+    grid.innerHTML='';
+    // weekday header (localized short names)
+    const dfmt = new Intl.DateTimeFormat(undefined,{weekday:'short'});
+    for(let i=0;i<7;i++){
+      const dow=(ws+i)%7;
+      const d=document.createElement('div'); d.className='dow';
+      // 2023-01-01 was a Sunday → date 1+dow has weekday `dow`
+      d.textContent = dfmt.format(new Date(2023,0,1+dow)).slice(0,2);
+      grid.appendChild(d);
+    }
+    // day cells (6 weeks)
+    const first = new Date(item.year, item.month, 1);
+    const lead = (first.getDay() - ws + 7) % 7;
+    const start = new Date(item.year, item.month, 1 - lead);
+    const today = new Date(); today.setHours(0,0,0,0);
+    for(let i=0;i<42;i++){
+      const d = new Date(start); d.setDate(start.getDate()+i);
+      const cell = document.createElement('button');
+      cell.className='cal-day'; cell.type='button'; cell.textContent=d.getDate();
+      const inMonth = d.getMonth()===item.month;
+      if(!inMonth) cell.classList.add('dim');
+      if(+d===+today) cell.classList.add('today');
+      const key = d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
+      if(item.marks[key]) cell.classList.add('marked');
+      cell.setAttribute('aria-label', d.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'}));
+      cell.addEventListener('click', ()=>{
+        if(item.marks[key]){ delete item.marks[key]; cell.classList.remove('marked'); }
+        else { item.marks[key]=true; cell.classList.add('marked'); }
+        save();
+      });
+      grid.appendChild(cell);
+    }
+  }
+  render();
+}
+
+/* ---------------- dragging ---------------- */
+function attachDrag(item, el, pin){
+  let downX=0,downY=0,offX=0,offY=0,moved=false,dragging=false;
+
+  el.addEventListener('pointerdown', e=>{
+    if(e.button!=null && e.button!==0) return;
+    const t = e.target;
+    if(t.closest('.x')) return;                                   // delete handled itself
+    // Edit controls handle their own pointer events; the pin (and bare
+    // paper chrome) start a drag.
+    if(t.closest('input,textarea,select,.swatch,.cal-day,.cal-nav,.mtitle,.add,.rm,.seg') && !t.closest('.pin')) return;
+
+    bringToFront(item, el);
+    moved=false; dragging=true;
+    downX=e.clientX; downY=e.clientY;
+    const r = el.getBoundingClientRect();
+    offX = e.clientX - r.left; offY = e.clientY - r.top;
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('lift','dragging-this');
+    board.classList.add('dragging');
+    e.preventDefault();
+
+    const move = ev=>{
+      if(!dragging) return;
+      if(Math.abs(ev.clientX-downX)+Math.abs(ev.clientY-downY) > 3) moved=true;
+      if(!moved) return;
+      const br = board.getBoundingClientRect();
+      const w = el.offsetWidth, h = el.offsetHeight;
+      let nx = clamp(ev.clientX - br.left - offX, 6, Math.max(6, board.clientWidth - w - 6));
+      let ny = clamp(ev.clientY - br.top  - offY, 6, Math.max(6, board.clientHeight - h - 6));
+      item.x=Math.round(nx); item.y=Math.round(ny);
+      el.style.left=item.x+'px'; el.style.top=item.y+'px';
+    };
+    const up = ()=>{
+      dragging=false;
+      el.releasePointerCapture(e.pointerId);
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      el.classList.remove('lift','dragging-this');
+      board.classList.remove('dragging');
+      if(moved) save();
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  });
+
+  // keyboard nudging when the pin is focused
+  pin.addEventListener('keydown', e=>{
+    const step = e.shiftKey ? 1 : 12;
+    let dx=0,dy=0;
+    if(e.key==='ArrowLeft') dx=-step; else if(e.key==='ArrowRight') dx=step;
+    else if(e.key==='ArrowUp') dy=-step; else if(e.key==='ArrowDown') dy=step; else return;
+    e.preventDefault();
+    bringToFront(item, el);
+    const w=el.offsetWidth, h=el.offsetHeight;
+    item.x = clamp(item.x+dx, 6, Math.max(6, board.clientWidth - w - 6));
+    item.y = clamp(item.y+dy, 6, Math.max(6, board.clientHeight - h - 6));
+    el.style.left=item.x+'px'; el.style.top=item.y+'px';
+    save();
+  });
+}
+
+/* ---------------- import / export / clear ---------------- */
+function exportBoard(){
+  if(!state.items.length){ toast('The board is empty — nothing to export.','err'); return; }
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='staff-board.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('Board exported.','ok');
+}
+function importBoard(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const s = JSON.parse(reader.result);
+      if(!s || !Array.isArray(s.items)) throw new Error('not a board file');
+      state = Object.assign({items:[],z:10,seq:1}, s);
+      renderAll();
+      save();
+      toast('Loaded ' + state.items.length + ' item' + (state.items.length===1?'':'s') + '.','ok');
+    }catch(err){ toast('Couldn’t read that file — is it a board export?','err'); }
+  };
+  reader.readAsText(file);
+}
+function clearBoard(){
+  if(!state.items.length){ toast('The board is already empty.'); return; }
+  if(!confirm('Clear the whole board? This removes every note, checklist and calendar.')) return;
+  state.items = [];
+  renderAll(); save();
+  toast('Board cleared.','ok');
+}
+
+/* ---------------- render-all (load / import) ---------------- */
+function renderAll(){
+  els.forEach(el=>el.remove());
+  els.clear();
+  // keep the z counter ahead of any restored item
+  state.z = Math.max(10, ...state.items.map(i=>i.z||0));
+  state.items.forEach(item=>{
+    // backfill anything an older/partial file might be missing
+    if(!item.pin) item.pin = pickPin();
+    if(item.rot==null) item.rot = 0;
+    mountCard(item, false);
+  });
+  // clamp any item that lands outside the current board
+  requestAnimationFrame(()=>{
+    state.items.forEach(item=>{
+      const el = els.get(item.id); if(!el) return;
+      item.x = clamp(item.x, 6, Math.max(6, board.clientWidth - el.offsetWidth - 6));
+      item.y = clamp(item.y, 6, Math.max(6, board.clientHeight - el.offsetHeight - 6));
+      el.style.left=item.x+'px'; el.style.top=item.y+'px';
+    });
+  });
+  updateStatus();
+}
+
+/* ---------------- first-run seed ---------------- */
+function seed(){
+  const w = boardWrap.clientWidth;
+  // welcome note (classic yellow for the first impression)
+  addNote(28, 30,
+    'Welcome to the staff-room board!\n\nGrab a pin to drag things around. Double-click the cork for a new note.',
+    NOTE_COLORS[0]);
+  // a starter checklist
+  const list = addList();
+  list.title = 'This week';
+  list.items = [
+    {text:'Photocopy Yr 9 worksheets', done:true},
+    {text:'Email parents re: trip', done:false},
+    {text:'Mark Set B essays', done:false},
+    {text:'Book the hall', done:false},
+  ];
+  // a calendar
+  const cal = addCal();
+  // lay them out across the board
+  els.get(list.id) && place(list, Math.min(w-260, 250), 26);
+  els.get(cal.id)  && place(cal,  Math.min(w-330, 520), 22);
+  // rebuild the two we mutated after creation
+  rebuild(list); rebuild(cal);
+  updateStatus(); save();
+}
+function place(item, x, y){ item.x=x; item.y=y; const el=els.get(item.id); if(el){ el.style.left=x+'px'; el.style.top=y+'px'; } }
+function rebuild(item){
+  const old = els.get(item.id);
+  if(old){ old.remove(); els.delete(item.id); }
+  mountCard(item, false);
+}
+
+/* ---------------- wire up ---------------- */
+$('addNote').addEventListener('click', ()=> addNote());
+$('addList').addEventListener('click', ()=> addList());
+$('addCal').addEventListener('click', ()=> addCal());
+$('exportBtn').addEventListener('click', exportBoard);
+$('importBtn').addEventListener('click', ()=> $('importFile').click());
+$('importFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importBoard(f); e.target.value=''; });
+$('clearBtn').addEventListener('click', clearBoard);
+
+// double-click the bare cork to drop a note where you clicked
+board.addEventListener('dblclick', e=>{
+  if(e.target!==board) return;
+  const br = board.getBoundingClientRect();
+  addNote(Math.round(e.clientX-br.left-90), Math.round(e.clientY-br.top-20));
+});
+
+/* ---------------- boot ---------------- */
+if(load()){ renderAll(); }
+else { seed(); }
+</script>
+</body>
+</html>
