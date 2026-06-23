@@ -525,11 +525,11 @@ void main(){
 }`;
 
   /* simulation */
-  const GRID=10, PIPE_R=0.22, BALL_R=PIPE_R*1.5, MAX_CYL=2600, MAX_SPH=1600;
+  const GRID=10, MAX_CYL=4000, MAX_SPH=2600;
   const AXES=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
   const BGC=[0.024,0.035,0.055], LIGHT=v_norm([0.45,0.85,0.55]), SPEC=[0.66,0.99,1.0];
   let occupied=new Set(), pipes=[], az=0.7, el=0.42;
-  let sceneStart=0, interval=20000, dissolving=false, dissolve=0, dissolveStart=0, stepAcc=0;
+  let sceneStart=0, interval=20000, dissolving=false, dissolve=0, dissolveStart=0;
   const key=p=>p[0]+','+p[1]+','+p[2];
   const inB=p=>Math.abs(p[0])<=GRID&&Math.abs(p[1])<=GRID&&Math.abs(p[2])<=GRID;
   const free=p=>inB(p)&&!occupied.has(key(p));
@@ -556,33 +556,38 @@ void main(){
     for(let i=0;i<40;i++){ const p=[(Math.random()*(2*GRID+1)|0)-GRID,(Math.random()*(2*GRID+1)|0)-GRID,(Math.random()*(2*GRID+1)|0)-GRID]; if(free(p)){ start=p; break; } }
     if(!start) return;
     const color=hsl(Math.random(),0.6+Math.random()*0.35,0.45+Math.random()*0.12);
-    occupied.add(key(start)); addInstance(sph,sphereModel(start,PIPE_R),color);
-    pipes.push({pos:start,dir:null,color});
+    const radius=0.15+Math.random()*0.16;                              // diameter varies per pipe
+    const maxLen=12+(Math.random()*64|0);                              // length varies per pipe
+    const stepMs=reduced ? 80+Math.random()*95 : 30+Math.random()*64;  // speed varies per pipe
+    occupied.add(key(start)); addInstance(sph,sphereModel(start,radius),color);
+    pipes.push({pos:start,dir:null,color,radius,maxLen,stepMs,acc:0,len:0});
   }
-  function endPipe(pipe){ addInstance(sph,sphereModel(pipe.pos,PIPE_R),pipe.color); }
+  function endPipe(pipe){ addInstance(sph,sphereModel(pipe.pos,pipe.radius),pipe.color); }
   function stepPipe(pipe){
+    if(pipe.len>=pipe.maxLen){ endPipe(pipe); return false; }                 // varied length: end and be replaced
     let dir=null;
     if(pipe.dir && Math.random()<0.55){ const np=[pipe.pos[0]+pipe.dir[0],pipe.pos[1]+pipe.dir[1],pipe.pos[2]+pipe.dir[2]]; if(free(np)) dir=pipe.dir; }
     if(!dir){ const opts=AXES.filter(d=>free([pipe.pos[0]+d[0],pipe.pos[1]+d[1],pipe.pos[2]+d[2]])); if(!opts.length){ endPipe(pipe); return false; } dir=opts[(Math.random()*opts.length)|0]; }
     const np=[pipe.pos[0]+dir[0],pipe.pos[1]+dir[1],pipe.pos[2]+dir[2]];
     const turned=pipe.dir && (dir[0]!==pipe.dir[0]||dir[1]!==pipe.dir[1]||dir[2]!==pipe.dir[2]);
-    if(!addInstance(cyl,cylinderModel(pipe.pos,np,PIPE_R),pipe.color)) return false;
-    if(turned) addInstance(sph,sphereModel(pipe.pos, Math.random()<0.33?BALL_R:PIPE_R),pipe.color);   // ~1/3 ball joints, rest flush elbows
-    occupied.add(key(np)); pipe.pos=np; pipe.dir=dir; return true;
+    if(!addInstance(cyl,cylinderModel(pipe.pos,np,pipe.radius),pipe.color)) return false;
+    if(turned) addInstance(sph,sphereModel(pipe.pos, Math.random()<0.33?pipe.radius*1.5:pipe.radius),pipe.color);   // ~1/3 ball joints, rest flush
+    occupied.add(key(np)); pipe.pos=np; pipe.dir=dir; pipe.len++; return true;
   }
   function resetScene(){
     occupied=new Set(); pipes=[]; cyl.count=0; cyl.uploaded=0; sph.count=0; sph.uploaded=0;
     for(let i=0;i<2;i++) spawnPipe();                                  // always two pipes at once
-    sceneStart=now(); interval=(16+Math.random()*8)*1000; dissolving=false; dissolve=0;
+    sceneStart=now(); interval=(34+Math.random()*22)*1000; dissolving=false; dissolve=0;   // fill longer before clearing
   }
   function beginDissolve(){ if(!dissolving){ dissolving=true; dissolveStart=now(); } }
   function grow(dt){
-    stepAcc+=dt; const STEP=reduced?110:58;
-    while(stepAcc>=STEP){ stepAcc-=STEP;
-      if(cyl.count>=MAX_CYL-4 || sph.count>=MAX_SPH-4){ beginDissolve(); break; }
-      for(let i=pipes.length-1;i>=0;i--){ if(!stepPipe(pipes[i])) pipes.splice(i,1); }
-      if(!pipes.length){ for(let k=0;k<2;k++) spawnPipe(); }
+    for(let i=pipes.length-1;i>=0;i--){            // each pipe advances at its own speed
+      const p=pipes[i]; p.acc+=dt; let alive=true;
+      while(alive && p.acc>=p.stepMs){ p.acc-=p.stepMs; alive=stepPipe(p); }
+      if(!alive) pipes.splice(i,1);
     }
+    while(pipes.length<2){ const n=pipes.length; spawnPipe(); if(pipes.length===n) break; }  // keep two going; replace finished ones
+    if(cyl.count>=MAX_CYL-8 || sph.count>=MAX_SPH-8) beginDissolve();
   }
   function init(){
     inited=true;
