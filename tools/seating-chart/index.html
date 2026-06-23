@@ -22,6 +22,7 @@
     --danger-soft:#f7e0de;
     --together:#2f6f9f;
     --together-soft:#dde9f3;
+    --ok:#3f9e6b;
     --room-bg:#f7f8f6;
     --grid-line:rgba(31,61,53,.07);
     --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
@@ -229,7 +230,7 @@
     animation:tin .2s ease both;}
   .toast.warn{border-left-color:var(--accent);}
   .toast.err{border-left-color:var(--danger);}
-  .toast.ok{border-left-color:#3f9e6b;}
+  .toast.ok{border-left-color:var(--ok);}
   @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 
   /* print header (screen-hidden) */
@@ -872,19 +873,26 @@ function generate(){
   const N=state.desks.length, M=state.students.length;
   const neigh=neighborPairsList();
   const adj=new Set();
-  for(const [i,j] of neigh) adj.add(i+'_'+j);
+  const adjList=Array.from({length:N},()=>[]);    // neighbour seat indices, per seat
+  for(const [i,j] of neigh){ adj.add(i+'_'+j); adjList[i].push(j); adjList[j].push(i); }
   const areAdj=(i,j)=>{ if(i===j) return false; return adj.has(i<j?i+'_'+j:j+'_'+i); };
   const hs=histScores();
   const strength=state.settings.rotationStrength;
+  const w=(x,y)=>(x!=null&&y!=null) ? (hs[pairKey(x,y)]||0) : 0;   // history weight of a seated pair
 
   const pool=shuffle(state.students);
   const seatNames=pool.slice(0,Math.min(N,M));   // who gets a desk
   const unseated=pool.slice(N);                   // overflow, if any
 
-  function score(seat){
-    let apart=0,tmiss=0,rot=0;
-    const pos={};
-    for(let i=0;i<N;i++) if(seat[i]!=null) pos[seat[i]]=i;
+  // Score = apart*1e6 + togetherMisses*1e3 + rotationCost*strength.
+  // rotationCost sums the history weight over every neighbour pair; the hill-climb
+  // below keeps it updated incrementally (only the edges touching the two swapped
+  // seats change), so each step costs O(degree) instead of O(neighbourPairs) and
+  // the engine scales to large rooms. constraintCost stays a direct scan — there
+  // are only ever a handful of keep-apart / keep-together pairs.
+  const rotationCost=seat=>{ let r=0; for(const [i,j] of neigh) r+=w(seat[i],seat[j]); return r; };
+  function constraintCost(pos){
+    let apart=0,tmiss=0;
     for(const [a,b] of state.pairs.apart){
       const ia=pos[a], ib=pos[b];
       if(ia!==undefined&&ib!==undefined&&areAdj(ia,ib)) apart++;
@@ -893,10 +901,7 @@ function generate(){
       const ia=pos[a], ib=pos[b];
       if(!(ia!==undefined&&ib!==undefined&&areAdj(ia,ib))) tmiss++;
     }
-    for(const [i,j] of neigh){
-      if(seat[i]!=null&&seat[j]!=null) rot += hs[pairKey(seat[i],seat[j])]||0;
-    }
-    return apart*1e6 + tmiss*1e3 + rot*strength;
+    return apart*1e6 + tmiss*1e3;
   }
 
   const RESTARTS=16, ITERS=Math.min(6000, 1200 + 70*N);
@@ -905,13 +910,24 @@ function generate(){
     const seat=new Array(N).fill(null);
     const slots=shuffle([...Array(N).keys()]);
     for(let k=0;k<seatNames.length;k++) seat[slots[k]]=seatNames[k];
-    let sc=score(seat);
+    const pos={};                                  // name -> seat index, kept in sync with seat[]
+    for(let i=0;i<N;i++) if(seat[i]!=null) pos[seat[i]]=i;
+    let rot=rotationCost(seat);
+    let sc=constraintCost(pos) + rot*strength;
     for(let it=0;it<ITERS;it++){
       const a=Math.floor(Math.random()*N), b=Math.floor(Math.random()*N);
       if(a===b) continue;
-      [seat[a],seat[b]]=[seat[b],seat[a]];
-      const ns=score(seat);
-      if(ns<=sc) sc=ns; else [seat[a],seat[b]]=[seat[b],seat[a]];
+      const na=seat[a], nb=seat[b];
+      if(na===nb) continue;                         // two empty desks — nothing changes
+      // change in rotation cost from only the edges touching seats a and b
+      let dRot=0;
+      for(const k of adjList[a]){ if(k!==b) dRot+=w(nb,seat[k])-w(na,seat[k]); }
+      for(const k of adjList[b]){ if(k!==a) dRot+=w(na,seat[k])-w(nb,seat[k]); }
+      seat[a]=nb; seat[b]=na;                        // apply swap to seat[] and pos
+      if(nb!=null) pos[nb]=a; if(na!=null) pos[na]=b;
+      const ns=constraintCost(pos) + (rot+dRot)*strength;
+      if(ns<=sc){ sc=ns; rot+=dRot; }
+      else { seat[a]=na; seat[b]=nb; if(na!=null) pos[na]=a; if(nb!=null) pos[nb]=b; }
     }
     if(!best||sc<best.sc) best={seat:seat.slice(),sc};
   }
