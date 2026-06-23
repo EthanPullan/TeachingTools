@@ -14,8 +14,6 @@
     --ink:#16241f; --muted:#67756f; --line:#d8dee2;
     --board:#1f3d35; --board-2:#173029; --accent:#e0982e;
     --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-
-    /* Movie theme — the cinema look, kept from Movie Picker */
     --bg:#0e0b14; --bg-2:#1b1426;
     --gold:#e6c171; --gold-bright:#f2d488;
     --cream:#f3ecdd; --meta:#9c9080;
@@ -35,7 +33,6 @@
   }
   body::after{content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.04;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
-
   /* ---------- Teaching Tools toolbar (matches the main site) ---------- */
   .toolbar{position:relative; z-index:5; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
     padding:11px 20px; background:var(--panel); border-bottom:1px solid var(--line);
@@ -268,7 +265,7 @@
 "Home on the Range (2004)\n"+
 "Hoodwinked! (2005)\n"+
 "Ice Age (2002)\n"+
-"Ice Age — The Meltdown (2006)\n"+
+"Ice Age \u2014 The Meltdown (2006)\n"+
 "Inside Out (2015)\n"+
 "Inside Out 2 (2024)\n"+
 "Kung Fu Panda (2008)\n"+
@@ -280,7 +277,7 @@
 "Shark Tale (2004)\n"+
 "Shrek 2 (2004)\n"+
 "Sinbad (1992)\n"+
-"Spirit — Stallion of the Cimarron (2002)\n"+
+"Spirit \u2014 Stallion of the Cimarron (2002)\n"+
 "The Angry Birds Movie (2016)\n"+
 "The Emperor's New Groove (2000)\n"+
 "The Incredibles (2004)\n"+
@@ -289,7 +286,7 @@
 "The Road to El Dorado (2000)\n"+
 "Toy Story (1995)\n"+
 "Toy Story 2 (1999)\n"+
-"WALL·E (2008)\n"+
+"WALL\u00B7E (2008)\n"+
 "# Live Action & Family\n"+
 "Charlie and the Chocolate Factory (2005)\n"+
 "Elf (2003)\n"+
@@ -297,9 +294,9 @@
 "Enchanted (2007)\n"+
 "How the Grinch Stole Christmas (2000)\n"+
 "Ice Princess (2005)\n"+
-"Paul Blart — Mall Cop (2009)\n"+
+"Paul Blart \u2014 Mall Cop (2009)\n"+
 "Space Jam (1996)\n"+
-"The Chronicles of Narnia — The Lion, the Witch and the Wardrobe (2005)\n"+
+"The Chronicles of Narnia \u2014 The Lion, the Witch and the Wardrobe (2005)\n"+
 "The Pink Panther 2 (2009)\n"+
 "The Sorcerer's Apprentice (2010)\n"+
 "The Spiderwick Chronicles (2008)\n"+
@@ -361,7 +358,7 @@
                  '<span class="dot"></span>'+
                  '<span class="name">'+esc(mv.name)+'</span>'+
                  '<span class="yr">'+esc(mv.year)+'</span>'+
-                 '<span class="check">✓</span>'+
+                 '<span class="check">\u2713</span>'+
                '</button>';
       }).join('');
       html += '<section class="cat" style="--accent:'+accent+'">'+
@@ -426,7 +423,7 @@
     document.getElementById('draw').disabled = (ballot.size === 0);
     if(entries.length === 0){
       body.innerHTML = '<div class="ballot-empty"><div class="big">No movies on the ballot yet</div>'+
-        '<p>Switch to Now Showing and tap the titles you’re considering. They’ll appear here to vote on.</p></div>';
+        '<p>Switch to Now Showing and tap the titles you\u2019re considering. They\u2019ll appear here to vote on.</p></div>';
       return;
     }
     entries.sort(function(a,b){
@@ -443,7 +440,7 @@
       var info = movieIndex.get(key) || { name: key, year: '' };
       var leading = max > 0 && votes === max;
       var meta = '';
-      if(leading) meta = (info.year ? info.year + ' &nbsp;·&nbsp; ' : '') + '<span class="lead-tag">★ Leading</span>';
+      if(leading) meta = (info.year ? info.year + ' &nbsp;·&nbsp; ' : '') + '<span class="lead-tag">\u2605 Leading</span>';
       else meta = info.year;
       var row = document.createElement('div');
       row.className = 'brow' + (leading ? ' lead' : '') + (key === winnerKey ? ' winner' : '');
@@ -451,10 +448,10 @@
         '<div class="rank">'+(idx+1)+'</div>'+
         '<div class="bname"><div class="t">'+esc(info.name)+'</div>'+(meta?'<div class="meta">'+meta+'</div>':'')+'</div>'+
         '<div class="vote">'+
-          '<button class="vbtn minus" aria-label="Remove a vote">−</button>'+
+          '<button class="vbtn minus" aria-label="Remove a vote">\u2212</button>'+
           '<span class="vcount">'+votes+'</span>'+
           '<button class="vbtn plus" aria-label="Add a vote">+</button>'+
-          '<button class="remove" aria-label="Take off the ballot">✕</button>'+
+          '<button class="remove" aria-label="Take off the ballot">\u2715</button>'+
         '</div>';
       row.querySelector('.plus').addEventListener('click', function(){ vote(key, 1); });
       row.querySelector('.minus').addEventListener('click', function(){ vote(key, -1); });
@@ -492,10 +489,10 @@
     var votes = ballot.get(winnerKey) || 0;
     var total = Array.from(ballot.values()).reduce(function(s,v){ return s + v; }, 0);
     var odds = (total === 0)
-      ? 'Drawn at even odds — no votes cast yet'
-      : votes + ' of ' + total + ' votes · ' + Math.round(votes / total * 100) + '% odds';
+      ? 'Drawn at even odds \u2014 no votes cast yet'
+      : votes + ' of ' + total + ' votes \u00B7 ' + Math.round(votes / total * 100) + '% odds';
     banner.innerHTML =
-      '<p class="eyebrow2">🏆 The winner is</p>'+
+      '<p class="eyebrow2">\uD83C\uDFC6 The winner is</p>'+
       '<h3 class="wtitle">'+esc(info.name)+(info.year?' <span style="font-weight:400;color:var(--meta);font-size:.55em">('+esc(info.year)+')</span>':'')+'</h3>'+
       '<p class="wodds">'+odds+'</p>';
     banner.hidden = false;
