@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A big, tap-to-play tic-tac-toe board for the classroom smart board — each tap drops the next X or O automatically.">
+<meta name="theme-color" content="#1f3d35">
+<title>Tic-Tac-Toe</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    /* player colors */
+    --x:#2f6f9f;   /* blue X */
+    --o:#c43d35;   /* red O */
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;
+    overflow:hidden;}
+  button{font-family:inherit;}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:6px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* ── toolbar ── */
+  .toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:11px 20px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex:none;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:11px 18px;
+    border-radius:10px;cursor:pointer;font-size:15px;font-weight:600;display:inline-flex;
+    align-items:center;gap:8px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn .ic{font-size:18px;line-height:1;}
+
+  /* ── scoreboard ── */
+  .scorebar{display:flex;align-items:stretch;justify-content:center;gap:14px;flex:none;
+    padding:14px 20px;background:var(--room-bg);border-bottom:1px solid var(--line);}
+  .score{display:flex;align-items:center;gap:14px;background:var(--panel);border:2px solid var(--line);
+    border-radius:14px;padding:10px 22px;min-width:240px;transition:border-color .15s,box-shadow .15s;}
+  .score.turn{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+  .score .glyph{font-size:42px;font-weight:800;line-height:1;font-family:var(--mono);}
+  .score.x .glyph{color:var(--x);}
+  .score.o .glyph{color:var(--o);}
+  .score .meta{display:flex;flex-direction:column;gap:2px;}
+  .score .name{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .score .wins{font-family:var(--mono);font-size:34px;font-weight:700;line-height:1;color:var(--ink);}
+  .vs{display:flex;align-items:center;font-size:13px;font-weight:700;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--muted);}
+
+  /* ── stage / board ── */
+  .stage{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:20px;gap:16px;position:relative;}
+  .status{font-size:clamp(18px,3.4vh,30px);font-weight:700;letter-spacing:.02em;
+    min-height:1.2em;text-align:center;}
+  .status b.x{color:var(--x);} .status b.o{color:var(--o);}
+
+  .board{
+    display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
+    gap:clamp(8px,1.4vmin,16px);
+    width:min(82vw, calc(100vh - 320px), 88vh);
+    aspect-ratio:1/1;
+    background:var(--board);padding:clamp(8px,1.4vmin,16px);
+    border-radius:24px;box-shadow:0 10px 34px rgba(20,40,33,.28);}
+  .cell{
+    border:none;background:var(--panel);border-radius:14px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-weight:800;line-height:1;
+    font-size:clamp(48px,16vmin,180px);
+    color:var(--ink);position:relative;overflow:hidden;
+    transition:background .12s,transform .06s;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
+  .cell:hover:not(.filled):not(:disabled){background:var(--accent-soft);}
+  .cell:active:not(.filled){transform:scale(.97);}
+  .cell.filled{cursor:default;}
+  .cell.x{color:var(--x);}
+  .cell.o{color:var(--o);}
+  .cell .glyph{animation:drop .22s cubic-bezier(.2,.7,.3,1) both;}
+  @keyframes drop{from{opacity:0;transform:scale(.4);}to{opacity:1;transform:none;}}
+  .cell.win{background:var(--accent-soft);box-shadow:inset 0 0 0 4px var(--accent);}
+  .cell.dim{opacity:.4;}
+
+  /* preview of whose mark drops next */
+  .cell:hover:not(.filled):not(:disabled)::after{
+    content:attr(data-next);position:absolute;opacity:.22;
+    font-family:var(--mono);font-weight:800;
+    color:var(--ink);pointer-events:none;}
+  .board.next-x .cell:hover:not(.filled)::after{color:var(--x);}
+  .board.next-o .cell:hover:not(.filled)::after{color:var(--o);}
+
+  @media (prefers-reduced-motion:reduce){
+    .cell .glyph{animation:none;} .btn:active{transform:none;} .cell:active{transform:none;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Tic-Tac-Toe <small>tap to play</small></div>
+    <div class="spacer"></div>
+    <button class="btn" id="undoBtn"><span class="ic">↶</span>Undo</button>
+    <button class="btn" id="resetScoreBtn"><span class="ic">⟲</span>Reset scores</button>
+    <button class="btn primary" id="newBtn"><span class="ic">＋</span>New round</button>
+  </header>
+
+  <section class="scorebar">
+    <div class="score x turn" id="scoreX">
+      <span class="glyph">X</span>
+      <div class="meta"><span class="name">Player X</span><span class="wins" id="winsX">0</span></div>
+    </div>
+    <div class="vs">vs</div>
+    <div class="score o" id="scoreO">
+      <span class="glyph">O</span>
+      <div class="meta"><span class="name">Player O</span><span class="wins" id="winsO">0</span></div>
+    </div>
+  </section>
+
+  <main class="stage">
+    <div class="status" id="status"><b class="x">X</b> to move</div>
+    <div class="board next-x" id="board" role="grid" aria-label="Tic-tac-toe board"></div>
+  </main>
+</div>
+
+<script>
+(function(){
+  const WINS = [
+    [0,1,2],[3,4,5],[6,7,8], // rows
+    [0,3,6],[1,4,7],[2,5,8], // cols
+    [0,4,8],[2,4,6]          // diagonals
+  ];
+
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const winsXEl = document.getElementById('winsX');
+  const winsOEl = document.getElementById('winsO');
+  const scoreXEl = document.getElementById('scoreX');
+  const scoreOEl = document.getElementById('scoreO');
+
+  let cells = Array(9).fill('');   // '', 'X', 'O'
+  let turn = 'X';
+  let over = false;
+  let history = [];                // indices played, for undo
+  let wins = {X:0, O:0};
+
+  // Build the 9 cells once.
+  const cellEls = [];
+  for(let i=0;i<9;i++){
+    const b = document.createElement('button');
+    b.className = 'cell';
+    b.setAttribute('role','gridcell');
+    b.dataset.i = i;
+    b.addEventListener('click', ()=>play(i));
+    boardEl.appendChild(b);
+    cellEls.push(b);
+  }
+
+  function render(){
+    cellEls.forEach((el,i)=>{
+      const v = cells[i];
+      el.classList.toggle('filled', !!v);
+      el.classList.remove('x','o','win','dim');
+      el.disabled = over || !!v;
+      if(v){
+        el.classList.add(v.toLowerCase());
+        el.innerHTML = '<span class="glyph">'+v+'</span>';
+        el.setAttribute('aria-label', 'Cell '+(i+1)+', '+v);
+      }else{
+        el.innerHTML = '';
+        el.dataset.next = turn;
+        el.setAttribute('aria-label', 'Cell '+(i+1)+', empty');
+      }
+    });
+    boardEl.classList.toggle('next-x', turn==='X');
+    boardEl.classList.toggle('next-o', turn==='O');
+    scoreXEl.classList.toggle('turn', !over && turn==='X');
+    scoreOEl.classList.toggle('turn', !over && turn==='O');
+    document.getElementById('undoBtn').disabled = history.length===0;
+  }
+
+  function play(i){
+    if(over || cells[i]) return;
+    cells[i] = turn;
+    history.push(i);
+
+    const line = winningLine();
+    if(line){
+      over = true;
+      wins[turn]++;
+      winsXEl.textContent = wins.X;
+      winsOEl.textContent = wins.O;
+      render();
+      line.forEach(k=>cellEls[k].classList.add('win'));
+      cellEls.forEach((el,k)=>{ if(!line.includes(k)) el.classList.add('dim'); });
+      const w = turn;
+      statusEl.innerHTML = '<b class="'+w.toLowerCase()+'">'+w+'</b> wins!';
+      return;
+    }
+
+    if(cells.every(Boolean)){
+      over = true;
+      render();
+      statusEl.textContent = "Cat's game — it's a draw";
+      return;
+    }
+
+    turn = turn==='X' ? 'O' : 'X';
+    render();
+    statusEl.innerHTML = '<b class="'+turn.toLowerCase()+'">'+turn+'</b> to move';
+  }
+
+  function winningLine(){
+    for(const [a,b,c] of WINS){
+      if(cells[a] && cells[a]===cells[b] && cells[a]===cells[c]) return [a,b,c];
+    }
+    return null;
+  }
+
+  function undo(){
+    if(!history.length) return;
+    const i = history.pop();
+    cells[i] = '';
+    over = false;
+    // whoever's mark we just removed is up again
+    turn = (history.length % 2 === 0) ? 'X' : 'O';
+    render();
+    statusEl.innerHTML = '<b class="'+turn.toLowerCase()+'">'+turn+'</b> to move';
+  }
+
+  function newRound(){
+    cells = Array(9).fill('');
+    history = [];
+    over = false;
+    turn = 'X';
+    render();
+    statusEl.innerHTML = '<b class="x">X</b> to move';
+  }
+
+  function resetScores(){
+    wins = {X:0, O:0};
+    winsXEl.textContent = '0';
+    winsOEl.textContent = '0';
+    newRound();
+  }
+
+  document.getElementById('newBtn').addEventListener('click', newRound);
+  document.getElementById('undoBtn').addEventListener('click', undo);
+  document.getElementById('resetScoreBtn').addEventListener('click', resetScores);
+
+  // Keyboard: 1-9 play the matching cell (top-left to bottom-right), R = new round, U = undo.
+  document.addEventListener('keydown', e=>{
+    if(e.key>='1' && e.key<='9'){ play(Number(e.key)-1); }
+    else if(e.key==='r' || e.key==='R'){ newRound(); }
+    else if(e.key==='u' || e.key==='U'){ undo(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
