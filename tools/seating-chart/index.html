@@ -59,6 +59,21 @@
   .class-field input{
     border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:190px;background:var(--panel-2);
   }
+  /* class switcher — shared room, separate rosters */
+  .class-switch{display:flex;align-items:center;gap:8px;}
+  .class-bar{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .class-pill{border:none;background:#fff;padding:6px 12px;cursor:pointer;font-size:12.5px;font-weight:600;
+    color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    border-right:1px solid var(--line);}
+  .class-pill:last-child{border-right:none;}
+  .class-pill:hover{background:var(--panel-2);color:var(--ink);}
+  .class-pill.active{background:var(--board);color:#fff;}
+  .class-add{border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;flex:none;
+    width:30px;height:30px;border-radius:8px;font-size:16px;line-height:1;font-weight:600;}
+  .class-add:hover{background:var(--panel-2);color:var(--board);border-color:var(--accent);}
+  .class-switch input{
+    border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:140px;background:var(--panel-2);
+  }
   .toolbar .spacer{flex:1;}
 
   .btn{
@@ -241,6 +256,8 @@
     .panel{width:100%;max-height:46vh;border-right:none;border-bottom:1px solid var(--line);}
     .stage{min-height:54vh;}
     .class-field input{min-width:130px;}
+    .class-switch{flex-wrap:wrap;}
+    .class-switch input{min-width:110px;}
   }
   @media (prefers-reduced-motion:reduce){
     .desk.pop{animation:none;}
@@ -274,9 +291,10 @@
   <header class="toolbar">
     <div class="brand"><span class="mark"></span>Seating Chart <small>generator</small></div>
     <div class="sep"></div>
-    <div class="class-field">
-      <label for="className">Class</label>
-      <input id="className" type="text" placeholder="Untitled class">
+    <div class="class-switch">
+      <div class="class-bar" id="classBar"></div>
+      <button class="class-add" id="addClassTop" type="button" title="Add a class (shares this room)" aria-label="Add a class">+</button>
+      <input id="className" type="text" placeholder="Class name" title="Rename the current class" aria-label="Current class name">
     </div>
     <div class="spacer"></div>
     <button class="btn primary" id="genBtn"><span class="ic">⚄</span> Generate seating</button>
@@ -409,7 +427,14 @@
 
         <!-- Data -->
         <section class="tabpanel" data-panel="data">
-          <h3 class="section-title">Class list</h3>
+          <h3 class="section-title">Classes</h3>
+          <p class="hint" style="margin:-2px 0 10px;">Each class keeps its own roster, pairs, seating and history but shares this room. Switch between them from the top bar.</p>
+          <div class="field-row">
+            <button class="btn small" id="addClassBtn">+ Add class</button>
+            <button class="btn small danger" id="removeClassBtn">Remove current class</button>
+          </div>
+
+          <h3 class="section-title stack">Class list</h3>
           <div class="field-row">
             <button class="btn small" id="impNamesBtn">Import names…</button>
             <button class="btn small" id="expNamesBtn">Export names</button>
@@ -485,14 +510,19 @@ const DEFAULTS = {
 };
 
 const state = {
+  // The room (desks, features, settings) is SHARED across classes; each class
+  // keeps its own roster, pairs, seating and history.
+  classes:[],                        // [{name,students,pairs,assignment,history}]
+  activeClass:0,
+  // ↓ live view of the active class — the rest of the app reads/writes these
   className:'',
   students:[],                       // [name]
   pairs:{ apart:[], together:[] },   // [[a,b],...]
-  desks:[],                          // [{id,x,y,v}]   v = rotated (tall)
-  features:[],                       // [{id,type,x,y,w0,h0,v}]  reference furniture
-  assignment:{},                     // deskId -> name
-  history:[],                        // [{date, pairs:[[a,b],...]}] oldest..newest
-  settings:{ ...DEFAULTS }
+  desks:[],                          // [{id,x,y,v}]   v = rotated (tall)   — shared
+  features:[],                       // [{id,type,x,y,w0,h0,v}]  reference furniture — shared
+  assignment:{},                     // deskId -> name  (active class)
+  history:[],                        // [{date, pairs:[[a,b],...]}] oldest..newest (active class)
+  settings:{ ...DEFAULTS }           // shared
 };
 
 // natural (un-rotated) footprint + label for each reference feature
@@ -519,6 +549,68 @@ const pairKey = (a,b) => a < b ? a+SEP+b : b+SEP+a;
 const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
 function shuffle(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function sanitize(s){ return (s||'').trim().replace(/[^a-z0-9\-_ ]/gi,'').replace(/\s+/g,'-').toLowerCase() || 'class'; }
+
+/* ---------------- Classes (shared room, separate rosters) ---------------- */
+function blankClass(name){ return { name:name||'', students:[], pairs:{apart:[],together:[]}, assignment:{}, history:[] }; }
+// The app edits state.{className,students,pairs,assignment,history} as a live view;
+// these move that view in and out of the per-class store.
+function commitActiveClass(){
+  const c=state.classes[state.activeClass]; if(!c) return;
+  c.name=state.className; c.students=state.students; c.pairs=state.pairs;
+  c.assignment=state.assignment; c.history=state.history;
+}
+function loadActiveClass(){
+  const c=state.classes[state.activeClass]; if(!c) return;
+  state.className=c.name; state.students=c.students; state.pairs=c.pairs;
+  state.assignment=c.assignment; state.history=c.history;
+}
+function refreshAfterClassChange(){
+  conflictDeskIds.clear(); lastStamp=null;   // keep `sel` — the room (desks) is shared across classes
+  $('className').value=state.className;
+  renderClassBar(); renderAll();
+}
+function switchClass(i){
+  if(i===state.activeClass || i<0 || i>=state.classes.length) return;
+  commitActiveClass(); state.activeClass=i; loadActiveClass();
+  refreshAfterClassChange();
+}
+function addClass(){
+  commitActiveClass();
+  state.classes.push(blankClass('Class '+(state.classes.length+1)));
+  state.activeClass=state.classes.length-1; loadActiveClass();
+  refreshAfterClassChange();
+  toast('Added a new class — it shares this room.','ok');
+}
+function removeActiveClass(){
+  if(state.classes.length<=1){ toast('You need at least one class.','warn'); return; }
+  const label=state.className.trim()||('Class '+(state.activeClass+1));
+  if(!confirm('Remove “'+label+'”? Its roster, pairs, seating and history are deleted. The room stays.')) return;
+  state.classes.splice(state.activeClass,1);
+  state.activeClass=clamp(state.activeClass,0,state.classes.length-1); loadActiveClass();
+  refreshAfterClassChange();
+}
+// desks are shared, so removing/clearing them must update every class's seating
+function purgeDeskFromAllClasses(id){
+  delete state.assignment[id];
+  for(const c of state.classes){ if(c.assignment && c.assignment!==state.assignment) delete c.assignment[id]; }
+}
+function clearSeatsAllClasses(){
+  state.assignment={};
+  state.classes.forEach((c,i)=>{ if(i!==state.activeClass) c.assignment={}; });
+}
+function renderClassBar(){
+  const bar=$('classBar'); if(!bar) return;
+  bar.innerHTML='';
+  state.classes.forEach((c,i)=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='class-pill'+(i===state.activeClass?' active':'');
+    const nm=c.name.trim()||('Class '+(i+1));
+    b.textContent=nm; b.title='Switch to '+nm;
+    b.addEventListener('click',()=>switchClass(i));
+    bar.appendChild(b);
+  });
+}
 
 /* ---------------- Toast ---------------- */
 function toast(msg, kind){
@@ -657,7 +749,7 @@ function addDesk(cx,cy){
   renderRoom(); renderStatus();
 }
 function addGrid(rows,cols,replace){
-  if(replace){ state.desks=[]; state.assignment={}; sel=null; }
+  if(replace){ state.desks=[]; clearSeatsAllClasses(); sel=null; }
   const {roomW,roomH}=state.settings;
   const s=sizeOf('desk',{v:defaultVertical});
   const stepX=s.w+28, stepY=s.h+34, x0=70, y0=84;
@@ -669,7 +761,7 @@ function addGrid(rows,cols,replace){
 }
 function deleteDesk(id){
   state.desks=state.desks.filter(d=>d.id!==id);
-  delete state.assignment[id];
+  purgeDeskFromAllClasses(id);
   if(sel && sel.kind==='desk' && sel.id===id) sel=null;
   renderRoom(); renderStatus(); renderStudents();
 }
@@ -1098,25 +1190,31 @@ function importLayout(text){
 }
 
 function exportSnapshot(){
-  const data={type:'seating-chart',version:1,className:state.className,students:state.students,
-    pairs:state.pairs,settings:state.settings,desks:state.desks,features:state.features,
-    assignment:state.assignment,history:state.history};
+  commitActiveClass();
+  const data={type:'seating-chart',version:2,activeClass:state.activeClass,classes:state.classes,
+    settings:state.settings,desks:state.desks,features:state.features};
   download(JSON.stringify(data,null,2), sanitize(state.className)+'-'+todayStr()+'.json','application/json');
 }
 function importSnapshot(text){
   const d=JSON.parse(text);
   if(d.type!=='seating-chart') throw new Error('not a seating-chart backup');
-  state.className=d.className||'';
-  state.students=Array.isArray(d.students)?d.students:[];
-  state.pairs={apart:(d.pairs&&d.pairs.apart)||[], together:(d.pairs&&d.pairs.together)||[]};
   state.settings=Object.assign({...DEFAULTS}, d.settings||{});
   state.desks=mapDesks(d.desks);
   state.features=mapFeatures(d.features);
-  state.assignment=d.assignment||{};
-  state.history=Array.isArray(d.history)?d.history:[];
+  const mapClass=c=>({ name:c.name||'', students:Array.isArray(c.students)?c.students:[],
+    pairs:{apart:(c.pairs&&c.pairs.apart)||[], together:(c.pairs&&c.pairs.together)||[]},
+    assignment:c.assignment||{}, history:Array.isArray(c.history)?c.history:[] });
+  if(Array.isArray(d.classes) && d.classes.length){
+    state.classes=d.classes.map(mapClass);
+    state.activeClass=clamp(d.activeClass||0,0,state.classes.length-1);
+  } else {                       // legacy single-class backup (version 1)
+    state.classes=[ mapClass({name:d.className,students:d.students,pairs:d.pairs,assignment:d.assignment,history:d.history}) ];
+    state.activeClass=0;
+  }
+  loadActiveClass();
   conflictDeskIds.clear(); sel=null; lastStamp=null;
   $('className').value=state.className;
-  syncControls(); renderAll();
+  syncControls(); renderClassBar(); renderAll();
   toast('Backup loaded.','ok');
 }
 
@@ -1152,7 +1250,7 @@ $('modeToggle').addEventListener('click',e=>{
 });
 
 // toolbar
-$('className').addEventListener('input',e=>{ state.className=e.target.value; });
+$('className').addEventListener('input',e=>{ state.className=e.target.value; commitActiveClass(); renderClassBar(); });
 $('genBtn').addEventListener('click',generate);
 $('printBtn').addEventListener('click',()=>window.print());
 window.addEventListener('beforeprint',()=>{
@@ -1189,7 +1287,7 @@ $('clearSeatsBtn').addEventListener('click',()=>{ state.assignment={}; conflictD
 $('clearDesksBtn').addEventListener('click',()=>{
   if(!state.desks.length) return;
   if(!confirm('Remove all desks?')) return;
-  state.desks=[]; state.assignment={}; conflictDeskIds.clear();
+  state.desks=[]; clearSeatsAllClasses(); conflictDeskIds.clear();
   if(sel && sel.kind==='desk') sel=null;
   renderRoom(); renderStatus(); renderStudents();
 });
@@ -1231,6 +1329,8 @@ $('clearHistBtn').addEventListener('click',()=>{
 });
 
 // data
+$('addClassBtn').addEventListener('click',addClass);
+$('removeClassBtn').addEventListener('click',removeActiveClass);
 $('impNamesBtn').addEventListener('click',()=>pickFile(importNames));
 $('expNamesBtn').addEventListener('click',exportNames);
 $('impLayoutBtn').addEventListener('click',()=>pickFile(importLayout));
@@ -1270,8 +1370,13 @@ window.addEventListener('keydown',e=>{
 });
 
 /* ---------------- Init ---------------- */
-addGrid(5,6,true);       // start with a tidy 5×6 room (30 desks), empty roster
+$('addClassTop').addEventListener('click',addClass);
+state.classes=[ blankClass('Class 1'), blankClass('Class 2') ];   // two classes, one shared room
+state.activeClass=0; loadActiveClass();
+$('className').value=state.className;
+addGrid(5,6,true);       // a tidy 5×6 room (30 desks), shared by every class
 syncControls();
+renderClassBar();
 renderAll();
 </script>
 </body>
