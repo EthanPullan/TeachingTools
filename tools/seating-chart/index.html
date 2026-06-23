@@ -645,6 +645,23 @@ function renderStudents(){
     li.querySelector('.xbtn').addEventListener('click',()=>removeStudent(name));
     ul.appendChild(li);
   }
+  publishRosters();
+}
+
+/* Share rosters with other Teaching Tools (e.g. the Name Wheel) via localStorage.
+   Purely additive — same-origin, best-effort, never blocks the app. */
+function publishRosters(){
+  try{
+    if(!Array.isArray(state.classes)) return;
+    const classes = state.classes.map((c,i)=>({
+      name: ((i===state.activeClass ? state.className : c.name) || '').trim(),
+      students: (i===state.activeClass ? state.students : c.students) || []
+    })).filter(c=>c.students.length);
+    localStorage.setItem('teachingtools:rosters', JSON.stringify({
+      type:'teachingtools-rosters', version:1, source:'seating-chart',
+      savedAt: Date.now(), classes
+    }));
+  }catch(e){ /* storage unavailable / full — ignore */ }
 }
 
 /* ---------------- Pairs ---------------- */
@@ -1231,7 +1248,7 @@ $('modeToggle').addEventListener('click',e=>{
 });
 
 // toolbar
-$('className').addEventListener('input',e=>{ state.className=e.target.value; commitActiveClass(); renderClassBar(); });
+$('className').addEventListener('input',e=>{ state.className=e.target.value; commitActiveClass(); renderClassBar(); publishRosters(); });
 $('genBtn').addEventListener('click',generate);
 $('printBtn').addEventListener('click',()=>window.print());
 window.addEventListener('beforeprint',()=>{
