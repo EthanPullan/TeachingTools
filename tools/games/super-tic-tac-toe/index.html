@@ -88,7 +88,6 @@
     animation:claimPop .28s cubic-bezier(.2,.7,.3,1) both;}
   .mini .claim.x{color:rgba(47,111,159,.42);}
   .mini .claim.o{color:rgba(196,61,53,.42);}
-  .mini .claim.d{color:rgba(103,117,111,.40);font-size:min(16vmin,calc(96vh/6));letter-spacing:.04em;}
   @keyframes claimPop{from{opacity:0;transform:scale(.55);}to{opacity:1;transform:none;}}
 
   /* individual cells */
@@ -242,10 +241,10 @@
       miniEls[b].classList.toggle('active', isActive);
       miniEls[b].classList.toggle('decided', decided);
 
-      // claim overlay
+      // claim overlay (winners only — drawn boards get no marker)
       const cl = claimEls[b];
-      if(decided){
-        cl.textContent = winners[b]==='D' ? 'DRAW' : winners[b];
+      if(decided && winners[b]!=='D'){
+        cl.textContent = winners[b];
         cl.className = 'claim ' + winners[b].toLowerCase();
       }else{
         cl.textContent = '';
