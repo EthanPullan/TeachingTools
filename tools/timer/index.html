@@ -118,14 +118,9 @@
   .time.corner{animation:cornerpop .7s cubic-bezier(.2,.7,.3,1);}
   @keyframes cornerpop{0%{transform:scale(1) rotate(0deg);}40%{transform:scale(1.34) rotate(8deg);}100%{transform:scale(1) rotate(0deg);}}
 
-  /* Hide-everything ("just look at it") mode */
-  .app.hide-ui .toolbar,.app.hide-ui .overlay{display:none;}
+  /* Hide timer (toggle) — keeps the toolbar so Fullscreen stays reachable */
+  .app.hide-ui .overlay{display:none;}
   .app.hide-ui .scrim{opacity:0;}
-  .zen-hint{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);z-index:4;pointer-events:none;
-    color:rgba(255,255,255,.85);font-size:13px;font-weight:600;letter-spacing:.03em;
-    background:rgba(0,0,0,.42);padding:7px 14px;border-radius:20px;opacity:0;transition:opacity .4s;
-    -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
-  .zen-hint.show{opacity:1;}
 
   @media (max-width:720px){
     .bg-label{display:none;}
@@ -217,7 +212,6 @@
     </div>
 
     <div class="flash" id="flash"></div>
-    <div class="zen-hint" id="zenHint">Tap or press a key to show</div>
   </main>
 </div>
 
@@ -525,7 +519,7 @@ void main(){
   vec3 N=normalize(vN), L=normalize(uLight), V=normalize(uEye-vW), H=normalize(L+V);
   float diff=max(dot(N,L),0.0); float spec=pow(max(dot(N,H),0.0),uShine);
   vec3 col = vCol*0.18 + vCol*diff*0.95 + uSpec*spec*0.9 + vCol*0.20;
-  col=mix(col, uBg, clamp((length(uEye-vW)-13.0)/18.0,0.0,1.0)*0.9);
+  col=mix(col, uBg, clamp((length(uEye-vW)-26.0)/18.0,0.0,1.0)*0.85);
   col=mix(col, uBg, clamp(uDissolve,0.0,1.0));
   frag=vec4(col,1.0);
 }`;
@@ -562,10 +556,10 @@ void main(){
     for(let i=0;i<40;i++){ const p=[(Math.random()*(2*GRID+1)|0)-GRID,(Math.random()*(2*GRID+1)|0)-GRID,(Math.random()*(2*GRID+1)|0)-GRID]; if(free(p)){ start=p; break; } }
     if(!start) return;
     const color=hsl(Math.random(),0.6+Math.random()*0.35,0.45+Math.random()*0.12);
-    occupied.add(key(start)); addInstance(sph,sphereModel(start,BALL_R),color);
+    occupied.add(key(start)); addInstance(sph,sphereModel(start,PIPE_R),color);
     pipes.push({pos:start,dir:null,color});
   }
-  function endPipe(pipe){ addInstance(sph,sphereModel(pipe.pos,BALL_R),pipe.color); }
+  function endPipe(pipe){ addInstance(sph,sphereModel(pipe.pos,PIPE_R),pipe.color); }
   function stepPipe(pipe){
     let dir=null;
     if(pipe.dir && Math.random()<0.55){ const np=[pipe.pos[0]+pipe.dir[0],pipe.pos[1]+pipe.dir[1],pipe.pos[2]+pipe.dir[2]]; if(free(np)) dir=pipe.dir; }
@@ -573,12 +567,12 @@ void main(){
     const np=[pipe.pos[0]+dir[0],pipe.pos[1]+dir[1],pipe.pos[2]+dir[2]];
     const turned=pipe.dir && (dir[0]!==pipe.dir[0]||dir[1]!==pipe.dir[1]||dir[2]!==pipe.dir[2]);
     if(!addInstance(cyl,cylinderModel(pipe.pos,np,PIPE_R),pipe.color)) return false;
-    if(turned) addInstance(sph,sphereModel(pipe.pos,BALL_R),pipe.color);
+    if(turned) addInstance(sph,sphereModel(pipe.pos, Math.random()<0.33?BALL_R:PIPE_R),pipe.color);   // ~1/3 ball joints, rest flush elbows
     occupied.add(key(np)); pipe.pos=np; pipe.dir=dir; return true;
   }
   function resetScene(){
     occupied=new Set(); pipes=[]; cyl.count=0; cyl.uploaded=0; sph.count=0; sph.uploaded=0;
-    const n=1+(Math.random()<0.5?1:0); for(let i=0;i<n;i++) spawnPipe();
+    for(let i=0;i<2;i++) spawnPipe();                                  // always two pipes at once
     sceneStart=now(); interval=(16+Math.random()*8)*1000; dissolving=false; dissolve=0;
   }
   function beginDissolve(){ if(!dissolving){ dissolving=true; dissolveStart=now(); } }
@@ -587,7 +581,7 @@ void main(){
     while(stepAcc>=STEP){ stepAcc-=STEP;
       if(cyl.count>=MAX_CYL-4 || sph.count>=MAX_SPH-4){ beginDissolve(); break; }
       for(let i=pipes.length-1;i>=0;i--){ if(!stepPipe(pipes[i])) pipes.splice(i,1); }
-      if(!pipes.length){ const n=1+(Math.random()<0.5?1:0); for(let k=0;k<n;k++) spawnPipe(); }
+      if(!pipes.length){ for(let k=0;k<2;k++) spawnPipe(); }
     }
   }
   function init(){
@@ -616,7 +610,7 @@ void main(){
     az+=dt*0.00006;
     if(dissolving){ dissolve=(now()-dissolveStart)/2000; if(dissolve>=1) resetScene(); }
     else { if(now()-sceneStart>interval) beginDissolve(); else grow(dt); }
-    const d=14, eye=[ d*Math.cos(el)*Math.sin(az), d*Math.sin(el), d*Math.cos(el)*Math.cos(az) ];
+    const d=22, eye=[ d*Math.cos(el)*Math.sin(az), d*Math.sin(el), d*Math.cos(el)*Math.cos(az) ];
     const aspect=canvas.width/Math.max(1,canvas.height);
     const vp=m4mul(m4perspective(45*Math.PI/180,aspect,0.5,60), m4lookAt(eye,[0,0,0],[0,1,0]));
     gl.useProgram(prog);
@@ -741,17 +735,14 @@ $('soundBtn').addEventListener('click',()=>{
   $('soundBtn').textContent = soundOn?'🔊':'🔇';
 });
 
-/* ---------------- Hide UI ("just look at it") ---------------- */
+/* ---------------- Hide timer (toggle) ---------------- */
 const appEl=document.querySelector('.app');
-let hintTimer=0;
 function setHideUI(on){
   appEl.classList.toggle('hide-ui',on);
-  const h=$('zenHint'); clearTimeout(hintTimer);
-  if(on){ h.classList.add('show'); hintTimer=setTimeout(()=>h.classList.remove('show'),2600); }
-  else h.classList.remove('show');
+  $('hideBtn').classList.toggle('on',on);
+  $('hideBtn').title = on ? 'Show timer' : 'Hide timer';
 }
-$('hideBtn').addEventListener('click',()=>setHideUI(true));
-$('stage').addEventListener('pointerdown',()=>{ if(appEl.classList.contains('hide-ui')) setHideUI(false); });
+$('hideBtn').addEventListener('click',()=>setHideUI(!appEl.classList.contains('hide-ui')));
 
 /* ---------------- Fullscreen ---------------- */
 function toggleFullscreen(){
@@ -764,7 +755,6 @@ document.addEventListener('fullscreenchange',()=>setTimeout(()=>{ bg.resize(); p
 
 /* ---------------- Keyboard ---------------- */
 window.addEventListener('keydown',e=>{
-  if(appEl.classList.contains('hide-ui')){ setHideUI(false); e.preventDefault(); return; }
   const tag=(document.activeElement&&document.activeElement.tagName)||'';
   if(/INPUT|TEXTAREA|SELECT/.test(tag)) return;
   if(e.key===' '||e.code==='Space'){ e.preventDefault(); mode==='timer'?timerToggle():swToggle(); }
