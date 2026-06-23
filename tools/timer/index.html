@@ -367,10 +367,10 @@ const bg = (function(){
   let W=0,H=0, scene='aurora';
   let blobs=[], bubbles=[], confetti=[], burstParts=[];
 
-  // Pipes — a tube walk confined to a border band, so the pipes wrap the screen
-  // edges (top / bottom / left / right) and leave the centre clear for the timer.
-  let pbuf=null, pctx=null, pPos, pDir, pHue, pLen, pWidth, pTotal=0, pAcc=0, pcell=28, pm=90;
-  const DIRS4=[[1,0],[-1,0],[0,1],[0,-1]];
+  // 3D pipes (Windows-screensaver style) — accumulated onto an offscreen buffer
+  let pbuf=null, pctx=null, pPos, pDir, pHue, pLen, pTotal=0, pAcc=0, pScale=40, exRx=300, exRy=160;
+  const PR=7, PDIRS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const _cA=Math.cos(0.62),_sA=Math.sin(0.62),_cB=Math.cos(0.5),_sB=Math.sin(0.5);
 
   function resize(){
     const dpr=Math.min(2, window.devicePixelRatio||1);
@@ -393,62 +393,62 @@ const bg = (function(){
     vy:rand(45,95), vx:rand(-25,25), rot:rand(0,6.28), vr:rand(-3,3), a:rand(0.7,1) }; }
   function initConfetti(){ const n=reduced?44:120; confetti=[]; for(let i=0;i<n;i++) confetti.push(newConfetti(rand(-H,H))); }
 
-  /* ---- Pipes (border wrap) ---- */
+  /* ---- 3D pipes ---- */
   function initPipes(){
     pbuf=document.createElement('canvas');
     pbuf.width=Math.max(1,Math.round(W)); pbuf.height=Math.max(1,Math.round(H));
     pctx=pbuf.getContext('2d'); pctx.lineCap='round'; pctx.lineJoin='round';
-    pcell=clamp(Math.round(Math.min(W,H)/22),16,38);
-    pm=Math.max(pcell*2, Math.round(Math.min(W,H)*0.16));   // border-band thickness
-    pTotal=0; pAcc=0; newPipe();
+    pScale=Math.min(W,H)/17; exRx=W*0.34; exRy=H*0.2; pTotal=0; pAcc=0; newPipe();
   }
-  function cellXY(c){ return { x:c.cx*pcell+pcell/2, y:c.cy*pcell+pcell/2 }; }
-  // a cell is "in the band" when its centre is on-screen and within pm of any edge
-  function inBand(cx,cy){
-    const x=cx*pcell+pcell/2, y=cy*pcell+pcell/2;
-    if(x<0||x>W||y<0||y>H) return false;
-    return x<pm || x>W-pm || y<pm || y>H-pm;
+  function proj(x,y,z){
+    const x1=x*_cA+z*_sA, z1=-x*_sA+z*_cA, y1=y*_cB-z1*_sB, z2=y*_sB+z1*_cB;
+    return { sx:W/2+x1*pScale, sy:H/2+y1*pScale, d:z2 };
   }
+  function inCube(p){ return Math.abs(p.x)<=PR&&Math.abs(p.y)<=PR&&Math.abs(p.z)<=PR; }
+  // <1 means this cell projects over the central timer zone (kept mostly clear)
+  function zoneScore(p){ const pr=proj(p.x,p.y,p.z), dx=(pr.sx-W/2)/exRx, dy=(pr.sy-H/2)/exRy; return dx*dx+dy*dy; }
   function newPipe(){
-    const cols=Math.ceil(W/pcell), rows=Math.ceil(H/pcell);
+    // bias the start away from the centre so pipes are less likely to begin on the timer
     let c=null;
-    for(let i=0;i<60;i++){ const t={cx:(Math.random()*cols)|0, cy:(Math.random()*rows)|0}; if(inBand(t.cx,t.cy)){ c=t; break; } }
-    pPos = c || {cx:0,cy:0};
-    pDir = DIRS4[(Math.random()*4)|0]; pHue=rand(0,360); pWidth=pcell*rand(0.5,0.78); pLen=0;
+    for(let i=0;i<6;i++){ const t={x:Math.round(rand(-PR,PR)),y:Math.round(rand(-PR,PR)),z:Math.round(rand(-PR,PR))};
+      if(!c) c=t; if(zoneScore(t)>1){ c=t; break; } }
+    pPos=c; pDir=PDIRS[(Math.random()*6)|0].slice(); pHue=rand(0,360); pLen=0;
   }
-  function line(a,b){ pctx.beginPath(); pctx.moveTo(a.x,a.y); pctx.lineTo(b.x,b.y); pctx.stroke(); }
-  function pipeSeg(a,b,hue,wdt,turned){
-    const pa=cellXY(a), pb=cellXY(b);
+  function line(pa,pb){ pctx.beginPath(); pctx.moveTo(pa.sx,pa.sy); pctx.lineTo(pb.sx,pb.sy); pctx.stroke(); }
+  function pipeSeg(a,b,hue,turned){
+    const pa=proj(a.x,a.y,a.z), pb=proj(b.x,b.y,b.z);
+    const t=clamp(((pa.d+pb.d)/2+PR)/(2*PR),0,1), lw=pScale*(0.46+0.36*t), light=38+24*t;
     // three passes → rounded-cylinder look: dark edge, lit body, bright highlight
-    pctx.lineWidth=wdt;      pctx.strokeStyle=`hsl(${hue},66%,30%)`; line(pa,pb);
-    pctx.lineWidth=wdt*0.72; pctx.strokeStyle=`hsl(${hue},80%,52%)`; line(pa,pb);
-    pctx.lineWidth=wdt*0.28; pctx.strokeStyle=`hsl(${hue},92%,74%)`; line(pa,pb);
+    pctx.lineWidth=lw;      pctx.strokeStyle=`hsl(${hue},70%,${Math.max(14,light-20)}%)`; line(pa,pb);
+    pctx.lineWidth=lw*0.72; pctx.strokeStyle=`hsl(${hue},80%,${light}%)`;                 line(pa,pb);
+    pctx.lineWidth=lw*0.3;  pctx.strokeStyle=`hsl(${hue},88%,${Math.min(94,light+26)}%)`; line(pa,pb);
     if(turned){
-      const r=wdt*0.62, g=pctx.createRadialGradient(pa.x-r*0.35,pa.y-r*0.35,r*0.1,pa.x,pa.y,r);
-      g.addColorStop(0,`hsl(${hue},92%,76%)`); g.addColorStop(1,`hsl(${hue},70%,34%)`);
-      pctx.fillStyle=g; pctx.beginPath(); pctx.arc(pa.x,pa.y,r,0,6.2832); pctx.fill();
+      const r=lw*0.62, g=pctx.createRadialGradient(pa.sx-r*0.35,pa.sy-r*0.35,r*0.1,pa.sx,pa.sy,r);
+      g.addColorStop(0,`hsl(${hue},88%,${Math.min(95,light+28)}%)`);
+      g.addColorStop(1,`hsl(${hue},72%,${Math.max(16,light-16)}%)`);
+      pctx.fillStyle=g; pctx.beginPath(); pctx.arc(pa.sx,pa.sy,r,0,6.2832); pctx.fill();
     }
   }
   function stepPipe(){
-    const straightOk=inBand(pPos.cx+pDir[0], pPos.cy+pDir[1]);
+    const ahead={x:pPos.x+pDir[0],y:pPos.y+pDir[1],z:pPos.z+pDir[2]};
     let turned=false;
-    if(!straightOk || Math.random()<0.16){
-      let opts=DIRS4.filter(d=>!(d[0]===-pDir[0]&&d[1]===-pDir[1]) && inBand(pPos.cx+d[0],pPos.cy+d[1]));
-      if(!opts.length) opts=DIRS4.filter(d=>inBand(pPos.cx+d[0],pPos.cy+d[1]));   // allow a U-turn if cornered
-      if(!opts.length){ newPipe(); return; }
-      pDir=opts[(Math.random()*opts.length)|0]; turned=true;
+    if(Math.random()<0.3 || !inCube(ahead)){
+      const opts=PDIRS.filter(d=>d[0]*pDir[0]+d[1]*pDir[1]+d[2]*pDir[2]===0)
+                      .filter(d=>inCube({x:pPos.x+d[0],y:pPos.y+d[1],z:pPos.z+d[2]}));
+      if(opts.length){ pDir=opts[(Math.random()*opts.length)|0].slice(); turned=true; }
+      else if(!inCube(ahead)){ newPipe(); return; }
     }
-    const nxt={cx:pPos.cx+pDir[0], cy:pPos.cy+pDir[1]};
-    if(!inBand(nxt.cx,nxt.cy)){ newPipe(); return; }
-    pipeSeg(pPos,nxt,pHue,pWidth,turned);
+    const nxt={x:pPos.x+pDir[0],y:pPos.y+pDir[1],z:pPos.z+pDir[2]};
+    if(!inCube(nxt)){ newPipe(); return; }
+    pipeSeg(pPos,nxt,pHue,turned);
     pPos=nxt; pLen++; pTotal++;
-    if(pLen>90) newPipe();
-    if(pTotal>1600){ pctx.clearRect(0,0,pbuf.width,pbuf.height); pTotal=0; }
+    if(pLen>34) newPipe();
+    if(pTotal>1100){ pctx.clearRect(0,0,pbuf.width,pbuf.height); pTotal=0; }
   }
   function drawPipes(dt){
     if(!pbuf) initPipes();
     pAcc+=dt; const stepMs=reduced?120:55; let guard=0;
-    while(pAcc>stepMs && guard<24){ stepPipe(); pAcc-=stepMs; guard++; }
+    while(pAcc>stepMs && guard<22){ stepPipe(); pAcc-=stepMs; guard++; }
     backdrop(); ctx.drawImage(pbuf,0,0,W,H);
   }
 
