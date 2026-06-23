@@ -52,6 +52,7 @@
   /* ---------- Stage ---------- */
   .stage{position:relative;flex:1;min-height:0;overflow:hidden;background:#0b1622;}
   #bg{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
+  #gl{position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none;}
   .scrim{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity .35s;
     background:radial-gradient(ellipse 42% 30% at 50% 46%, rgba(8,12,20,.62), rgba(8,12,20,0) 72%);}
   .scrim.show{opacity:1;}
@@ -117,6 +118,10 @@
   .time.corner{animation:cornerpop .7s cubic-bezier(.2,.7,.3,1);}
   @keyframes cornerpop{0%{transform:scale(1) rotate(0deg);}40%{transform:scale(1.34) rotate(8deg);}100%{transform:scale(1) rotate(0deg);}}
 
+  /* Hide timer (toggle) — keeps the toolbar so Fullscreen stays reachable */
+  .app.hide-ui .overlay{display:none;}
+  .app.hide-ui .scrim{opacity:0;}
+
   @media (max-width:720px){
     .bg-label{display:none;}
     .toolbar{gap:8px;padding:8px 12px;}
@@ -151,11 +156,13 @@
       </div>
     </div>
     <button class="icon-btn on" id="soundBtn" title="Sound on / off" aria-label="Toggle sound">🔊</button>
+    <button class="icon-btn" id="hideBtn" title="Hide everything" aria-label="Hide all controls">👁</button>
     <button class="icon-btn" id="fsBtn" title="Fullscreen (F)" aria-label="Toggle fullscreen">⛶</button>
   </header>
 
   <main class="stage" id="stage">
     <canvas id="bg"></canvas>
+    <canvas id="gl"></canvas>
     <div class="scrim" id="scrim"></div>
 
     <div class="overlay">
@@ -367,18 +374,13 @@ const bg = (function(){
   let W=0,H=0, scene='aurora';
   let blobs=[], bubbles=[], confetti=[], burstParts=[];
 
-  // 3D pipes (Windows-screensaver style) — accumulated onto an offscreen buffer
-  let pbuf=null, pctx=null, pPos, pDir, pHue, pLen, pTotal=0, pAcc=0, pScale=40, exRx=300, exRy=160, pSteer=true;
-  const PR=7, PDIRS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-  const _cA=Math.cos(0.62),_sA=Math.sin(0.62),_cB=Math.cos(0.5),_sB=Math.sin(0.5);
-
   function resize(){
     const dpr=Math.min(2, window.devicePixelRatio||1);
     W=canvas.clientWidth||window.innerWidth; H=canvas.clientHeight||window.innerHeight;
     canvas.width=Math.round(W*dpr); canvas.height=Math.round(H*dpr);
     ctx.setTransform(dpr,0,0,dpr,0,0);
     if(!blobs.length) initBlobs();
-    initBubbles(); initConfetti(); initPipes();
+    initBubbles(); initConfetti();
   }
   function initBlobs(){
     blobs=[]; for(let i=0;i<6;i++) blobs.push({
@@ -393,70 +395,7 @@ const bg = (function(){
     vy:rand(45,95), vx:rand(-25,25), rot:rand(0,6.28), vr:rand(-3,3), a:rand(0.7,1) }; }
   function initConfetti(){ const n=reduced?44:120; confetti=[]; for(let i=0;i<n;i++) confetti.push(newConfetti(rand(-H,H))); }
 
-  /* ---- 3D pipes ---- */
-  function initPipes(){
-    pbuf=document.createElement('canvas');
-    pbuf.width=Math.max(1,Math.round(W)); pbuf.height=Math.max(1,Math.round(H));
-    pctx=pbuf.getContext('2d'); pctx.lineCap='round'; pctx.lineJoin='round';
-    pScale=Math.min(W,H)/17; exRx=W*0.34; exRy=H*0.2; pTotal=0; pAcc=0; newPipe();
-  }
-  function proj(x,y,z){
-    const x1=x*_cA+z*_sA, z1=-x*_sA+z*_cA, y1=y*_cB-z1*_sB, z2=y*_sB+z1*_cB;
-    return { sx:W/2+x1*pScale, sy:H/2+y1*pScale, d:z2 };
-  }
-  function inCube(p){ return Math.abs(p.x)<=PR&&Math.abs(p.y)<=PR&&Math.abs(p.z)<=PR; }
-  // <1 means this cell projects over the central timer zone (kept mostly clear)
-  function zoneScore(p){ const pr=proj(p.x,p.y,p.z), dx=(pr.sx-W/2)/exRx, dy=(pr.sy-H/2)/exRy; return dx*dx+dy*dy; }
-  function newPipe(){
-    pSteer=Math.random()<0.8;                              // ~1 in 5 pipes roams freely (may cross behind the timer)
-    let c=null;
-    for(let i=0;i<8;i++){ const t={x:Math.round(rand(-PR,PR)),y:Math.round(rand(-PR,PR)),z:Math.round(rand(-PR,PR))};
-      if(!c) c=t; if(!pSteer || zoneScore(t)>1.15){ c=t; break; } }   // framing pipes start outside the timer zone
-    pPos=c; pDir=PDIRS[(Math.random()*6)|0].slice(); pHue=rand(0,360); pLen=0;
-  }
-  function line(pa,pb){ pctx.beginPath(); pctx.moveTo(pa.sx,pa.sy); pctx.lineTo(pb.sx,pb.sy); pctx.stroke(); }
-  function pipeSeg(a,b,hue,turned){
-    const pa=proj(a.x,a.y,a.z), pb=proj(b.x,b.y,b.z);
-    const t=clamp(((pa.d+pb.d)/2+PR)/(2*PR),0,1), lw=pScale*(0.46+0.36*t), light=38+24*t;
-    // three passes → rounded-cylinder look: dark edge, lit body, bright highlight
-    pctx.lineWidth=lw;      pctx.strokeStyle=`hsl(${hue},70%,${Math.max(14,light-20)}%)`; line(pa,pb);
-    pctx.lineWidth=lw*0.72; pctx.strokeStyle=`hsl(${hue},80%,${light}%)`;                 line(pa,pb);
-    pctx.lineWidth=lw*0.3;  pctx.strokeStyle=`hsl(${hue},88%,${Math.min(94,light+26)}%)`; line(pa,pb);
-    if(turned){
-      const r=lw*0.62, g=pctx.createRadialGradient(pa.sx-r*0.35,pa.sy-r*0.35,r*0.1,pa.sx,pa.sy,r);
-      g.addColorStop(0,`hsl(${hue},88%,${Math.min(95,light+28)}%)`);
-      g.addColorStop(1,`hsl(${hue},72%,${Math.max(16,light-16)}%)`);
-      pctx.fillStyle=g; pctx.beginPath(); pctx.arc(pa.sx,pa.sy,r,0,6.2832); pctx.fill();
-    }
-  }
-  function stepPipe(){
-    const ahead={x:pPos.x+pDir[0],y:pPos.y+pDir[1],z:pPos.z+pDir[2]};
-    const aheadInZone=inCube(ahead)&&zoneScore(ahead)<1;    // framing pipes treat the timer zone as a soft wall
-    let turned=false;
-    if(Math.random()<0.3 || !inCube(ahead) || (pSteer&&aheadInZone)){
-      const opts=PDIRS.filter(d=>d[0]*pDir[0]+d[1]*pDir[1]+d[2]*pDir[2]===0)
-                      .filter(d=>inCube({x:pPos.x+d[0],y:pPos.y+d[1],z:pPos.z+d[2]}));
-      if(opts.length){
-        if(pSteer){ let bd=opts[0], bs=-1; for(const d of opts){ const s=zoneScore({x:pPos.x+d[0],y:pPos.y+d[1],z:pPos.z+d[2]}); if(s>bs){ bs=s; bd=d; } } pDir=bd.slice(); }
-        else pDir=opts[(Math.random()*opts.length)|0].slice();
-        turned=true;
-      } else if(!inCube(ahead)){ newPipe(); return; }
-    }
-    const nxt={x:pPos.x+pDir[0],y:pPos.y+pDir[1],z:pPos.z+pDir[2]};
-    if(!inCube(nxt)){ newPipe(); return; }
-    pipeSeg(pPos,nxt,pHue,turned);
-    pPos=nxt; pLen++; pTotal++;
-    if(pLen>34) newPipe();
-    if(pTotal>1100){ pctx.clearRect(0,0,pbuf.width,pbuf.height); pTotal=0; }
-  }
-  function drawPipes(dt){
-    if(!pbuf) initPipes();
-    pAcc+=dt; const stepMs=reduced?120:55; let guard=0;
-    while(pAcc>stepMs && guard<22){ stepPipe(); pAcc-=stepMs; guard++; }
-    backdrop(); ctx.drawImage(pbuf,0,0,W,H);
-  }
-
-  function setScene(s){ scene=s; if(s==='bubbles') initBubbles(); if(s==='confetti') initConfetti(); if(s==='pipes') initPipes(); }
+  function setScene(s){ scene=s; if(s==='bubbles') initBubbles(); if(s==='confetti') initConfetti(); }
   function burst(cx,cy){
     cx=(cx==null)?W/2:cx; cy=(cy==null)?H*0.42:cy;
     const n=reduced?70:180;
@@ -517,17 +456,178 @@ const bg = (function(){
 
   function draw(t,dt){
     const dts=dt/1000, k=reduced?0.4:1;
-    if(scene==='pipes'){ drawPipes(dt); }
-    else {
-      backdrop();
-      if(scene==='aurora') drawAurora(t);
-      else if(scene==='bubbles') drawBubbles(dts,k);
-      else if(scene==='confetti') drawConfetti(dts,k);
-      // plain & dvd: just the backdrop
-    }
+    backdrop();
+    if(scene==='aurora') drawAurora(t);
+    else if(scene==='bubbles') drawBubbles(dts,k);
+    else if(scene==='confetti') drawConfetti(dts,k);
+    // plain, dvd, and the pipes fallback: just the backdrop
     if(burstParts.length) drawBurst(dts);
   }
   return { resize, setScene, burst, draw, get scene(){ return scene; } };
+})();
+
+/* ---------------- Pipes 3D (WebGL2 — the "Pipes" scene) ----------------
+   The classic 3D pipes: a node-by-node walk on a 20^3 grid (50% straight,
+   else a random free axis), instanced cylinders with ball-joint spheres at
+   the elbows, Blinn-Phong with a cyan specular, fog, and a fade-and-clear.
+   Lazily creates its own WebGL2 context on first use. */
+const pipes3d = (function(){
+  const canvas=$('gl');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let gl=null, prog=null, U=null, cyl=null, sph=null, ok=false, inited=false, active=false;
+
+  /* vector + mat4 math (column-major) */
+  const v_sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+  const v_dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+  const v_cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const v_len=a=>Math.hypot(a[0],a[1],a[2]);
+  const v_norm=a=>{ const l=v_len(a)||1; return [a[0]/l,a[1]/l,a[2]/l]; };
+  function m4mul(a,b){ const o=new Array(16); for(let c=0;c<4;c++) for(let r=0;r<4;r++) o[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3]; return o; }
+  const m4ident=()=>[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
+  const m4translate=(x,y,z)=>[1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1];
+  const m4scale=(x,y,z)=>[x,0,0,0,0,y,0,0,0,0,z,0,0,0,0,1];
+  function m4perspective(fovy,aspect,near,far){ const f=1/Math.tan(fovy/2),nf=1/(near-far); return [f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0]; }
+  function m4lookAt(eye,c,up){ const z=v_norm(v_sub(eye,c)),x=v_norm(v_cross(up,z)),y=v_cross(z,x);
+    return [x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-v_dot(x,eye),-v_dot(y,eye),-v_dot(z,eye),1]; }
+  function rotAlignY(d){ const vx=d[2],vy=0,vz=-d[0],c=d[1];
+    if(c>0.99999) return m4ident(); if(c<-0.99999) return [1,0,0,0,0,-1,0,0,0,0,-1,0,0,0,0,1];
+    const k=1/(1+c),vxx=vx*vx,vyy=vy*vy,vzz=vz*vz,vxy=vx*vy,vxz=vx*vz,vyz=vy*vz;
+    const r00=1+k*(-vzz-vyy),r01=-vz+k*vxy,r02=vy+k*vxz,r10=vz+k*vxy,r11=1+k*(-vzz-vxx),r12=-vx+k*vyz,r20=-vy+k*vxz,r21=vx+k*vyz,r22=1+k*(-vyy-vxx);
+    return [r00,r10,r20,0,r01,r11,r21,0,r02,r12,r22,0,0,0,0,1]; }
+  function cylinderModel(A,B,r){ const d=v_sub(B,A),l=v_len(d),dn=[d[0]/l,d[1]/l,d[2]/l]; return m4mul(m4translate(A[0],A[1],A[2]),m4mul(rotAlignY(dn),m4scale(r,l,r))); }
+  function sphereModel(P,r){ return m4mul(m4translate(P[0],P[1],P[2]),m4scale(r,r,r)); }
+  function cylinderMesh(seg){ const pos=[],nor=[],idx=[]; for(let i=0;i<=seg;i++){ const t=i/seg*Math.PI*2,x=Math.cos(t),z=Math.sin(t); pos.push(x,0,z); nor.push(x,0,z); pos.push(x,1,z); nor.push(x,0,z); } for(let i=0;i<seg;i++){ const a=i*2; idx.push(a,a+1,a+2,a+2,a+1,a+3); } return {positions:new Float32Array(pos),normals:new Float32Array(nor),indices:new Uint16Array(idx)}; }
+  function sphereMesh(stacks,slices){ const pos=[],nor=[],idx=[]; for(let i=0;i<=stacks;i++){ const phi=i/stacks*Math.PI,y=Math.cos(phi),rr=Math.sin(phi); for(let j=0;j<=slices;j++){ const th=j/slices*Math.PI*2,x=rr*Math.cos(th),z=rr*Math.sin(th); pos.push(x,y,z); nor.push(x,y,z); } } const row=slices+1; for(let i=0;i<stacks;i++) for(let j=0;j<slices;j++){ const a=i*row+j,b=a+row; idx.push(a,b,a+1,a+1,b,b+1); } return {positions:new Float32Array(pos),normals:new Float32Array(nor),indices:new Uint16Array(idx)}; }
+
+  const VERT=`#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
+layout(location=2) in vec4 aM0;
+layout(location=3) in vec4 aM1;
+layout(location=4) in vec4 aM2;
+layout(location=5) in vec4 aM3;
+layout(location=6) in vec3 aColor;
+uniform mat4 uVP;
+out vec3 vN; out vec3 vW; out vec3 vCol;
+void main(){ mat4 m=mat4(aM0,aM1,aM2,aM3); vec4 w=m*vec4(aPos,1.0); vW=w.xyz; vN=normalize(mat3(m)*aNormal); vCol=aColor; gl_Position=uVP*w; }`;
+  const FRAG=`#version 300 es
+precision highp float;
+in vec3 vN; in vec3 vW; in vec3 vCol;
+uniform vec3 uEye; uniform vec3 uLight; uniform vec3 uSpec; uniform float uShine; uniform vec3 uBg; uniform float uDissolve;
+out vec4 frag;
+void main(){
+  vec3 N=normalize(vN), L=normalize(uLight), V=normalize(uEye-vW), H=normalize(L+V);
+  float diff=max(dot(N,L),0.0); float spec=pow(max(dot(N,H),0.0),uShine);
+  vec3 col = vCol*0.18 + vCol*diff*0.95 + uSpec*spec*0.9 + vCol*0.20;
+  col=mix(col, uBg, clamp((length(uEye-vW)-26.0)/18.0,0.0,1.0)*0.85);
+  col=mix(col, uBg, clamp(uDissolve,0.0,1.0));
+  frag=vec4(col,1.0);
+}`;
+
+  /* simulation */
+  const GRID=10, MAX_CYL=4000, MAX_SPH=2600;
+  const AXES=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const BGC=[0.024,0.035,0.055], LIGHT=v_norm([0.45,0.85,0.55]), SPEC=[0.66,0.99,1.0];
+  let occupied=new Set(), pipes=[], az=0.7, el=0.42;
+  let sceneStart=0, interval=20000, dissolving=false, dissolve=0, dissolveStart=0;
+  const key=p=>p[0]+','+p[1]+','+p[2];
+  const inB=p=>Math.abs(p[0])<=GRID&&Math.abs(p[1])<=GRID&&Math.abs(p[2])<=GRID;
+  const free=p=>inB(p)&&!occupied.has(key(p));
+  function hsl(h,s,l){ const a=s*Math.min(l,1-l), f=n=>{ const k=(n+h*12)%12; return l-a*Math.max(-1,Math.min(k-3,9-k,1)); }; return [f(0),f(8),f(4)]; }
+
+  function compile(type,src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) console.error('pipes shader:',gl.getShaderInfoLog(s)); return s; }
+  function makeObject(mesh,maxInst){
+    const vao=gl.createVertexArray(); gl.bindVertexArray(vao);
+    const pb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,pb); gl.bufferData(gl.ARRAY_BUFFER,mesh.positions,gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+    const nb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,nb); gl.bufferData(gl.ARRAY_BUFFER,mesh.normals,gl.STATIC_DRAW); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,0);
+    const eb=gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,eb); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,mesh.indices,gl.STATIC_DRAW);
+    const mb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,mb); gl.bufferData(gl.ARRAY_BUFFER,maxInst*64,gl.DYNAMIC_DRAW);
+    for(let k=0;k<4;k++){ gl.enableVertexAttribArray(2+k); gl.vertexAttribPointer(2+k,4,gl.FLOAT,false,64,k*16); gl.vertexAttribDivisor(2+k,1); }
+    const cb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,cb); gl.bufferData(gl.ARRAY_BUFFER,maxInst*12,gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(6); gl.vertexAttribPointer(6,3,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(6,1);
+    gl.bindVertexArray(null);
+    return { vao, modelBuf:mb, colorBuf:cb, idxCount:mesh.indices.length, max:maxInst, model:new Float32Array(maxInst*16), color:new Float32Array(maxInst*3), count:0, uploaded:0 };
+  }
+  function addInstance(obj,model,color){ if(obj.count>=obj.max) return false; obj.model.set(model,obj.count*16); obj.color.set(color,obj.count*3); obj.count++; return true; }
+  function uploadObject(obj){ if(obj.count<=obj.uploaded) return; gl.bindBuffer(gl.ARRAY_BUFFER,obj.modelBuf); gl.bufferSubData(gl.ARRAY_BUFFER,obj.uploaded*64,obj.model.subarray(obj.uploaded*16,obj.count*16)); gl.bindBuffer(gl.ARRAY_BUFFER,obj.colorBuf); gl.bufferSubData(gl.ARRAY_BUFFER,obj.uploaded*12,obj.color.subarray(obj.uploaded*3,obj.count*3)); obj.uploaded=obj.count; }
+  function drawObject(obj){ gl.bindVertexArray(obj.vao); gl.drawElementsInstanced(gl.TRIANGLES,obj.idxCount,gl.UNSIGNED_SHORT,0,obj.count); }
+
+  function spawnPipe(){
+    let start=null;
+    for(let i=0;i<40;i++){ const p=[(Math.random()*(2*GRID+1)|0)-GRID,(Math.random()*(2*GRID+1)|0)-GRID,(Math.random()*(2*GRID+1)|0)-GRID]; if(free(p)){ start=p; break; } }
+    if(!start) return;
+    const color=hsl(Math.random(),0.6+Math.random()*0.35,0.45+Math.random()*0.12);
+    const radius=0.15+Math.random()*0.16;                              // diameter varies per pipe
+    const maxLen=12+(Math.random()*64|0);                              // length varies per pipe
+    const stepMs=reduced ? 80+Math.random()*95 : 30+Math.random()*64;  // speed varies per pipe
+    occupied.add(key(start)); addInstance(sph,sphereModel(start,radius),color);
+    pipes.push({pos:start,dir:null,color,radius,maxLen,stepMs,acc:0,len:0});
+  }
+  function endPipe(pipe){ addInstance(sph,sphereModel(pipe.pos,pipe.radius),pipe.color); }
+  function stepPipe(pipe){
+    if(pipe.len>=pipe.maxLen){ endPipe(pipe); return false; }                 // varied length: end and be replaced
+    let dir=null;
+    if(pipe.dir && Math.random()<0.55){ const np=[pipe.pos[0]+pipe.dir[0],pipe.pos[1]+pipe.dir[1],pipe.pos[2]+pipe.dir[2]]; if(free(np)) dir=pipe.dir; }
+    if(!dir){ const opts=AXES.filter(d=>free([pipe.pos[0]+d[0],pipe.pos[1]+d[1],pipe.pos[2]+d[2]])); if(!opts.length){ endPipe(pipe); return false; } dir=opts[(Math.random()*opts.length)|0]; }
+    const np=[pipe.pos[0]+dir[0],pipe.pos[1]+dir[1],pipe.pos[2]+dir[2]];
+    const turned=pipe.dir && (dir[0]!==pipe.dir[0]||dir[1]!==pipe.dir[1]||dir[2]!==pipe.dir[2]);
+    if(!addInstance(cyl,cylinderModel(pipe.pos,np,pipe.radius),pipe.color)) return false;
+    if(turned) addInstance(sph,sphereModel(pipe.pos, Math.random()<0.33?pipe.radius*1.5:pipe.radius),pipe.color);   // ~1/3 ball joints, rest flush
+    occupied.add(key(np)); pipe.pos=np; pipe.dir=dir; pipe.len++; return true;
+  }
+  function resetScene(){
+    occupied=new Set(); pipes=[]; cyl.count=0; cyl.uploaded=0; sph.count=0; sph.uploaded=0;
+    for(let i=0;i<2;i++) spawnPipe();                                  // always two pipes at once
+    sceneStart=now(); interval=(34+Math.random()*22)*1000; dissolving=false; dissolve=0;   // fill longer before clearing
+  }
+  function beginDissolve(){ if(!dissolving){ dissolving=true; dissolveStart=now(); } }
+  function grow(dt){
+    for(let i=pipes.length-1;i>=0;i--){            // each pipe advances at its own speed
+      const p=pipes[i]; p.acc+=dt; let alive=true;
+      while(alive && p.acc>=p.stepMs){ p.acc-=p.stepMs; alive=stepPipe(p); }
+      if(!alive) pipes.splice(i,1);
+    }
+    while(pipes.length<2){ const n=pipes.length; spawnPipe(); if(pipes.length===n) break; }  // keep two going; replace finished ones
+    if(cyl.count>=MAX_CYL-8 || sph.count>=MAX_SPH-8) beginDissolve();
+  }
+  function init(){
+    inited=true;
+    gl=canvas.getContext('webgl2',{antialias:true,alpha:false,depth:true});
+    if(!gl){ ok=false; return; }
+    prog=gl.createProgram();
+    gl.attachShader(prog,compile(gl.VERTEX_SHADER,VERT));
+    gl.attachShader(prog,compile(gl.FRAGMENT_SHADER,FRAG));
+    gl.linkProgram(prog);
+    if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){ console.error('pipes link:',gl.getProgramInfoLog(prog)); ok=false; return; }
+    U={}; ['uVP','uEye','uLight','uSpec','uShine','uBg','uDissolve'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+    cyl=makeObject(cylinderMesh(16),MAX_CYL); sph=makeObject(sphereMesh(14,22),MAX_SPH);
+    ok=true; resetScene();
+  }
+  function resize(){
+    if(!ok) return;
+    const dpr=Math.min(2,window.devicePixelRatio||1);
+    const w=canvas.clientWidth||window.innerWidth, h=canvas.clientHeight||window.innerHeight;
+    canvas.width=Math.round(w*dpr); canvas.height=Math.round(h*dpr); gl.viewport(0,0,canvas.width,canvas.height);
+  }
+  function activate(){ if(!inited) init(); if(!ok) return false; active=true; canvas.style.display='block'; resize(); resetScene(); return true; }
+  function deactivate(){ active=false; canvas.style.display='none'; }
+  function frame(t,dt){
+    if(!ok || !active) return;
+    az+=dt*0.00006;
+    if(dissolving){ dissolve=(now()-dissolveStart)/2000; if(dissolve>=1) resetScene(); }
+    else { if(now()-sceneStart>interval) beginDissolve(); else grow(dt); }
+    const d=22, eye=[ d*Math.cos(el)*Math.sin(az), d*Math.sin(el), d*Math.cos(el)*Math.cos(az) ];
+    const aspect=canvas.width/Math.max(1,canvas.height);
+    const vp=m4mul(m4perspective(45*Math.PI/180,aspect,0.5,60), m4lookAt(eye,[0,0,0],[0,1,0]));
+    gl.useProgram(prog);
+    gl.uniformMatrix4fv(U.uVP,false,new Float32Array(vp));
+    gl.uniform3fv(U.uEye,eye); gl.uniform3fv(U.uLight,LIGHT); gl.uniform3fv(U.uSpec,SPEC);
+    gl.uniform1f(U.uShine,100.0); gl.uniform3fv(U.uBg,BGC); gl.uniform1f(U.uDissolve,dissolving?Math.min(1,dissolve):0);
+    uploadObject(cyl); uploadObject(sph);
+    gl.clearColor(BGC[0],BGC[1],BGC[2],1); gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+    gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    drawObject(cyl); drawObject(sph);
+  }
+  return { activate, deactivate, resize, frame, get ok(){ return ok; } };
 })();
 
 /* ---------------- DVD bounce ---------------- */
@@ -580,7 +680,8 @@ const dvd = (function(){
 let raf=0, lastT=0;
 function loop(t){
   const dt=Math.min(50, t-lastT||16); lastT=t;
-  bg.draw(t,dt);
+  if(bg.scene==='pipes' && pipes3d.ok) pipes3d.frame(t,dt);   // WebGL pipes
+  else bg.draw(t,dt);                                          // 2D scenes
   if(bg.scene==='dvd') dvd.tick(dt);
   if(mode==='timer') tickTimer(); else tickSW();
   raf=requestAnimationFrame(loop);
@@ -606,6 +707,7 @@ $('bgPicker').addEventListener('click',e=>{
   bg.setScene(s);
   $('bgPicker').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));
   if(s==='dvd') dvd.enter(); else dvd.exit();
+  if(s==='pipes') pipes3d.activate(); else pipes3d.deactivate();
   applyScrim(s);
 });
 
@@ -638,6 +740,15 @@ $('soundBtn').addEventListener('click',()=>{
   $('soundBtn').textContent = soundOn?'🔊':'🔇';
 });
 
+/* ---------------- Hide timer (toggle) ---------------- */
+const appEl=document.querySelector('.app');
+function setHideUI(on){
+  appEl.classList.toggle('hide-ui',on);
+  $('hideBtn').classList.toggle('on',on);
+  $('hideBtn').title = on ? 'Show timer' : 'Hide timer';
+}
+$('hideBtn').addEventListener('click',()=>setHideUI(!appEl.classList.contains('hide-ui')));
+
 /* ---------------- Fullscreen ---------------- */
 function toggleFullscreen(){
   const el=$('stage');
@@ -645,7 +756,7 @@ function toggleFullscreen(){
   else { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
 }
 $('fsBtn').addEventListener('click',toggleFullscreen);
-document.addEventListener('fullscreenchange',()=>setTimeout(bg.resize,60));
+document.addEventListener('fullscreenchange',()=>setTimeout(()=>{ bg.resize(); pipes3d.resize(); },60));
 
 /* ---------------- Keyboard ---------------- */
 window.addEventListener('keydown',e=>{
@@ -656,7 +767,7 @@ window.addEventListener('keydown',e=>{
   else if(e.key==='f'||e.key==='F'){ toggleFullscreen(); }
   else if((e.key==='l'||e.key==='L')&&mode==='stopwatch'){ swLap(); }
 });
-window.addEventListener('resize',bg.resize);
+window.addEventListener('resize',()=>{ bg.resize(); pipes3d.resize(); });
 
 /* ---------------- Init ---------------- */
 bg.resize();
