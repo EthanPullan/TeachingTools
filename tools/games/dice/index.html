@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A tabletop dice roller for the classroom smart board — a felt tray, one of every die to tap-roll, and a pool builder to roll lots of dice at once.">
+<meta name="theme-color" content="#1f3d35">
+<title>Dice</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;overflow:hidden;}
+  button{font-family:inherit;}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* ── toolbar ── */
+  .toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex:none;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:10px 15px;
+    border-radius:9px;cursor:pointer;font-size:14px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;white-space:nowrap;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.small{padding:6px 10px;font-size:12.5px;border-radius:7px;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:16px;line-height:1;}
+
+  /* ── layout ── */
+  .main{flex:1;display:flex;min-height:0;}
+
+  /* dice rack (left) */
+  .rack{flex:none;width:clamp(96px,12vw,150px);background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;gap:clamp(6px,1.4vh,12px);padding:14px 12px;overflow:auto;align-items:center;}
+  .rack .rack-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);text-align:center;}
+  .rack-die{border:none;background:none;cursor:pointer;padding:4px;border-radius:12px;width:100%;
+    display:flex;align-items:center;justify-content:center;transition:transform .08s,background .12s;}
+  .rack-die:hover{background:var(--panel-2);transform:translateY(-2px);}
+  .rack-die:active{transform:translateY(0) scale(.95);}
+  .rack-die svg{width:clamp(50px,6vw,78px);height:clamp(50px,6vw,78px);filter:drop-shadow(0 3px 4px rgba(20,40,33,.25));}
+
+  /* tray (centre) */
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0;padding:16px;gap:12px;}
+  .tray-rim{flex:1;min-height:0;border-radius:26px;padding:clamp(10px,1.8vw,20px);position:relative;
+    background:linear-gradient(150deg,#7a5530,#4a3018 55%,#34210f);
+    box-shadow:0 22px 44px rgba(0,0,0,.34), inset 0 2px 3px rgba(255,255,255,.22), inset 0 -3px 6px rgba(0,0,0,.4);}
+  .felt{position:absolute;inset:clamp(10px,1.8vw,20px);border-radius:16px;overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 50% 30%, #338058 0%, #246048 45%, #163f30 100%);
+    box-shadow:inset 0 0 50px rgba(0,0,0,.55), inset 0 3px 10px rgba(0,0,0,.4);}
+  .felt::before{content:"";position:absolute;inset:0;opacity:.5;
+    background-image:radial-gradient(rgba(255,255,255,.05) 1px, transparent 1.4px);
+    background-size:7px 7px;}
+  .felt::after{content:"";position:absolute;inset:0;border-radius:16px;
+    box-shadow:inset 0 0 0 2px rgba(255,255,255,.05);pointer-events:none;}
+  .dice{position:absolute;inset:0;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;
+    gap:clamp(8px,1.4vw,18px);padding:clamp(20px,4vh,48px);overflow:auto;}
+  .die{cursor:pointer;transform:rotate(var(--rot,0deg));transition:transform .1s;
+    width:clamp(58px,8.4vw,116px);height:clamp(58px,8.4vw,116px);flex:none;}
+  .die:hover{transform:rotate(var(--rot,0deg)) scale(1.06);}
+  .die svg{width:100%;height:100%;filter:drop-shadow(0 5px 7px rgba(0,0,0,.4));display:block;}
+  .die.roll{animation:tumble .62s cubic-bezier(.2,.8,.3,1.1) both;}
+  @keyframes tumble{
+    0%{transform:scale(.2) rotate(-240deg);opacity:0;}
+    65%{transform:scale(1.12) rotate(18deg);opacity:1;}
+    100%{transform:rotate(var(--rot,0deg)) scale(1);opacity:1;}
+  }
+  .tray-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:rgba(255,255,255,.6);font-size:clamp(15px,2.4vh,20px);font-weight:600;text-align:center;padding:30px;pointer-events:none;}
+
+  /* total chip on felt */
+  .total{position:absolute;top:clamp(14px,2vw,24px);right:clamp(16px,2.2vw,28px);z-index:3;
+    background:rgba(13,30,24,.62);border:1px solid rgba(255,255,255,.16);border-radius:14px;
+    padding:8px 16px;color:#fff;display:flex;align-items:baseline;gap:10px;backdrop-filter:blur(3px);}
+  .total .lab{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.7);}
+  .total .num{font-family:var(--mono);font-weight:800;font-size:clamp(26px,4.6vh,46px);line-height:1;}
+
+  .breakdown{flex:none;min-height:1.4em;font-family:var(--mono);font-size:clamp(12px,1.9vh,15px);
+    color:var(--muted);text-align:center;padding:0 10px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .breakdown b{color:var(--ink);}
+
+  /* customization panel (right) */
+  .panel{flex:none;width:clamp(230px,24vw,320px);background:var(--panel);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;}
+  .panel-scroll{overflow:auto;padding:16px;display:flex;flex-direction:column;gap:16px;min-height:0;}
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 4px;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;margin:0;}
+
+  .poolrow{display:flex;align-items:center;gap:10px;}
+  .poolrow .mini{width:34px;height:34px;flex:none;}
+  .poolrow .name{flex:1;font-weight:700;font-family:var(--mono);font-size:14px;}
+  .stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .stepper button{border:none;background:var(--panel-2);width:32px;height:34px;cursor:pointer;font-size:18px;
+    font-weight:700;color:var(--board);line-height:1;}
+  .stepper button:hover{background:var(--accent-soft);}
+  .stepper .val{min-width:34px;text-align:center;font-family:var(--mono);font-weight:700;font-size:15px;}
+
+  .modrow{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    border-top:1px solid var(--line);padding-top:14px;}
+  .modrow .name{font-weight:700;font-size:13.5px;}
+
+  .presets{display:flex;flex-wrap:wrap;gap:7px;}
+  .chip{border:1px solid var(--line);background:var(--panel-2);border-radius:20px;padding:6px 12px;cursor:pointer;
+    font-family:var(--mono);font-size:13px;font-weight:700;color:var(--board);}
+  .chip:hover{background:var(--accent-soft);border-color:var(--accent);}
+
+  .panel-foot{border-top:1px solid var(--line);padding:14px 16px;display:flex;flex-direction:column;gap:9px;}
+  .panel-foot .btn{justify-content:center;}
+  .roll-pool{font-size:16px;padding:13px;}
+
+  @media (max-width:920px){
+    .main{flex-direction:column;}
+    .rack{width:100%;flex-direction:row;border-right:none;border-bottom:1px solid var(--line);overflow-x:auto;align-items:center;}
+    .rack .rack-title{display:none;}
+    .panel{width:100%;border-left:none;border-top:1px solid var(--line);max-height:40vh;}
+  }
+  @media (prefers-reduced-motion:reduce){ .die.roll{animation:none;} .btn:active{transform:none;} }
+</style>
+</head>
+<body>
+<!-- shared gradient defs for the dice (referenced by every die svg) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="diceDefs"></defs></svg>
+
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Dice <small>roll &amp; total</small></div>
+    <div class="spacer"></div>
+    <button class="btn" id="rerollBtn"><span class="ic">🎲</span>Roll again</button>
+    <button class="btn" id="soundBtn" aria-pressed="false"><span class="ic">🔈</span>Sound</button>
+    <button class="btn" id="clearBtn"><span class="ic">🧹</span>Clear tray</button>
+  </header>
+
+  <div class="main">
+    <!-- RACK -->
+    <aside class="rack" id="rack">
+      <div class="rack-title">Tap to roll</div>
+    </aside>
+
+    <!-- TRAY -->
+    <section class="stage">
+      <div class="tray-rim">
+        <div class="felt">
+          <div class="total"><span class="lab">Total</span><span class="num" id="totalNum">0</span></div>
+          <div class="dice" id="dice"></div>
+          <div class="tray-empty" id="trayEmpty">Tap a die on the left, or build a roll on the right →</div>
+        </div>
+      </div>
+      <div class="breakdown" id="breakdown"></div>
+    </section>
+
+    <!-- CUSTOMIZE -->
+    <aside class="panel">
+      <div class="panel-scroll">
+        <div>
+          <h3 class="section-title">Roll a pool</h3>
+          <p class="hint" style="margin-bottom:12px">Choose how many of each die, then roll them all together.</p>
+          <div id="poolRows" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+        <div class="modrow">
+          <span class="name">Modifier</span>
+          <div class="stepper" data-mod>
+            <button data-step="-1" aria-label="Decrease modifier">−</button>
+            <span class="val" id="modVal">+0</span>
+            <button data-step="1" aria-label="Increase modifier">+</button>
+          </div>
+        </div>
+        <div>
+          <h3 class="section-title">Quick rolls</h3>
+          <div class="presets" id="presets"></div>
+        </div>
+      </div>
+      <div class="panel-foot">
+        <button class="btn primary roll-pool" id="rollPoolBtn"><span class="ic">🎲</span>Roll pool</button>
+        <button class="btn small" id="resetPoolBtn">Reset pool</button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(function(){
+  const TYPES=[4,6,8,10,12,20,100];
+  const COLOR={4:'#2f6f9f',6:'#f1ead9',8:'#3f9e6b',10:'#c43d35',12:'#7a52a3',20:'#e0982e',100:'#4a7c9b'};
+  const SHAPE={
+    4:'50,8 92,86 8,86',
+    8:'50,6 90,50 50,94 10,50',
+    10:'50,6 88,40 50,96 12,40',
+    12:'50,5 94,40 77,93 23,93 6,40',
+    20:'50,5 90,28 90,72 50,95 10,72 10,28',
+    100:'50,6 88,40 50,96 12,40'
+  };
+  const $=id=>document.getElementById(id);
+
+  let tray=[];            // [{type, value, rot}]
+  let pool={4:0,6:0,8:0,10:0,12:0,20:0,100:0};
+  let mod=0;
+  let soundOn=false;
+  let uid=0;
+
+  /* ---- colour helpers + gradient defs ---- */
+  function clampc(v){ return Math.max(0,Math.min(255,Math.round(v))); }
+  function shade(hex,amt){ // amt>0 lighten toward white, amt<0 darken toward black
+    const n=parseInt(hex.slice(1),16); let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+    if(amt>=0){ r+=(255-r)*amt; g+=(255-g)*amt; b+=(255-b)*amt; }
+    else { r*=(1+amt); g*=(1+amt); b*=(1+amt); }
+    return '#'+[clampc(r),clampc(g),clampc(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+  }
+  (function buildDefs(){
+    let s='';
+    TYPES.forEach(t=>{
+      s+=`<linearGradient id="g${t}" x1="0" y1="0" x2="1" y2="1">`
+       + `<stop offset="0" stop-color="${shade(COLOR[t],0.34)}"/>`
+       + `<stop offset="0.55" stop-color="${COLOR[t]}"/>`
+       + `<stop offset="1" stop-color="${shade(COLOR[t],-0.28)}"/>`
+       + `</linearGradient>`;
+    });
+    $('diceDefs').innerHTML=s;
+  })();
+
+  /* ---- pip layout for d6 ---- */
+  const PIPS={
+    1:[[50,50]],
+    2:[[33,33],[67,67]],
+    3:[[33,33],[50,50],[67,67]],
+    4:[[33,33],[67,33],[33,67],[67,67]],
+    5:[[33,33],[67,33],[50,50],[33,67],[67,67]],
+    6:[[33,32],[33,50],[33,68],[67,32],[67,50],[67,68]]
+  };
+
+  /* ---- render one die as svg markup ---- */
+  function dieSVG(type, content){          // content: number (value) or string label
+    const stroke=shade(COLOR[type],-0.4);
+    let inner='';
+    if(type===6){
+      inner=`<rect x="14" y="14" width="72" height="72" rx="13" fill="url(#g6)" stroke="${stroke}" stroke-width="2"/>`
+          + `<ellipse cx="40" cy="34" rx="20" ry="10" fill="#fff" opacity="0.16"/>`;
+      if(typeof content==='number'){
+        const dark=shade(COLOR[6],-0.78);
+        inner += PIPS[content].map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="7.4" fill="${dark}"/>`).join('');
+      }else{
+        inner += `<text x="50" y="50" text-anchor="middle" dominant-baseline="central" font-weight="800" font-size="30" fill="${shade(COLOR[6],-0.7)}">${content}</text>`;
+      }
+      return `<svg viewBox="0 0 100 100">${inner}</svg>`;
+    }
+    inner=`<polygon points="${SHAPE[type]}" fill="url(#g${type})" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/>`
+        + `<ellipse cx="44" cy="32" rx="18" ry="9" fill="#fff" opacity="0.14"/>`;
+    if(type===20){ inner+=`<polygon points="50,24 76,68 24,68" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1.6" stroke-linejoin="round"/>`; }
+    const txt=String(content);
+    const fs = txt.length>=3 ? 26 : txt.length===2 ? 34 : 40;
+    const cy = type===4 ? 64 : 52;       // nudge number down inside the triangle
+    inner+=`<text x="50" y="${cy}" text-anchor="middle" dominant-baseline="central" font-weight="800" font-size="${fs}" fill="#fff" stroke="rgba(0,0,0,.18)" stroke-width="0.6" paint-order="stroke">${txt}</text>`;
+    return `<svg viewBox="0 0 100 100">${inner}</svg>`;
+  }
+
+  /* ---- build the rack + pool rows + presets ---- */
+  function buildRack(){
+    const rack=$('rack');
+    TYPES.forEach(t=>{
+      const b=document.createElement('button');
+      b.className='rack-die'; b.title='Roll a d'+t;
+      b.innerHTML=dieSVG(t,'d'+t);
+      b.addEventListener('click',()=>rollOne(t));
+      rack.appendChild(b);
+    });
+  }
+  function buildPool(){
+    const wrap=$('poolRows');
+    TYPES.forEach(t=>{
+      const row=document.createElement('div'); row.className='poolrow';
+      row.innerHTML=`<span class="mini">${dieSVG(t,'d'+t)}</span><span class="name">d${t}</span>`
+        +`<div class="stepper"><button data-d="-1" aria-label="One fewer d${t}">−</button>`
+        +`<span class="val" id="pv${t}">0</span>`
+        +`<button data-d="1" aria-label="One more d${t}">+</button></div>`;
+      row.querySelector('[data-d="-1"]').addEventListener('click',()=>bumpPool(t,-1));
+      row.querySelector('[data-d="1"]').addEventListener('click',()=>bumpPool(t,1));
+      wrap.appendChild(row);
+    });
+  }
+  const PRESETS=[ '1d20','2d6','3d6','4d6','2d10','1d12','2d20','1d100' ];
+  function buildPresets(){
+    const wrap=$('presets');
+    PRESETS.forEach(p=>{
+      const [n,t]=p.split('d').map(Number);
+      const c=document.createElement('button'); c.className='chip'; c.textContent=p;
+      c.addEventListener('click',()=>{ resetPool(); pool[t]=n; syncPool(); rollPool(); });
+      wrap.appendChild(c);
+    });
+  }
+
+  /* ---- pool controls ---- */
+  function bumpPool(t,d){ pool[t]=Math.max(0,Math.min(30,pool[t]+d)); syncPool(); }
+  function syncPool(){ TYPES.forEach(t=>{ $('pv'+t).textContent=pool[t]; }); }
+  function resetPool(){ TYPES.forEach(t=>pool[t]=0); syncPool(); }
+
+  /* ---- rolling ---- */
+  function rnd(sides){ return 1+Math.floor(Math.random()*sides); }
+  function rollOne(type){
+    tray.push({type, value:rnd(type), rot:rndRot(), id:++uid, fresh:true});
+    clack(1); render();
+  }
+  function rollPool(){
+    const total=TYPES.reduce((s,t)=>s+pool[t],0);
+    if(total===0) return;
+    tray=[];
+    TYPES.forEach(t=>{ for(let i=0;i<pool[t];i++) tray.push({type:t, value:rnd(t), rot:rndRot(), id:++uid, fresh:true}); });
+    clack(Math.min(total,8)); render();
+  }
+  function rerollAll(){
+    if(!tray.length) return;
+    tray.forEach(d=>{ d.value=rnd(d.type); d.rot=rndRot(); d.fresh=true; });
+    clack(Math.min(tray.length,8)); render();
+  }
+  function rndRot(){ return (Math.random()*24-12).toFixed(1)+'deg'; }
+
+  /* ---- render tray ---- */
+  function render(){
+    const box=$('dice'); box.innerHTML='';
+    $('trayEmpty').style.display = tray.length ? 'none' : 'flex';
+    tray.forEach((d,i)=>{
+      const el=document.createElement('div');
+      el.className='die'+(d.fresh?' roll':'');
+      el.style.setProperty('--rot', d.rot);
+      if(d.fresh) el.style.animationDelay=(i%12*0.04)+'s';
+      el.innerHTML=dieSVG(d.type, d.value);
+      el.title='d'+d.type+' — tap to re-roll';
+      el.addEventListener('click',()=>{ d.value=rnd(d.type); d.rot=rndRot(); d.fresh=true; clack(1); render(); });
+      box.appendChild(el);
+      d.fresh=false;
+    });
+    // total
+    const sum=tray.reduce((s,d)=>s+d.value,0)+mod;
+    $('totalNum').textContent=sum;
+    // breakdown
+    $('breakdown').innerHTML=buildBreakdown();
+  }
+  function buildBreakdown(){
+    if(!tray.length) return mod ? `modifier <b>${fmtMod(mod)}</b>` : '';
+    const parts=[];
+    TYPES.forEach(t=>{
+      const vals=tray.filter(d=>d.type===t).map(d=>d.value);
+      if(vals.length) parts.push(`${vals.length}d${t} <b>[${vals.join(', ')}]</b>`);
+    });
+    let s=parts.join('  +  ');
+    if(mod) s+=`  ${mod>0?'+':'−'}  <b>${Math.abs(mod)}</b>`;
+    const sum=tray.reduce((a,d)=>a+d.value,0)+mod;
+    s+=`  =  <b>${sum}</b>`;
+    return s;
+  }
+  function fmtMod(m){ return (m>0?'+':'')+m; }
+
+  /* ---- modifier ---- */
+  document.querySelector('[data-mod]').addEventListener('click',e=>{
+    const b=e.target.closest('[data-step]'); if(!b) return;
+    mod=Math.max(-50,Math.min(50,mod+ (+b.dataset.step)));
+    $('modVal').textContent=fmtMod(mod);
+    render();
+  });
+
+  /* ---- sound (WebAudio noise 'clack', no files) ---- */
+  let actx=null;
+  function ensureAudio(){ if(soundOn && !actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } }
+  function clack(n){
+    if(!soundOn || !actx) return;
+    for(let i=0;i<n;i++){
+      const t=actx.currentTime + i*0.05 + Math.random()*0.03;
+      const dur=0.05;
+      const buf=actx.createBuffer(1, actx.sampleRate*dur, actx.sampleRate);
+      const data=buf.getChannelData(0);
+      for(let s=0;s<data.length;s++){ data[s]=(Math.random()*2-1)*Math.pow(1-s/data.length,2); }
+      const src=actx.createBufferSource(); src.buffer=buf;
+      const bp=actx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1400+Math.random()*900; bp.Q.value=1.2;
+      const g=actx.createGain(); g.gain.value=0.18;
+      src.connect(bp); bp.connect(g); g.connect(actx.destination);
+      src.start(t);
+    }
+  }
+
+  /* ---- toolbar / panel buttons ---- */
+  $('rollPoolBtn').addEventListener('click',rollPool);
+  $('resetPoolBtn').addEventListener('click',resetPool);
+  $('rerollBtn').addEventListener('click',rerollAll);
+  $('clearBtn').addEventListener('click',()=>{ tray=[]; render(); });
+  $('soundBtn').addEventListener('click',()=>{
+    soundOn=!soundOn; ensureAudio();
+    const b=$('soundBtn'); b.setAttribute('aria-pressed',soundOn);
+    b.classList.toggle('primary',soundOn);
+    b.querySelector('.ic').textContent = soundOn ? '🔊' : '🔈';
+  });
+
+  // keyboard: R re-rolls, Space rolls the pool, C clears
+  document.addEventListener('keydown',e=>{
+    if(/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    if(e.key==='r'||e.key==='R') rerollAll();
+    else if(e.code==='Space'){ e.preventDefault(); rollPool(); }
+    else if(e.key==='c'||e.key==='C'){ tray=[]; render(); }
+  });
+
+  buildRack(); buildPool(); buildPresets(); syncPool(); render();
+})();
+</script>
+</body>
+</html>
