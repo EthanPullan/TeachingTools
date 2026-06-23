@@ -77,11 +77,22 @@
   .board.dragging{cursor:grabbing;}
 
   /* ---- pinned card (paper) ---- */
+  /* transform-origin:top-left keeps the top-left pinned while resizing the
+     bottom-right corner, even with the slight pinned-paper rotation. */
   .card{position:absolute;top:0;left:0;border-radius:3px;
-    box-shadow:var(--paper-shadow);transform:rotate(var(--rot,0deg));
+    box-shadow:var(--paper-shadow);transform:rotate(var(--rot,0deg));transform-origin:0 0;
     transition:box-shadow .12s;will-change:left,top;touch-action:none;}
   .card.lift{box-shadow:0 3px 4px rgba(40,24,8,.22),0 18px 30px rgba(40,24,8,.40);}
-  .card .inner{position:relative;padding:18px 12px 12px;}
+  .card .inner{position:relative;padding:18px 12px 12px;display:flex;flex-direction:column;
+    height:100%;min-height:0;}
+
+  /* resize grip — drag the bottom-right corner to resize */
+  .rs{position:absolute;right:1px;bottom:1px;width:18px;height:18px;cursor:nwse-resize;
+    z-index:3;opacity:0;transition:opacity .12s;touch-action:none;}
+  .card:hover .rs,.card:focus-within .rs{opacity:.65;}
+  .rs:hover{opacity:1;}
+  .rs::after{content:"";position:absolute;right:3px;bottom:3px;width:8px;height:8px;
+    border-right:2px solid rgba(40,24,8,.55);border-bottom:2px solid rgba(40,24,8,.55);}
 
   /* push pin = drag handle */
   .pin{position:absolute;top:-9px;left:50%;transform:translateX(-50%);
@@ -106,10 +117,10 @@
   .x:hover{background:var(--danger-soft);color:var(--danger);}
 
   /* ---- sticky note ---- */
-  .card.note{width:196px;background:var(--note,#fff59d);
+  .card.note{min-width:130px;min-height:110px;background:var(--note,#fff59d);
     background-image:linear-gradient(160deg, rgba(255,255,255,.35), rgba(0,0,0,.04));}
   .card.note .inner{padding:20px 13px 26px;}
-  .note textarea{width:100%;min-height:128px;border:none;background:transparent;resize:none;
+  .note textarea{flex:1;width:100%;min-height:54px;border:none;background:transparent;resize:none;
     font-family:"Bradley Hand","Segoe Print",var(--sans);font-size:15px;line-height:1.5;
     color:#33270f;padding:0;}
   .note textarea:focus{outline:none;}
@@ -123,17 +134,18 @@
     cursor:pointer;padding:0;}
   .swatch.on{box-shadow:0 0 0 2px rgba(40,24,8,.55);}
 
-  /* ---- paper cards (list / calendar) ---- */
+  /* ---- paper cards (list / calendar / countdown) ---- */
   .card.paper{background:#fffdf7;background-image:linear-gradient(160deg,rgba(255,255,255,.5),rgba(0,0,0,.03));}
-  .card.list{width:236px;}
-  .card .head{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .card.list{min-width:180px;min-height:120px;}
+  .card .head{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex:none;}
   .card .head .title{flex:1;border:none;background:transparent;font-weight:700;font-size:13.5px;
     color:var(--ink);padding:2px 2px;border-radius:5px;letter-spacing:.01em;}
   .card .head .title:focus{outline:none;background:var(--panel-2);}
   .card .head .count{font-family:var(--mono);font-size:10.5px;color:var(--muted);
     background:var(--panel-2);border:1px solid var(--line);border-radius:20px;padding:1px 7px;flex:none;}
 
-  .checks{list-style:none;margin:0 0 6px;padding:0;display:flex;flex-direction:column;gap:3px;}
+  .checks{list-style:none;margin:0 0 6px;padding:0;display:flex;flex-direction:column;gap:3px;
+    flex:1;min-height:0;overflow:auto;}
   .checks li{display:flex;align-items:center;gap:7px;padding:2px 2px;border-radius:6px;}
   .checks li:hover{background:rgba(40,24,8,.05);}
   .checks input[type=checkbox]{width:15px;height:15px;accent-color:var(--board);flex:none;cursor:pointer;}
@@ -144,7 +156,7 @@
     line-height:1;padding:0 3px;border-radius:5px;opacity:0;transition:opacity .12s;}
   .checks li:hover .rm{opacity:1;}
   .checks .rm:hover{color:var(--danger);background:var(--danger-soft);}
-  .additem{display:flex;align-items:center;gap:6px;}
+  .additem{display:flex;align-items:center;gap:6px;flex:none;}
   .additem input{flex:1;border:1px solid var(--line);border-radius:7px;padding:5px 8px;
     background:var(--panel-2);font-size:12.5px;}
   .additem .add{border:1px solid var(--line);background:var(--panel);border-radius:7px;cursor:pointer;
@@ -152,32 +164,45 @@
   .additem .add:hover{background:var(--panel-2);}
 
   /* ---- calendar ---- */
-  .card.cal{width:308px;}
-  .cal-head{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .card.cal{min-width:252px;min-height:248px;}
+  .cal-head{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex:none;}
   .cal-head .mtitle{flex:1;text-align:center;font-weight:700;font-size:13.5px;cursor:pointer;
     border:none;background:transparent;color:var(--ink);border-radius:6px;padding:3px;letter-spacing:.01em;}
   .cal-head .mtitle:hover{background:var(--panel-2);}
   .cal-nav{border:1px solid var(--line);background:var(--panel);border-radius:7px;cursor:pointer;
     width:26px;height:26px;flex:none;font-size:14px;line-height:1;color:var(--ink);}
   .cal-nav:hover{background:var(--panel-2);}
-  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
-  .cal-grid .dow{font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;flex:none;}
+  .cal-dow .dow{font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
     color:var(--muted);text-align:center;padding:2px 0 4px;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(6,1fr);
+    gap:2px;flex:1;min-height:0;}
   .cal-day{border:none;background:transparent;font-family:var(--mono);font-size:11.5px;
-    color:var(--ink);aspect-ratio:1/1;border-radius:6px;cursor:pointer;position:relative;
+    color:var(--ink);min-height:24px;border-radius:6px;cursor:pointer;position:relative;
     display:flex;align-items:center;justify-content:center;padding:0;}
   .cal-day:hover{background:var(--panel-2);}
   .cal-day.dim{color:rgba(40,24,8,.3);}
   .cal-day.today{box-shadow:inset 0 0 0 2px var(--accent);font-weight:700;}
   .cal-day.marked::after{content:"";position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
     width:5px;height:5px;border-radius:50%;background:var(--danger);}
-  .cal-foot{display:flex;align-items:center;gap:8px;margin-top:9px;
+  .cal-foot{display:flex;align-items:center;gap:8px;margin-top:9px;flex:none;
     font-size:10.5px;color:var(--muted);}
   .cal-foot .lab{letter-spacing:.06em;text-transform:uppercase;font-weight:700;}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
   .seg button{border:none;background:#fff;padding:3px 9px;cursor:pointer;font-size:11px;font-weight:600;
     color:var(--muted);}
   .seg button.active{background:var(--board);color:#fff;}
+
+  /* ---- day countdown ---- */
+  .card.count{min-width:172px;min-height:132px;background:#fffdf7;
+    background-image:linear-gradient(160deg,rgba(255,255,255,.5),rgba(0,0,0,.03));}
+  .count .cbody{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;text-align:center;gap:2px;}
+  .count .big{font-family:var(--mono);font-weight:700;font-size:46px;line-height:1;color:var(--board);}
+  .count .big.past{color:var(--muted);}
+  .count .unit{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+  .count .date{font-family:var(--mono);font-size:11.5px;color:var(--ink);margin-top:6px;}
+  .count .foot{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4;flex:none;text-align:center;}
 
   /* ---- empty hint ---- */
   .emptyhint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
@@ -230,6 +255,7 @@
     <button class="btn" id="addNote"><span class="ic">📝</span><span class="lbl">Sticky note</span></button>
     <button class="btn" id="addList"><span class="ic">✓</span><span class="lbl">Checklist</span></button>
     <button class="btn" id="addCal"><span class="ic">📅</span><span class="lbl">Calendar</span></button>
+    <button class="btn" id="addCount"><span class="ic">⏳</span><span class="lbl">Countdown</span></button>
     <button class="btn small" id="exportBtn" title="Download this board as a file">Export</button>
     <button class="btn small" id="importBtn" title="Load a board file">Import</button>
     <button class="btn small danger" id="clearBtn" title="Clear the whole board">Clear</button>
@@ -240,7 +266,7 @@
     <div class="board" id="board">
       <div class="emptyhint" id="emptyHint">
         <b>The board is empty.</b><br>
-        Add a sticky note, checklist or calendar — or double-click the cork.
+        Add a sticky note, checklist, calendar or countdown — or double-click the cork.
       </div>
     </div>
   </div>
@@ -251,6 +277,8 @@
     <span class="stat"><b id="cLists">0</b> checklists</span>
     <span class="dotline"></span>
     <span class="stat"><b id="cCals">0</b> calendars</span>
+    <span class="dotline"></span>
+    <span class="stat"><b id="cCounts">0</b> countdowns</span>
     <span class="stamp"><span class="saved" id="savedDot"></span><span id="savedTxt">Saved locally</span></span>
   </footer>
 </div>
@@ -261,15 +289,18 @@
 /* =====================================================================
    Staff-Room Board — single-file, offline.
 
-   A digital corkboard for the staff room: pin sticky notes, checklists
-   and a month calendar to a cork surface and drag them around.
+   A digital corkboard for the staff room: pin sticky notes, checklists,
+   a month calendar and a day countdown to a cork surface and arrange them.
 
    • Items are absolutely positioned on the cork. The push pin doubles as
      a drag handle (grab the pin or the paper margins; click into text to
-     edit). Arrow keys nudge a focused pin for keyboard users.
-   • The calendar's first day of week follows the SYSTEM/locale default
+     edit). Arrow keys nudge a focused pin for keyboard users. Drag the
+     bottom-right corner to resize; content reflows to fit.
+   • The calendar's first day of week follows the BROWSER/system default
      (Intl.Locale weekInfo) — Monday in much of the world, Sunday in the
-     US etc. Each calendar can be flipped Sun/Mon independently.
+     US etc. Each calendar's Auto/Sun/Mon toggle can override it.
+   • The countdown counts whole calendar days to a hardcoded target
+     (COUNTDOWN_TARGET); school-day-only counting is a future TODO.
    • State auto-saves to this browser (localStorage). No network, no
      accounts. Export/Import moves a board between machines as a file.
    ===================================================================== */
@@ -290,6 +321,19 @@ const PINS = [
   {c:'#7a52c0', d:'#553a87'}, // violet
 ];
 
+// Hardcoded countdown target. Month is 0-based, so 5 = June.
+// TODO: per-card date picker + school-day-only counting (skip weekends/holidays).
+const COUNTDOWN_TARGET = new Date(2027, 5, 25);   // 25 June 2027
+
+// Default + minimum sizes per item type (used by create + resize). h:null = grow
+// to fit content until the user drags the corner.
+const SIZE = {
+  note:  { w:196, h:188, minW:130, minH:110 },
+  list:  { w:236, h:null, minW:180, minH:120 },
+  cal:   { w:308, h:300, minW:252, minH:248 },
+  count: { w:226, h:188, minW:172, minH:132 },
+};
+
 /* ---- state ---- */
 let state = { items:[], z:10, seq:1 };
 const els = new Map();           // id -> card element
@@ -297,13 +341,20 @@ let saveTimer = null;
 let placeIx = 0;                 // cascade counter for new items
 
 /* ---------------- locale week start ---------------- */
-// Returns 0..6 (0 = Sunday) for the system locale's first day of week.
+// Returns 0..6 (0 = Sunday) for the browser/system's first day of week.
+// This reads the browser locale (navigator.language) and asks Intl for that
+// locale's week info — i.e. it follows whatever Sun/Mon convention the
+// browser is set to, with no hardcoded preference.
 function systemWeekStart(){
-  try{
-    const loc = new Intl.Locale(navigator.language || 'en-US');
-    const wi = (typeof loc.getWeekInfo === 'function') ? loc.getWeekInfo() : loc.weekInfo;
-    if(wi && wi.firstDay) return wi.firstDay % 7;   // CLDR 1..7 (Mon..Sun) -> 1..6,0
-  }catch(e){}
+  const langs = (navigator.languages && navigator.languages.length)
+    ? navigator.languages : [navigator.language || 'en-US'];
+  for(const lang of langs){
+    try{
+      const loc = new Intl.Locale(lang);
+      const wi = (typeof loc.getWeekInfo === 'function') ? loc.getWeekInfo() : loc.weekInfo;
+      if(wi && wi.firstDay) return wi.firstDay % 7;   // CLDR 1..7 (Mon..Sun) -> 1..6,0
+    }catch(e){}
+  }
   // Fallback: infer a region and guess (most of the world starts Monday).
   const sundayFirst = ['US','CA','AU','NZ','JP','IL','KR','IN','ZA','BR','MX','PH','CO',
     'EG','SA','HK','TW','CN','ID','TH','PE','VE','CL','GT','PR','PA','CR','DO','HN','NI','BO','EC'];
@@ -372,18 +423,26 @@ function nextPos(){
 }
 
 function updateStatus(){
-  let n=0,l=0,c=0;
-  state.items.forEach(it=>{ if(it.type==='note')n++; else if(it.type==='list')l++; else if(it.type==='cal')c++; });
-  $('cNotes').textContent=n; $('cLists').textContent=l; $('cCals').textContent=c;
+  let n=0,l=0,c=0,d=0;
+  state.items.forEach(it=>{ if(it.type==='note')n++; else if(it.type==='list')l++;
+    else if(it.type==='cal')c++; else if(it.type==='count')d++; });
+  $('cNotes').textContent=n; $('cLists').textContent=l; $('cCals').textContent=c; $('cCounts').textContent=d;
   $('emptyHint').style.display = state.items.length ? 'none' : 'block';
+}
+
+// Apply an item's stored size to its element (h:null => grow to fit content).
+function applySize(item, el){
+  const def = SIZE[item.type] || {};
+  el.style.width  = (item.w || def.w || 200) + 'px';
+  el.style.height = (item.h != null) ? item.h + 'px' : '';
 }
 
 /* ---------------- create items ---------------- */
 function addNote(x, y, text, color){
   const pos = (x==null) ? nextPos() : {x,y};
-  const item = { id:uid(), type:'note', x:pos.x, y:pos.y, rot:rand(-3.2,3.2),
-    z:++state.z, pin:pickPin(), color: color || NOTE_COLORS[Math.floor(rand(0,NOTE_COLORS.length))],
-    text: text || '' };
+  const item = { id:uid(), type:'note', x:pos.x, y:pos.y, w:SIZE.note.w, h:SIZE.note.h,
+    rot:rand(-3.2,3.2), z:++state.z, pin:pickPin(),
+    color: color || NOTE_COLORS[Math.floor(rand(0,NOTE_COLORS.length))], text: text || '' };
   state.items.push(item);
   mountCard(item, true);
   updateStatus(); save();
@@ -391,8 +450,8 @@ function addNote(x, y, text, color){
 }
 function addList(){
   const pos = nextPos();
-  const item = { id:uid(), type:'list', x:pos.x, y:pos.y, rot:rand(-2.4,2.4),
-    z:++state.z, pin:pickPin(), title:'Checklist', items:[] };
+  const item = { id:uid(), type:'list', x:pos.x, y:pos.y, w:SIZE.list.w, h:SIZE.list.h,
+    rot:rand(-2.4,2.4), z:++state.z, pin:pickPin(), title:'Checklist', items:[] };
   state.items.push(item);
   mountCard(item, true);
   updateStatus(); save();
@@ -401,9 +460,18 @@ function addList(){
 function addCal(){
   const pos = nextPos();
   const now = new Date();
-  const item = { id:uid(), type:'cal', x:pos.x, y:pos.y, rot:rand(-2,2),
-    z:++state.z, pin:pickPin(), year:now.getFullYear(), month:now.getMonth(),
-    weekStart:null /* null = system default */, marks:{} };
+  const item = { id:uid(), type:'cal', x:pos.x, y:pos.y, w:SIZE.cal.w, h:SIZE.cal.h,
+    rot:rand(-2,2), z:++state.z, pin:pickPin(), year:now.getFullYear(), month:now.getMonth(),
+    weekStart:null /* null = system/browser default */, marks:{} };
+  state.items.push(item);
+  mountCard(item, true);
+  updateStatus(); save();
+  return item;
+}
+function addCount(){
+  const pos = nextPos();
+  const item = { id:uid(), type:'count', x:pos.x, y:pos.y, w:SIZE.count.w, h:SIZE.count.h,
+    rot:rand(-2.4,2.4), z:++state.z, pin:pickPin(), title:'Countdown' };
   state.items.push(item);
   mountCard(item, true);
   updateStatus(); save();
@@ -414,6 +482,7 @@ function removeItem(item){
   const el = els.get(item.id);
   if(el) el.remove();
   els.delete(item.id);
+  if(item._tick){ countdownEls.delete(item._tick); item._tick=null; }
   state.items = state.items.filter(i=>i!==item);
   updateStatus(); save();
 }
@@ -428,6 +497,7 @@ function mountCard(item, animate){
   el.style.top  = item.y + 'px';
   el.style.zIndex = item.z;
   el.style.setProperty('--rot', (item.rot||0)+'deg');
+  applySize(item, el);
   if(item.type==='note') el.style.setProperty('--note', item.color);
 
   const inner = document.createElement('div');
@@ -450,15 +520,23 @@ function mountCard(item, animate){
   inner.appendChild(x);
 
   // body
-  if(item.type==='note')      buildNote(item, inner);
-  else if(item.type==='list') buildList(item, inner);
-  else if(item.type==='cal')  buildCal(item, inner);
+  if(item.type==='note')       buildNote(item, inner);
+  else if(item.type==='list')  buildList(item, inner);
+  else if(item.type==='cal')   buildCal(item, inner);
+  else if(item.type==='count') buildCount(item, inner);
+
+  // resize grip (bottom-right corner)
+  const rs = document.createElement('div');
+  rs.className = 'rs';
+  rs.setAttribute('aria-hidden','true');
+  inner.appendChild(rs);
 
   el.appendChild(inner);
   board.appendChild(el);
   els.set(item.id, el);
 
   attachDrag(item, el, pin);
+  attachResize(item, el, rs);
   return el;
 }
 
@@ -563,17 +641,23 @@ function buildCal(item, inner){
   head.appendChild(prev); head.appendChild(title); head.appendChild(next);
   inner.appendChild(head);
 
+  const dow = document.createElement('div'); dow.className='cal-dow';
+  inner.appendChild(dow);
   const grid = document.createElement('div'); grid.className='cal-grid';
   inner.appendChild(grid);
 
   const foot = document.createElement('div'); foot.className='cal-foot';
   const lab = document.createElement('span'); lab.className='lab'; lab.textContent='Week starts';
   const seg = document.createElement('div'); seg.className='seg';
+  // Auto = follow the browser/system default; Sun/Mon force an override.
+  const bAuto = document.createElement('button'); bAuto.type='button'; bAuto.textContent='Auto';
   const bSun = document.createElement('button'); bSun.type='button'; bSun.textContent='Sun';
   const bMon = document.createElement('button'); bMon.type='button'; bMon.textContent='Mon';
-  bSun.addEventListener('click', ()=>{ item.weekStart=0; render(); save(); });
-  bMon.addEventListener('click', ()=>{ item.weekStart=1; render(); save(); });
-  seg.appendChild(bSun); seg.appendChild(bMon);
+  bAuto.title = 'Use the browser/system default (' + (SYS_WEEK_START===0?'Sunday':'Monday') + ')';
+  bAuto.addEventListener('click', ()=>{ item.weekStart=null; render(); save(); });
+  bSun.addEventListener('click',  ()=>{ item.weekStart=0;    render(); save(); });
+  bMon.addEventListener('click',  ()=>{ item.weekStart=1;    render(); save(); });
+  seg.appendChild(bAuto); seg.appendChild(bSun); seg.appendChild(bMon);
   foot.appendChild(lab); foot.appendChild(seg);
   inner.appendChild(foot);
 
@@ -589,23 +673,25 @@ function buildCal(item, inner){
 
   function render(){
     const ws = effWeekStart(item);
-    bSun.classList.toggle('active', ws===0);
-    bMon.classList.toggle('active', ws===1);
+    bAuto.classList.toggle('active', item.weekStart==null);
+    bSun.classList.toggle('active', item.weekStart===0);
+    bMon.classList.toggle('active', item.weekStart===1);
 
     title.textContent = new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'})
       .format(new Date(item.year, item.month, 1));
 
-    grid.innerHTML='';
     // weekday header (localized short names)
+    dow.innerHTML='';
     const dfmt = new Intl.DateTimeFormat(undefined,{weekday:'short'});
     for(let i=0;i<7;i++){
-      const dow=(ws+i)%7;
+      const wd=(ws+i)%7;
       const d=document.createElement('div'); d.className='dow';
-      // 2023-01-01 was a Sunday → date 1+dow has weekday `dow`
-      d.textContent = dfmt.format(new Date(2023,0,1+dow)).slice(0,2);
-      grid.appendChild(d);
+      // 2023-01-01 was a Sunday → date 1+wd has weekday `wd`
+      d.textContent = dfmt.format(new Date(2023,0,1+wd)).slice(0,2);
+      dow.appendChild(d);
     }
     // day cells (6 weeks)
+    grid.innerHTML='';
     const first = new Date(item.year, item.month, 1);
     const lead = (first.getDay() - ws + 7) % 7;
     const start = new Date(item.year, item.month, 1 - lead);
@@ -631,6 +717,51 @@ function buildCal(item, inner){
   render();
 }
 
+/* ---------------- day countdown ---------------- */
+// Whole days from local "today" to the target (rounded so DST can't add a day).
+function daysUntil(target){
+  const now = new Date(); now.setHours(0,0,0,0);
+  const t = new Date(target); t.setHours(0,0,0,0);
+  return Math.round((t - now) / 86400000);
+}
+const countdownEls = new Set();   // refreshed by a ticker so it stays current
+
+function buildCount(item, inner){
+  const head = document.createElement('div'); head.className='head';
+  const title = document.createElement('input');
+  title.className='title'; title.value=item.title||''; title.placeholder='Countdown';
+  title.setAttribute('aria-label','Countdown title');
+  title.addEventListener('input', ()=>{ item.title=title.value; save(); });
+  head.appendChild(title);
+  inner.appendChild(head);
+
+  const body = document.createElement('div'); body.className='cbody';
+  const big = document.createElement('div'); big.className='big';
+  const unit = document.createElement('div'); unit.className='unit';
+  const date = document.createElement('div'); date.className='date';
+  body.appendChild(big); body.appendChild(unit); body.appendChild(date);
+  inner.appendChild(body);
+
+  const foot = document.createElement('div'); foot.className='foot';
+  foot.textContent = 'calendar days for now · school days soon';
+  inner.appendChild(foot);
+
+  function render(){
+    const n = daysUntil(COUNTDOWN_TARGET);
+    big.classList.toggle('past', n < 0);
+    if(n > 0){ big.textContent = n; unit.textContent = (n===1 ? 'day to go' : 'days to go'); }
+    else if(n === 0){ big.textContent = '🎉'; unit.textContent = 'the day is here'; }
+    else { big.textContent = Math.abs(n); unit.textContent = (n===-1 ? 'day ago' : 'days ago'); }
+    date.textContent = COUNTDOWN_TARGET.toLocaleDateString(undefined,
+      { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+  }
+  render();
+  // keep this card's number live while the board is open (see the ticker below)
+  const entry = { render };
+  countdownEls.add(entry);
+  item._tick = entry;   // removeItem / rebuild drop this from the ticker set
+}
+
 /* ---------------- dragging ---------------- */
 function attachDrag(item, el, pin){
   let downX=0,downY=0,offX=0,offY=0,moved=false,dragging=false;
@@ -638,7 +769,7 @@ function attachDrag(item, el, pin){
   el.addEventListener('pointerdown', e=>{
     if(e.button!=null && e.button!==0) return;
     const t = e.target;
-    if(t.closest('.x')) return;                                   // delete handled itself
+    if(t.closest('.x') || t.closest('.rs')) return;               // delete / resize handle themselves
     // Edit controls handle their own pointer events; the pin (and bare
     // paper chrome) start a drag.
     if(t.closest('input,textarea,select,.swatch,.cal-day,.cal-nav,.mtitle,.add,.rm,.seg') && !t.closest('.pin')) return;
@@ -695,6 +826,46 @@ function attachDrag(item, el, pin){
   });
 }
 
+/* ---------------- resizing (drag the bottom-right corner) ---------------- */
+function attachResize(item, el, handle){
+  handle.addEventListener('pointerdown', e=>{
+    if(e.button!=null && e.button!==0) return;
+    e.preventDefault(); e.stopPropagation();          // never start a drag
+    bringToFront(item, el);
+    const def = SIZE[item.type] || { minW:120, minH:90 };
+    const startX=e.clientX, startY=e.clientY;
+    const startW=el.offsetWidth, startH=el.offsetHeight;
+    // Map the screen-space drag onto the card's own axes so resizing stays
+    // true even with the slight pinned rotation.
+    const rad=(item.rot||0)*Math.PI/180, cos=Math.cos(rad), sin=Math.sin(rad);
+    handle.setPointerCapture(e.pointerId);
+    el.classList.add('lift');
+
+    const move = ev=>{
+      const dx=ev.clientX-startX, dy=ev.clientY-startY;
+      const ldx = dx*cos + dy*sin;        // rotate the delta by -θ
+      const ldy = -dx*sin + dy*cos;
+      const maxW = Math.max(def.minW, board.clientWidth  - item.x - 6);
+      const maxH = Math.max(def.minH, board.clientHeight - item.y - 6);
+      item.w = Math.round(clamp(startW + ldx, def.minW, maxW));
+      item.h = Math.round(clamp(startH + ldy, def.minH, maxH));
+      el.style.width  = item.w + 'px';
+      el.style.height = item.h + 'px';
+    };
+    const up = ()=>{
+      handle.releasePointerCapture(e.pointerId);
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      el.classList.remove('lift');
+      save();
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  });
+}
+
 /* ---------------- import / export / clear ---------------- */
 function exportBoard(){
   if(!state.items.length){ toast('The board is empty — nothing to export.','err'); return; }
@@ -721,7 +892,7 @@ function importBoard(file){
 }
 function clearBoard(){
   if(!state.items.length){ toast('The board is already empty.'); return; }
-  if(!confirm('Clear the whole board? This removes every note, checklist and calendar.')) return;
+  if(!confirm('Clear the whole board? This removes every note, checklist, calendar and countdown.')) return;
   state.items = [];
   renderAll(); save();
   toast('Board cleared.','ok');
@@ -731,12 +902,16 @@ function clearBoard(){
 function renderAll(){
   els.forEach(el=>el.remove());
   els.clear();
+  countdownEls.clear();                       // re-populated as countdowns re-mount
   // keep the z counter ahead of any restored item
   state.z = Math.max(10, ...state.items.map(i=>i.z||0));
   state.items.forEach(item=>{
     // backfill anything an older/partial file might be missing
     if(!item.pin) item.pin = pickPin();
     if(item.rot==null) item.rot = 0;
+    const def = SIZE[item.type] || {};
+    if(item.w==null) item.w = def.w;           // boards saved before resizing existed
+    if(!('h' in item)) item.h = (def.h!==undefined ? def.h : null);
     mountCard(item, false);
   });
   // clamp any item that lands outside the current board
@@ -769,17 +944,22 @@ function seed(){
   ];
   // a calendar
   const cal = addCal();
+  // a day countdown (target is hardcoded — see COUNTDOWN_TARGET)
+  const count = addCount();
+  count.title = 'End of year';
   // lay them out across the board
-  els.get(list.id) && place(list, Math.min(w-260, 250), 26);
-  els.get(cal.id)  && place(cal,  Math.min(w-330, 520), 22);
-  // rebuild the two we mutated after creation
-  rebuild(list); rebuild(cal);
+  els.get(list.id)  && place(list,  Math.min(w-260, 250), 26);
+  els.get(cal.id)   && place(cal,   Math.min(w-340, 520), 22);
+  els.get(count.id) && place(count, 32, 250);
+  // rebuild the ones we mutated after creation
+  rebuild(list); rebuild(cal); rebuild(count);
   updateStatus(); save();
 }
 function place(item, x, y){ item.x=x; item.y=y; const el=els.get(item.id); if(el){ el.style.left=x+'px'; el.style.top=y+'px'; } }
 function rebuild(item){
   const old = els.get(item.id);
   if(old){ old.remove(); els.delete(item.id); }
+  if(item._tick){ countdownEls.delete(item._tick); item._tick=null; }
   mountCard(item, false);
 }
 
@@ -787,6 +967,7 @@ function rebuild(item){
 $('addNote').addEventListener('click', ()=> addNote());
 $('addList').addEventListener('click', ()=> addList());
 $('addCal').addEventListener('click', ()=> addCal());
+$('addCount').addEventListener('click', ()=> addCount());
 $('exportBtn').addEventListener('click', exportBoard);
 $('importBtn').addEventListener('click', ()=> $('importFile').click());
 $('importFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importBoard(f); e.target.value=''; });
@@ -802,6 +983,9 @@ board.addEventListener('dblclick', e=>{
 /* ---------------- boot ---------------- */
 if(load()){ renderAll(); }
 else { seed(); }
+
+// keep day countdowns current if the board is left open across midnight
+setInterval(()=>{ countdownEls.forEach(c=>c.render()); }, 60000);
 </script>
 </body>
 </html>
