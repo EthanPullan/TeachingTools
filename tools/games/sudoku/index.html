@@ -465,7 +465,8 @@
           const s = spans[n-1];
           // render priority when a digit sits in more than one layer: blue → struck → grey
           let cls = c.blue.has(n) ? 'b' : c.strike.has(n) ? 's' : c.grey.has(n) ? 'g' : '';
-          if(cls){ s.textContent = n; if(hl>0 && n===hl) cls += ' hl'; s.className = cls; }
+          // a struck note is an eliminated candidate — it never takes the match highlight
+          if(cls){ s.textContent = n; if(hl>0 && n===hl && cls!=='s') cls += ' hl'; s.className = cls; }
           else { s.textContent=''; s.className=''; }
         }
       }
