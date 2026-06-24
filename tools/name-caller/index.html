@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A big, colourful name picker wheel for the classroom smart board — pull names from your shared Class Lists or type them in, switch between two classes, and spin to pick a student.">
+<meta name="description" content="Pull a student name out of a hat for the classroom smart board — names come from your shared Class Lists (or the Seating Chart), or type them in. Switch between two classes, draw at random, no repeats.">
 <meta name="theme-color" content="#1f3d35">
-<title>Name Wheel</title>
+<title>Name Caller</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
 <style>
   :root{
@@ -122,37 +122,45 @@
   .slider-row .lab b{font-family:var(--mono);font-weight:700;color:var(--board);}
   input[type=range]{width:100%;accent-color:var(--accent);}
 
-  /* ── wheel stage ── */
-  .wheel-area{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:18px;position:relative;}
-  .wheel-box{position:relative;width:min(86vh, 92%);aspect-ratio:1/1;max-width:900px;
-    display:flex;align-items:center;justify-content:center;}
-  svg.wheel{width:100%;height:100%;overflow:visible;display:block;
-    filter:drop-shadow(0 12px 30px rgba(20,40,33,.26));}
-  #wheelG{transition:none;}
-  .wheel-rim{fill:none;stroke:var(--board);stroke-width:1.6;}
-  .seg-text{fill:#fff;font-family:var(--sans);font-weight:700;
-    paint-order:stroke;stroke:rgba(0,0,0,.22);stroke-width:.35px;}
-  /* pointer */
-  .pointer{position:absolute;top:-2px;left:50%;transform:translateX(-50%);
-    width:0;height:0;border-left:18px solid transparent;border-right:18px solid transparent;
-    border-top:34px solid var(--accent);z-index:5;filter:drop-shadow(0 3px 3px rgba(20,40,33,.3));}
-  .pointer::after{content:"";position:absolute;top:-40px;left:-9px;width:18px;height:18px;
-    border-radius:50%;background:var(--accent);box-shadow:inset 0 0 0 3px rgba(0,0,0,.08);}
-  /* centre hub = the spin button */
-  .hub{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;
-    width:18%;height:18%;border-radius:50%;border:none;cursor:pointer;
-    background:var(--panel);box-shadow:0 4px 14px rgba(20,40,33,.3),inset 0 0 0 4px var(--board);
-    color:var(--board);font-weight:800;letter-spacing:.06em;text-transform:uppercase;
-    font-size:clamp(12px,1.9vh,18px);display:flex;align-items:center;justify-content:center;
-    transition:transform .06s;}
-  .hub:hover{background:var(--panel-2);} .hub:active{transform:translate(-50%,-50%) scale(.95);}
-  .hub[disabled]{opacity:.5;cursor:not-allowed;}
+  /* ── hat stage ── */
+  .hat-area{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:18px;position:relative;}
+  .hat-wrap{position:relative;width:min(70vh,94%);aspect-ratio:1/1;max-width:560px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  svg.hat{width:100%;height:100%;overflow:visible;display:block;
+    filter:drop-shadow(0 16px 30px rgba(20,40,33,.26));transform-origin:50% 86%;}
+  .hat.shaking{animation:hatshake .5s ease-in-out infinite;}
+  @keyframes hatshake{
+    0%,100%{transform:rotate(0deg) translateY(0);}
+    20%{transform:rotate(-3.2deg) translateY(-2px);}
+    60%{transform:rotate(3.2deg) translateY(-2px);}
+  }
+  .hat-rim{fill:none;}
+  .sparkle{fill:var(--accent);opacity:0;transform-box:fill-box;transform-origin:center;}
+  .hat.shaking .sparkle{animation:spark 1s ease-in-out infinite;}
+  .hat.shaking .sparkle.s2{animation-delay:.32s;}
+  .hat.shaking .sparkle.s3{animation-delay:.64s;}
+  @keyframes spark{0%,100%{opacity:0;transform:scale(.4);}50%{opacity:.9;transform:scale(1);}}
 
-  .empty-wheel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    text-align:center;color:var(--muted);font-size:16px;padding:30px;pointer-events:none;}
+  /* the paper slip that rises out of the hat */
+  .slip{position:absolute;left:50%;top:24%;
+    transform:translate(-50%,30px) scale(.55) rotate(-2deg);opacity:0;
+    background:#fff;border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:9px;
+    min-width:44%;max-width:82%;padding:14px 20px;text-align:center;
+    box-shadow:0 12px 26px rgba(20,40,33,.30);z-index:4;pointer-events:none;
+    transition:transform .5s cubic-bezier(.2,.8,.3,1),opacity .4s ease;}
+  .slip.rising{transform:translate(-50%,-72px) scale(1) rotate(-2deg);opacity:1;}
+  .slip .slip-name{font-weight:800;color:var(--board);font-size:clamp(18px,3.6vh,36px);
+    line-height:1.12;word-break:break-word;letter-spacing:-.01em;}
+  .slip::before{content:"";position:absolute;left:14px;right:14px;top:7px;height:0;
+    border-top:1px dashed var(--line);}
 
-  .spinbtn{flex:none;display:flex;justify-content:center;padding:0 20px 18px;}
-  .spinbtn .btn{font-size:18px;padding:14px 40px;border-radius:12px;}
+  .empty-hat{position:absolute;left:0;right:0;bottom:8%;text-align:center;color:var(--muted);
+    font-size:15px;padding:0 30px;pointer-events:none;}
+
+  .drawbtn{flex:none;display:flex;flex-direction:column;align-items:center;gap:7px;padding:0 20px 16px;}
+  .drawbtn .btn{font-size:18px;padding:14px 40px;border-radius:12px;}
+  .drawbtn .tip{font-size:12px;color:var(--muted);}
+  .drawbtn .tip b{color:var(--board);}
 
   /* status bar */
   .statusbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 18px;height:44px;flex:none;
@@ -194,18 +202,20 @@
   }
   @media (prefers-reduced-motion:reduce){
     .winner.show,.winner-card{animation:none;} .confetti{display:none;}
-    .btn:active,.hub:active{transform:none;}
+    .hat.shaking{animation:none;} .hat.shaking .sparkle{animation:none;}
+    .slip{transition:opacity .2s ease;}
+    .btn:active{transform:none;}
   }
 </style>
 </head>
 <body>
 <div class="app">
   <header class="toolbar">
-    <div class="brand"><span class="mark"></span>Name Wheel <small>random picker</small></div>
+    <div class="brand"><span class="mark"></span>Name Caller <small>name out of a hat</small></div>
     <div class="classbar" id="classBar">
       <button class="class-pill active" data-pick="0" id="pill0">Class 1</button>
       <button class="class-pill" data-pick="1" id="pill1">Class 2</button>
-      <button class="class-pill combine" data-pick="both" id="pillBoth" title="Spin both classes together">Both</button>
+      <button class="class-pill combine" data-pick="both" id="pillBoth" title="Draw from both classes together">Both</button>
     </div>
     <div class="spacer"></div>
     <button class="btn" id="presentBtn"><span class="ic">⛶</span>Present</button>
@@ -229,7 +239,7 @@
         <div>
           <h3 class="section-title" style="margin-bottom:8px">Bring in names</h3>
           <div class="import-row">
-            <button class="btn small" id="fromSeatingBtn"><span class="ic">📋</span>Class Lists</button>
+            <button class="btn small" id="fromListBtn"><span class="ic">📋</span>Class Lists</button>
             <button class="btn small" id="fromFileBtn"><span class="ic">📁</span>File…</button>
           </div>
           <div class="source-box" id="sourceBox"></div>
@@ -250,7 +260,7 @@
 
         <div class="picked-wrap" id="pickedWrap" style="display:none">
           <div class="picked-head">
-            <h3 class="section-title">Already picked <span class="count-pill" id="pickedCount">0</span></h3>
+            <h3 class="section-title">Already drawn <span class="count-pill" id="pickedCount">0</span></h3>
             <button class="btn small" id="resetPicked">Reset</button>
           </div>
           <ul class="picked-list" id="pickedList"></ul>
@@ -261,11 +271,11 @@
       <section class="tabpanel" data-panel="options">
         <label class="opt">
           <input type="checkbox" id="optNoRepeat" checked>
-          <span class="lab"><b>No repeats</b><span>Remove each name after it's picked, so everyone gets a turn before any repeats.</span></span>
+          <span class="lab"><b>No repeats</b><span>Set each name aside after it's drawn, so everyone gets a turn before any repeats.</span></span>
         </label>
         <label class="opt">
           <input type="checkbox" id="optCombine">
-          <span class="lab"><b>Combine both classes</b><span>Spin Class 1 and Class 2 together as one big wheel.</span></span>
+          <span class="lab"><b>Combine both classes</b><span>Draw from Class 1 and Class 2 together as one hat.</span></span>
         </label>
         <label class="opt">
           <input type="checkbox" id="optConfetti" checked>
@@ -273,38 +283,56 @@
         </label>
         <label class="opt">
           <input type="checkbox" id="optSound">
-          <span class="lab"><b>Sound</b><span>Tick while spinning and a chime on the winner.</span></span>
+          <span class="lab"><b>Sound</b><span>Shuffle ticks while drawing and a chime on the winner.</span></span>
         </label>
         <div class="slider-row">
-          <div class="lab"><span>Spin length</span><b id="spinVal">5s</b></div>
-          <input type="range" id="optSpin" min="3" max="9" step="1" value="5">
+          <div class="lab"><span>Draw length</span><b id="speedVal">3s</b></div>
+          <input type="range" id="optSpeed" min="2" max="6" step="1" value="3">
         </div>
-        <p class="hint">Tip: tap the centre of the wheel — or press <b>Space</b> — to spin. Names you add here stay saved on this computer, separately for each class.</p>
+        <p class="hint">Tip: tap the hat — or press <b>Space</b> — to draw. Names you add here stay saved on this computer, separately for each class. Manage your shared <b>Class Lists</b> on the Teaching Tools home page.</p>
       </section>
     </aside>
 
     <!-- STAGE -->
     <section class="stage">
-      <div class="wheel-area">
-        <div class="wheel-box">
-          <div class="pointer"></div>
-          <svg class="wheel" id="wheel" viewBox="0 0 100 100" aria-label="Name wheel">
-            <g id="wheelG"></g>
-            <circle class="wheel-rim" cx="50" cy="50" r="49"></circle>
+      <div class="hat-area">
+        <div class="hat-wrap" id="hatWrap" role="button" tabindex="0" aria-label="Draw a name from the hat">
+          <svg class="hat" id="hat" viewBox="0 0 200 200" aria-hidden="true">
+            <!-- sparkles above the hat -->
+            <path class="sparkle s1" d="M150 40 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z"></path>
+            <path class="sparkle s2" d="M44 54 l2.4 5.6 5.6 2.4 -5.6 2.4 -2.4 5.6 -2.4 -5.6 -5.6 -2.4 5.6 -2.4 z"></path>
+            <path class="sparkle s3" d="M168 78 l2 4.6 4.6 2 -4.6 2 -2 4.6 -2 -4.6 -4.6 -2 4.6 -2 z"></path>
+            <!-- shadow under the brim -->
+            <ellipse cx="100" cy="171" rx="86" ry="11" fill="rgba(20,40,33,.10)"></ellipse>
+            <!-- crown -->
+            <rect x="54" y="56" width="92" height="100" rx="13" fill="var(--board)"></rect>
+            <rect x="54" y="56" width="92" height="100" rx="13" fill="none" stroke="var(--board-2)" stroke-width="1.5"></rect>
+            <!-- subtle highlight down the left of the crown -->
+            <rect x="63" y="70" width="7" height="74" rx="3.5" fill="rgba(255,255,255,.06)"></rect>
+            <!-- hat band -->
+            <rect x="54" y="128" width="92" height="20" fill="var(--accent)"></rect>
+            <rect x="54" y="128" width="92" height="20" fill="none" stroke="var(--accent-deep)" stroke-width="1"></rect>
+            <!-- brim -->
+            <ellipse cx="100" cy="156" rx="94" ry="18" fill="var(--board)"></ellipse>
+            <ellipse cx="100" cy="156" rx="94" ry="18" fill="none" stroke="var(--board-2)" stroke-width="1.5"></ellipse>
+            <!-- opening (the hole names come out of) -->
+            <ellipse cx="100" cy="58" rx="46" ry="11" fill="#0e1f1a"></ellipse>
+            <ellipse cx="100" cy="57" rx="46" ry="11" fill="none" stroke="var(--board-line)" stroke-width="1.4"></ellipse>
           </svg>
-          <button class="hub" id="hub" aria-label="Spin the wheel">Spin</button>
-          <div class="empty-wheel" id="emptyWheel" style="display:none">Add names to start spinning →</div>
+          <div class="slip" id="slip"><div class="slip-name" id="slipName">—</div></div>
+          <div class="empty-hat" id="emptyHat" style="display:none">Add names to start drawing →</div>
         </div>
       </div>
-      <div class="spinbtn">
-        <button class="btn primary" id="spinBtn"><span class="ic">🎯</span>Spin the wheel</button>
+      <div class="drawbtn">
+        <button class="btn primary" id="drawBtn"><span class="ic">🎩</span>Draw a name</button>
+        <span class="tip">Tap the hat or press <b>Space</b></span>
       </div>
       <div class="statusbar">
         <span class="stat">Names <b id="sbNames">0</b></span>
         <span class="dotline"></span>
-        <span class="stat">Remaining <b id="sbRemain">0</b></span>
+        <span class="stat">In the hat <b id="sbRemain">0</b></span>
         <span class="dotline"></span>
-        <span class="stat">Picked <b id="sbPicked">0</b></span>
+        <span class="stat">Drawn <b id="sbPicked">0</b></span>
         <span class="last" id="sbLast"></span>
       </div>
     </section>
@@ -314,12 +342,12 @@
 <!-- winner overlay -->
 <div class="winner" id="winner">
   <div class="winner-card">
-    <div class="eyebrow">And the wheel picks…</div>
+    <div class="eyebrow">Out of the hat…</div>
     <div class="who" id="winnerName">—</div>
     <div class="from" id="winnerFrom"></div>
     <div class="winner-actions">
       <button class="btn" id="winClose">Close</button>
-      <button class="btn primary" id="winAgain">Spin again</button>
+      <button class="btn primary" id="winAgain">Draw again</button>
     </div>
   </div>
 </div>
@@ -327,7 +355,7 @@
 
 <script>
 (function(){
-  const LS='teachingtools:name-wheel';
+  const LS='teachingtools:name-caller';
   const ROSTER_LS='teachingtools:rosters';
   const PALETTE=['#2f6f9f','#3f9e6b','#e0982e','#c43d35','#1f3d35','#b9781f','#4a7c9b','#6aa377','#d98a26','#9f5a52'];
   const $=id=>document.getElementById(id);
@@ -336,11 +364,11 @@
   let state = {
     classes:[{name:'Class 1',names:[],picked:[]},{name:'Class 2',names:[],picked:[]}],
     active:0,
-    opts:{noRepeat:true, combine:false, confetti:true, sound:false, spin:5}
+    opts:{noRepeat:true, combine:false, confetti:true, sound:false, speed:3}
   };
   load();
 
-  let rotation=0, spinning=false, lastWinner=null;
+  let drawing=false, lastWinner=null;
 
   /* ---------- persistence ---------- */
   function save(){ try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} }
@@ -385,108 +413,70 @@
   function entries(){
     return state.opts.combine ? availOf(0).concat(availOf(1)) : availOf(state.active);
   }
-  function parseNames(text){
-    return text.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
-  }
-  function escapeHtml(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-
-  /* ---------- wheel geometry ---------- */
-  function pt(cx,cy,r,ang){ const a=(ang-90)*Math.PI/180; return {x:cx+r*Math.cos(a), y:cy+r*Math.sin(a)}; }
-  function arc(cx,cy,r,a0,a1){
-    const p0=pt(cx,cy,r,a0), p1=pt(cx,cy,r,a1), large=(a1-a0)>180?1:0;
-    return `M${cx} ${cy} L${p0.x.toFixed(3)} ${p0.y.toFixed(3)} A${r} ${r} 0 ${large} 1 ${p1.x.toFixed(3)} ${p1.y.toFixed(3)} Z`;
-  }
-  function fitName(name, fs){
-    const maxChars = Math.max(5, Math.floor(33/(fs*0.58)));
-    return name.length>maxChars ? name.slice(0,maxChars-1)+'…' : name;
-  }
-
-  function renderWheel(){
-    const g=$('wheelG'), list=entries(), N=list.length;
-    g.innerHTML='';
-    const empty=$('emptyWheel'), hub=$('hub');
-    if(N===0){
-      empty.style.display='flex';
-      empty.textContent = curHasNames() ? 'Everyone has been picked — Reset to go again' : 'Add names to start spinning';
-      hub.disabled=true; $('spinBtn').disabled=true;
-      // faint placeholder ring
-      g.innerHTML='<circle cx="50" cy="50" r="48" fill="#f1f4f3"></circle>';
-      return;
-    }
-    empty.style.display='none'; hub.disabled=false; $('spinBtn').disabled=false;
-    const seg=360/N;
-    const fs = N<=8?5.4 : N<=12?4.4 : N<=18?3.5 : N<=26?2.9 : N<=36?2.4 : 2.0;
-    let html='';
-    for(let i=0;i<N;i++){
-      const a0=i*seg, a1=(i+1)*seg, mid=a0+seg/2;
-      const color=PALETTE[i%PALETTE.length];
-      html+=`<path d="${arc(50,50,48,a0,a1)}" fill="${color}" stroke="#fff" stroke-width="0.6"></path>`;
-      const flip = mid>90 && mid<270;
-      const rot = flip ? mid+90 : mid-90;
-      const p=pt(50,50,30,mid);
-      html+=`<text class="seg-text" x="${p.x.toFixed(2)}" y="${p.y.toFixed(2)}" font-size="${fs}" `
-          + `text-anchor="middle" dominant-baseline="central" `
-          + `transform="rotate(${rot.toFixed(2)} ${p.x.toFixed(2)} ${p.y.toFixed(2)})">${escapeHtml(fitName(list[i].name, fs))}</text>`;
-    }
-    g.innerHTML=html;
-    g.setAttribute('transform',`rotate(${rotation} 50 50)`);
-  }
   function curHasNames(){ return state.opts.combine ? (state.classes[0].names.length+state.classes[1].names.length)>0 : curClass().names.length>0; }
+  function parseNames(text){ return text.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function fitName(name){ return name.length>26 ? name.slice(0,25)+'…' : name; }
 
-  /* ---------- spin ---------- */
-  function spin(){
+  /* ---------- draw ---------- */
+  function draw(){
     const list=entries(), N=list.length;
-    if(spinning || N<1) return;
+    if(drawing || N<1) return;
     ensureAudio();
-    spinning=true; hideWinner();
-    $('hub').disabled=true; $('spinBtn').disabled=true;
-    const seg=360/N;
-    const win=Math.floor(Math.random()*N);
-    const centerOf = (win+0.5)*seg;
-    const desiredMod = ((360 - centerOf)%360 + 360)%360;     // rotation that puts winner under the top pointer
-    const turns = 4 + Math.floor(Math.random()*2);
-    let target = Math.ceil((rotation + turns*360)/360)*360 + desiredMod;
-    if(target < rotation + turns*360) target += 360;
-    const start=rotation, dist=target-start, dur=state.opts.spin*1000;
+    drawing=true; hideWinner();
+    $('drawBtn').disabled=true;
+    const win = list[Math.floor(Math.random()*N)];
+
+    const hat=$('hat'), slip=$('slip'), slipName=$('slipName');
+    hat.classList.add('shaking');
+    slip.classList.remove('rising');           // reset, then raise on next frame
+    // force reflow so the transition replays even on a back-to-back draw
+    void slip.offsetWidth;
+    slip.classList.add('rising');
+
+    const dur=Math.max(1, state.opts.speed)*1000;
     const t0=performance.now();
-    let lastSeg=-1;
+    let nextFlip=0;
     function frame(now){
       let t=(now-t0)/dur; if(t>1)t=1;
-      const e=1-Math.pow(1-t,4);                              // easeOutQuart
-      rotation = start + dist*e;
-      $('wheelG').setAttribute('transform',`rotate(${rotation} 50 50)`);
-      // tick when a new segment passes the pointer
-      const segNow=Math.floor(((-rotation%360)+360)%360 / seg);
-      if(segNow!==lastSeg){ lastSeg=segNow; if(t<1) tick(); }
+      const e=1-Math.pow(1-t,3);                // easeOutCubic — flips slow as we settle
+      if(now>=nextFlip){
+        const label = t<1 ? list[Math.floor(Math.random()*N)].name : win.name;
+        slipName.textContent = fitName(label);
+        nextFlip = now + (45 + e*300);          // 45ms → ~345ms between flips
+        if(t<1) tick();
+      }
       if(t<1){ requestAnimationFrame(frame); }
-      else { spinning=false; rotation=((target%360)+360)%360; finishSpin(list[win]); }
+      else { slipName.textContent=fitName(win.name); finishDraw(win); }
     }
     requestAnimationFrame(frame);
   }
 
-  function finishSpin(entry){
-    $('hub').disabled=false; $('spinBtn').disabled=false;
+  function finishDraw(entry){
+    drawing=false;
+    $('hat').classList.remove('shaking');
+    $('drawBtn').disabled=false;
     lastWinner=entry;
     chime();
     showWinner(entry);
     if(state.opts.confetti) burstConfetti();
-    updateStatus();
+    renderStage(); updateStatus();   // refresh empty/depleted state once the draw lands
   }
 
   /* ---------- winner overlay ---------- */
   function showWinner(entry){
     $('winnerName').textContent=entry.name;
-    const showFrom = state.opts.combine;
-    $('winnerFrom').textContent = showFrom ? ('from '+state.classes[entry.ci].name) : '';
-    if(state.opts.noRepeat){ markPicked(entry); }   // auto-remove so everyone gets a turn
+    $('winnerFrom').textContent = state.opts.combine ? ('from '+(state.classes[entry.ci].name||('Class '+(entry.ci+1)))) : '';
+    if(state.opts.noRepeat){ markPicked(entry); }   // set aside so everyone gets a turn
     $('winner').classList.add('show');
+    $('winAgain').focus();
   }
   function hideWinner(){ $('winner').classList.remove('show'); }
 
   function markPicked(entry){
     const c=state.classes[entry.ci];
     if(!c.picked.includes(entry.name)) c.picked.push(entry.name);
-    save(); renderWheel(); renderPicked(); updateStatus();
+    save(); renderPicked(); updateStatus();
   }
 
   /* ---------- rendering panel ---------- */
@@ -512,10 +502,10 @@
       const ul=$('pickedList'); ul.innerHTML='';
       c.picked.forEach(name=>{
         const li=document.createElement('li');
-        li.innerHTML=`<span></span><button class="undo" title="Put back on the wheel">↩</button>`;
+        li.innerHTML=`<span></span><button class="undo" title="Put back in the hat">↩</button>`;
         li.querySelector('span').textContent=name;
         li.querySelector('.undo').addEventListener('click',()=>{
-          c.picked=c.picked.filter(n=>n!==name); save(); renderWheel(); renderPicked(); updateStatus();
+          c.picked=c.picked.filter(n=>n!==name); save(); renderPicked(); updateStatus();
         });
         ul.appendChild(li);
       });
@@ -526,8 +516,21 @@
     $('optCombine').checked=state.opts.combine;
     $('optConfetti').checked=state.opts.confetti;
     $('optSound').checked=state.opts.sound;
-    $('optSpin').value=state.opts.spin;
-    $('spinVal').textContent=state.opts.spin+'s';
+    $('optSpeed').value=state.opts.speed;
+    $('speedVal').textContent=state.opts.speed+'s';
+  }
+  function renderStage(){
+    const N=entries().length, empty=$('emptyHat');
+    $('drawBtn').disabled = N<1;
+    if(N<1){
+      empty.style.display='block';
+      empty.textContent = curHasNames() ? 'Everyone has been drawn — Reset to go again' : 'Add names to start drawing';
+      // tuck the slip back into the hat
+      $('slip').classList.remove('rising');
+      $('slipName').textContent='—';
+    }else{
+      empty.style.display='none';
+    }
   }
   function updateStatus(){
     const remain = entries().length;
@@ -543,7 +546,7 @@
     $('sbPicked').textContent = state.opts.noRepeat ? picked : 0;
     $('sbLast').innerHTML = lastWinner ? ('Last pick <b>'+escapeHtml(lastWinner.name)+'</b>') : '';
   }
-  function renderAll(){ renderClassBar(); renderNames(); renderPicked(); renderOptions(); renderWheel(); updateStatus(); }
+  function renderAll(){ renderClassBar(); renderNames(); renderPicked(); renderOptions(); renderStage(); updateStatus(); }
 
   /* ---------- editing ---------- */
   function commitNames(){
@@ -551,13 +554,13 @@
     const c=curClass();
     c.names=names;
     const set=new Set(names);
-    c.picked=c.picked.filter(n=>set.has(n));    // drop picked names that were removed
+    c.picked=c.picked.filter(n=>set.has(n));    // drop drawn names that were removed
     $('nameCount').textContent=names.length;
-    save(); renderWheel(); renderPicked(); updateStatus();
+    save(); renderStage(); renderPicked(); updateStatus();
   }
 
-  /* ---------- import: seating chart ---------- */
-  function openSeating(){
+  /* ---------- import: shared Class Lists ---------- */
+  function openClassLists(){
     const box=$('sourceBox');
     let data=null;
     try{ data=JSON.parse(localStorage.getItem(ROSTER_LS)||'null'); }catch(e){}
@@ -611,8 +614,8 @@
       if(trimmed.startsWith('{')){
         try{
           const d=JSON.parse(trimmed);
+          // a Class Lists / Seating Chart export with multiple classes
           if(Array.isArray(d.classes) && d.classes.length && (d.type==='seating-chart' || d.type==='teachingtools-rosters')){
-            // load each class into a slot (first two)
             d.classes.slice(0,2).forEach((c,i)=>{
               state.classes[i].names=(c.students||[]).map(s=>String(s).trim()).filter(Boolean);
               state.classes[i].picked=[]; if(c.name) state.classes[i].name=c.name;
@@ -648,7 +651,7 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
     o.stop(t+dur);
   }
-  function tick(){ blip(1100,0.03,'square',0.03); }
+  function tick(){ blip(900+Math.random()*240,0.03,'square',0.025); }
   function chime(){ if(!state.opts.sound||!actx) return; [523,659,784,1047].forEach((f,i)=>setTimeout(()=>blip(f,0.32,'triangle',0.07),i*90)); }
 
   /* ---------- confetti ---------- */
@@ -689,20 +692,20 @@
   $('names').addEventListener('input', commitNames);
   $('shuffleBtn').addEventListener('click',()=>{
     const a=curClass().names; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-    save(); renderNames(); renderWheel();
+    save(); renderNames();
   });
   $('sortBtn').addEventListener('click',()=>{
-    curClass().names.sort((a,b)=>a.localeCompare(b)); save(); renderNames(); renderWheel();
+    curClass().names.sort((a,b)=>a.localeCompare(b)); save(); renderNames();
   });
   $('clearBtn').addEventListener('click',()=>{
     if(!curClass().names.length) return;
     if(!confirm('Clear all names in “'+(curClass().name||'this class')+'”?')) return;
     curClass().names=[]; curClass().picked=[]; save(); renderAll();
   });
-  $('resetPicked').addEventListener('click',()=>{ curClass().picked=[]; save(); renderWheel(); renderPicked(); updateStatus(); });
+  $('resetPicked').addEventListener('click',()=>{ curClass().picked=[]; save(); renderStage(); renderPicked(); updateStatus(); });
 
   // import
-  $('fromSeatingBtn').addEventListener('click',openSeating);
+  $('fromListBtn').addEventListener('click',openClassLists);
   $('fromFileBtn').addEventListener('click',()=>$('fileInput').click());
   $('fileInput').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) handleFile(f); e.target.value=''; });
   // drag & drop a file anywhere on the panel
@@ -717,12 +720,13 @@
   $('optCombine').addEventListener('change',e=>{ state.opts.combine=e.target.checked; save(); renderAll(); });
   $('optConfetti').addEventListener('change',e=>{ state.opts.confetti=e.target.checked; save(); });
   $('optSound').addEventListener('change',e=>{ state.opts.sound=e.target.checked; if(e.target.checked) ensureAudio(); save(); });
-  $('optSpin').addEventListener('input',e=>{ state.opts.spin=+e.target.value; $('spinVal').textContent=state.opts.spin+'s'; save(); });
+  $('optSpeed').addEventListener('input',e=>{ state.opts.speed=+e.target.value; $('speedVal').textContent=state.opts.speed+'s'; save(); });
 
-  // spin triggers
-  $('hub').addEventListener('click',spin);
-  $('spinBtn').addEventListener('click',spin);
-  $('winAgain').addEventListener('click',()=>{ hideWinner(); spin(); });
+  // draw triggers
+  $('drawBtn').addEventListener('click',draw);
+  $('hatWrap').addEventListener('click',draw);
+  $('hatWrap').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.code==='Space'){ e.preventDefault(); draw(); } });
+  $('winAgain').addEventListener('click',()=>{ hideWinner(); draw(); });
   $('winClose').addEventListener('click',hideWinner);
 
   // present mode
@@ -731,22 +735,19 @@
     document.body.classList.toggle('present',on);
     try{ if(on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
          else if(!on && document.fullscreenElement) document.exitFullscreen(); }catch(e){}
-    setTimeout(renderWheel,60);
   });
   document.addEventListener('fullscreenchange',()=>{
     if(!document.fullscreenElement) document.body.classList.remove('present');
-    setTimeout(renderWheel,60);
   });
 
   // keyboard
   document.addEventListener('keydown',e=>{
     const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
     if((e.code==='Space'||e.key==='Enter') && !typing){
-      if($('winner').classList.contains('show')){ e.preventDefault(); hideWinner(); spin(); }
-      else { e.preventDefault(); spin(); }
+      if($('winner').classList.contains('show')){ e.preventDefault(); hideWinner(); draw(); }
+      else { e.preventDefault(); draw(); }
     }else if(e.key==='Escape'){ hideWinner(); }
   });
-  window.addEventListener('resize',()=>renderWheel());
 
   renderAll();
 })();

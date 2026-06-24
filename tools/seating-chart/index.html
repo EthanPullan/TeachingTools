@@ -648,15 +648,35 @@ function renderStudents(){
   publishRosters();
 }
 
-/* Share rosters with other Teaching Tools (e.g. the Name Wheel) via localStorage.
-   Purely additive — same-origin, best-effort, never blocks the app. */
+/* Share rosters with other Teaching Tools (Class Lists on the home page, the
+   Name Caller, the Name Wheel…) via localStorage. Same-origin, best-effort,
+   never blocks the app — and non-destructive: this tool only adds/updates its
+   own classes and never wipes lists saved elsewhere. */
 function publishRosters(){
   try{
     if(!Array.isArray(state.classes)) return;
-    const classes = state.classes.map((c,i)=>({
+    const mine = state.classes.map((c,i)=>({
       name: ((i===state.activeClass ? state.className : c.name) || '').trim(),
       students: (i===state.activeClass ? state.students : c.students) || []
     })).filter(c=>c.students.length);
+    if(!mine.length) return;          // nothing to contribute yet — leave the shared store untouched
+
+    // Merge by class name: keep externally-saved classes we don't own, then add ours.
+    let existing=[];
+    try{
+      const d=JSON.parse(localStorage.getItem('teachingtools:rosters')||'null');
+      if(d && Array.isArray(d.classes)) existing=d.classes;
+    }catch(e){ /* unreadable — treat as empty */ }
+    const mineByKey=new Map(mine.map(c=>[c.name.toLowerCase(), c]));
+    const classes=[];
+    existing.forEach(c=>{
+      if(!c || !Array.isArray(c.students)) return;
+      const key=(c.name||'').trim().toLowerCase();
+      if(!key || mineByKey.has(key)) return;   // skip unnamed or classes this tool is about to provide
+      classes.push({ name:(c.name||'').trim(), students:c.students });
+    });
+    mine.forEach(c=>classes.push(c));
+
     localStorage.setItem('teachingtools:rosters', JSON.stringify({
       type:'teachingtools-rosters', version:1, source:'seating-chart',
       savedAt: Date.now(), classes

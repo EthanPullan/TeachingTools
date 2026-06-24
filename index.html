@@ -80,8 +80,55 @@
     color:var(--muted);font-size:12.5px;line-height:1.6;}
   footer code{font-family:var(--mono);color:var(--ink);}
 
+  /* buttons & inputs (shared by the class-lists panel) */
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;
+    gap:6px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.danger{color:var(--danger);border-color:var(--danger-soft);background:#fff;}
+  .btn.danger:hover{background:var(--danger-soft);}
+  .btn.small{padding:5px 9px;font-size:12px;border-radius:7px;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:14px;line-height:1;}
+
+  /* class-lists panel — the shared roster, managed primarily here */
+  .lists{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:18px;margin:0 0 30px;}
+  .lists-head{display:flex;align-items:flex-start;gap:11px;flex-wrap:wrap;margin-bottom:14px;}
+  .lists-head .mark{width:30px;height:30px;border-radius:8px;background:var(--board);color:#eaf2ef;flex:none;
+    display:flex;align-items:center;justify-content:center;font-size:15px;margin-top:1px;}
+  .lists-head .htext{flex:1;min-width:200px;}
+  .lists-head h2{margin:0;font-size:16px;font-weight:700;}
+  .lists-head p{margin:3px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5;max-width:64ch;}
+  .lists-head .total{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:20px;padding:3px 10px;color:var(--muted);white-space:nowrap;}
+
+  .classrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .cpill{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;cursor:pointer;
+    padding:6px 12px;font-size:13px;font-weight:700;color:var(--muted);max-width:220px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;transition:background .12s,color .12s,border-color .12s;}
+  .cpill:hover{color:var(--ink);}
+  .cpill.active{background:var(--board);color:#fff;border-color:var(--board);}
+  .cpill.add{font-weight:600;color:var(--board);background:#fff;border-style:dashed;}
+  .cpill.add:hover{background:var(--panel-2);}
+
+  .cls-edit{display:flex;flex-direction:column;gap:10px;}
+  .cls-name-row{display:flex;align-items:center;gap:9px;}
+  .cls-name-row input{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);
+    padding:8px 10px;font-weight:700;}
+  .cls-name-row input:focus{outline:none;border-color:var(--accent);}
+  .cls-count{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;}
+  textarea.cls-names{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px 11px;resize:vertical;
+    min-height:122px;background:var(--panel-2);line-height:1.7;font-size:14px;color:var(--ink);
+    font-family:var(--sans);}
+  textarea.cls-names:focus{outline:none;border-color:var(--accent);}
+  .cls-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+  .cls-actions .spread{flex:1;}
+
   @media (max-width:620px){ .hero h1{font-size:22px;} .wrap{padding:24px 16px 48px;} }
-  @media (prefers-reduced-motion:reduce){ .card{transition:none;} .card:hover{transform:none;} *{scroll-behavior:auto;} }
+  @media (prefers-reduced-motion:reduce){ .card{transition:none;} .card:hover{transform:none;} .btn:active{transform:none;} *{scroll-behavior:auto;} }
 </style>
 </head>
 <body>
@@ -94,6 +141,38 @@
   <main class="wrap">
     <section class="hero">
       <h1>Small, fast tools for the classroom.</h1>
+    </section>
+
+    <section class="lists" id="classLists" aria-label="Class lists">
+      <div class="lists-head">
+        <span class="mark">📋</span>
+        <div class="htext">
+          <h2>Class lists</h2>
+          <p>Save your rosters once here, and every tool that needs names — the Name Caller, Name Wheel,
+             and more — picks them up automatically. Stored on this device only; each tool can also run on
+             its own and take names by hand.</p>
+        </div>
+        <span class="total" id="listsTotal">0 names</span>
+      </div>
+
+      <div class="classrow" id="classRow"></div>
+
+      <div class="cls-edit">
+        <div class="cls-name-row">
+          <input id="clsName" type="text" placeholder="Class name" aria-label="Class name" autocomplete="off">
+          <span class="cls-count" id="clsCount">0 names</span>
+        </div>
+        <textarea id="clsNames" class="cls-names" spellcheck="false" autocomplete="off"
+          placeholder="One name per line…&#10;&#10;Ada Lovelace&#10;Alan Turing&#10;Grace Hopper"></textarea>
+        <div class="cls-actions">
+          <button class="btn small" id="clsSort"><span class="ic">↕</span>Sort A–Z</button>
+          <button class="btn small" id="clsExport"><span class="ic">⭳</span>Export</button>
+          <button class="btn small" id="clsImport"><span class="ic">📁</span>Import…</button>
+          <span class="spread"></span>
+          <button class="btn small danger" id="clsRemove"><span class="ic">🗑</span>Remove class</button>
+        </div>
+        <input type="file" id="clsFile" accept=".json,.txt,.csv,application/json,text/plain" hidden>
+      </div>
     </section>
 
     <h2 class="section-title">Tools</h2>
@@ -149,7 +228,21 @@
         </div>
         <div class="tags">
           <span class="tag">spin to pick</span>
-          <span class="tag">from seating chart</span>
+          <span class="tag">from class lists</span>
+          <span class="tag">two classes</span>
+          <span class="tag">no repeats</span>
+        </div>
+        <span class="open">Open tool <span class="arr">→</span></span>
+      </a>
+
+      <a class="card" href="tools/name-caller/index.html">
+        <div class="top">
+          <span class="mark">🎩</span>
+          <h2>Name Caller</h2>
+        </div>
+        <div class="tags">
+          <span class="tag">name out of a hat</span>
+          <span class="tag">from class lists</span>
           <span class="tag">two classes</span>
           <span class="tag">no repeats</span>
         </div>
@@ -277,6 +370,143 @@
     (function(){
       const n = document.querySelectorAll('#toolGrid .card:not(.soon)').length;
       document.getElementById('toolCount').textContent = n + (n===1 ? ' tool' : ' tools');
+    })();
+  </script>
+
+  <script>
+    /* ───────── Class lists ─────────
+       The shared roster store every tool reads. Stored on this device only.
+       Shape:  { type, version, source, savedAt, classes:[ {name, students:[…]} ] }
+       This page is the primary editor; the Seating Chart also contributes,
+       and the Name Caller / Name Wheel read it. Nothing is sent online. */
+    (function(){
+      const ROSTER_LS = 'teachingtools:rosters';
+      const $ = id => document.getElementById(id);
+      const model = { classes:[], active:0 };
+
+      load();
+      if(!model.classes.length){ model.classes = [{ name:'Class 1', students:[] }]; }
+      model.active = 0;
+
+      // Read existing rosters (from this page, the Seating Chart, or an import).
+      function load(){
+        try{
+          const d = JSON.parse(localStorage.getItem(ROSTER_LS) || 'null');
+          if(d && Array.isArray(d.classes)){
+            model.classes = d.classes.map((c,i)=>({
+              name: (c && c.name != null) ? String(c.name) : ('Class ' + (i+1)),
+              students: (c && Array.isArray(c.students)) ? c.students.map(s=>String(s)).filter(s=>s.trim()) : []
+            }));
+          }
+        }catch(e){ /* unreadable — start fresh */ }
+      }
+      // Write the shared store. Only ever called from a real edit, so simply
+      // visiting the home page never overwrites rosters saved elsewhere.
+      function publish(){
+        try{
+          const classes = model.classes.map(c=>({ name:(c.name||'').trim(), students:c.students.slice() }));
+          localStorage.setItem(ROSTER_LS, JSON.stringify({
+            type:'teachingtools-rosters', version:1, source:'home', savedAt:Date.now(), classes
+          }));
+        }catch(e){ /* storage unavailable / full — ignore */ }
+      }
+
+      const cur = () => model.classes[model.active];
+      const parseNames = t => t.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
+      const plural = n => n + (n===1 ? ' name' : ' names');
+
+      function renderRow(){
+        const row = $('classRow'); row.innerHTML = '';
+        model.classes.forEach((c,i)=>{
+          const b = document.createElement('button');
+          b.className = 'cpill' + (i===model.active ? ' active' : '');
+          b.textContent = c.name || ('Class ' + (i+1));
+          b.title = plural(c.students.length);
+          b.addEventListener('click', ()=>{ model.active = i; renderAll(); });
+          row.appendChild(b);
+        });
+        const add = document.createElement('button');
+        add.className = 'cpill add'; add.textContent = '+ Add class';
+        add.addEventListener('click', ()=>{
+          model.classes.push({ name:'Class ' + (model.classes.length+1), students:[] });
+          model.active = model.classes.length - 1;
+          publish(); renderAll(); $('clsName').focus(); $('clsName').select();
+        });
+        row.appendChild(add);
+      }
+      function renderEditor(){
+        const c = cur();
+        $('clsName').value = c.name;
+        $('clsNames').value = c.students.join('\n');
+        $('clsCount').textContent = plural(c.students.length);
+        $('clsRemove').disabled = model.classes.length <= 1;
+      }
+      function renderTotal(){
+        $('listsTotal').textContent = plural(model.classes.reduce((n,c)=>n+c.students.length, 0));
+      }
+      function renderAll(){ renderRow(); renderEditor(); renderTotal(); }
+
+      $('clsName').addEventListener('input', e=>{
+        cur().name = e.target.value; renderRow(); publish();
+      });
+      $('clsNames').addEventListener('input', e=>{
+        cur().students = parseNames(e.target.value);
+        $('clsCount').textContent = plural(cur().students.length);
+        renderRow(); renderTotal(); publish();
+      });
+      $('clsSort').addEventListener('click', ()=>{
+        cur().students.sort((a,b)=>a.localeCompare(b)); publish(); renderEditor();
+      });
+      $('clsRemove').addEventListener('click', ()=>{
+        if(model.classes.length <= 1) return;
+        if(!confirm('Remove “' + (cur().name || 'this class') + '” and its names?')) return;
+        model.classes.splice(model.active, 1);
+        model.active = Math.max(0, model.active - 1);
+        publish(); renderAll();
+      });
+
+      // Export — a portable backup that also re-imports here or into any tool.
+      $('clsExport').addEventListener('click', ()=>{
+        const data = { type:'teachingtools-rosters', version:1, source:'home', savedAt:Date.now(),
+          classes: model.classes.map(c=>({ name:(c.name||'').trim(), students:c.students.slice() })) };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'class-lists.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      });
+      // Import — a class-lists/seating-chart export, a {name,students} list, or plain text.
+      $('clsImport').addEventListener('click', ()=>$('clsFile').click());
+      $('clsFile').addEventListener('change', e=>{ const f = e.target.files[0]; if(f) readFile(f); e.target.value=''; });
+      function readFile(file){
+        const r = new FileReader();
+        r.onload = ()=>{
+          const text = String(r.result || ''); const trimmed = text.trim();
+          let imported = null;
+          if(trimmed.startsWith('{') || trimmed.startsWith('[')){
+            try{
+              const d = JSON.parse(trimmed);
+              if(d && Array.isArray(d.classes)){
+                imported = d.classes.map((c,i)=>({ name:c.name || ('Class ' + (i+1)),
+                  students:(c.students||[]).map(s=>String(s).trim()).filter(Boolean) }));
+              }else if(d && Array.isArray(d.students)){
+                imported = [{ name:d.name || 'Imported', students:d.students.map(s=>String(s).trim()).filter(Boolean) }];
+              }else if(Array.isArray(d)){
+                imported = [{ name:'Imported', students:d.map(s=>String(s).trim()).filter(Boolean) }];
+              }
+            }catch(e){ /* fall through to plain text */ }
+          }
+          if(!imported){ const names = parseNames(text); if(names.length) imported = [{ name:'Imported', students:names }]; }
+          imported = (imported || []).filter(c=>c.students.length);
+          if(!imported.length) return;
+          model.classes = model.classes.filter(c=>c.students.length).concat(imported);
+          model.active = model.classes.length - 1;
+          publish(); renderAll();
+        };
+        r.readAsText(file);
+      }
+
+      renderAll();
     })();
   </script>
 </body>
