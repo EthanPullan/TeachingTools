@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A big, tap-to-play Sudoku board for the classroom smart board — drag to select cells, two colours of pencil notes, a built-in timer, and an on-screen number pad.">
+<meta name="theme-color" content="#1f3d35">
+<title>Sudoku</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    /* ── Sudoku-specific tokens ── */
+    --grid-soft:#cdd6da;    /* thin line between cells */
+    --grid-strong:#8d9aa0;  /* thick line between 3×3 boxes + outer frame */
+    --given:#16241f;        /* a clue printed by the puzzle (bold, immovable) */
+    --user:#2f7d68;         /* a digit the player entered */
+    --note-grey:#9aa4a3;    /* first pencil-note layer — light grey */
+    --note-blue:#2f6f9f;    /* second pencil-note layer — blue */
+    --sel:rgba(224,152,46,.22);   /* selected cell wash (amber) */
+    --peer:rgba(31,61,53,.055);   /* row/col/box of the focused cell */
+    --same:rgba(224,152,46,.14);  /* cells sharing the focused cell's digit */
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;overflow:hidden;}
+  button,select{font-family:inherit;}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* ── toolbar ── */
+  .toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex:none;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 14px;
+    border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;white-space:nowrap;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn[disabled]{opacity:.4;cursor:not-allowed;}
+  .btn .ic{font-size:16px;line-height:1;}
+
+  /* difficulty filter + puzzle picker */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;flex:none;}
+  .seg button{border:none;background:#fff;padding:8px 13px;cursor:pointer;font-size:13px;font-weight:700;
+    color:var(--muted);transition:background .12s,color .12s;}
+  .seg button:hover{background:var(--panel-2);color:var(--ink);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .seg .lab{display:flex;align-items:center;padding:0 11px;font-size:10.5px;font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--panel-2);}
+  select.picker{border:1px solid var(--line);border-radius:9px;background:var(--panel-2);
+    padding:8px 10px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;max-width:170px;}
+
+  /* ── status strip ── */
+  .statusbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex:none;
+    padding:9px 16px;background:var(--room-bg);border-bottom:1px solid var(--line);}
+  .puz{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:14px;}
+  .puz .badge{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;padding:3px 9px;border-radius:20px;background:var(--panel);
+    border:1px solid var(--line);color:var(--muted);}
+  .puz .badge.hard{color:var(--danger);border-color:var(--danger-soft);background:var(--danger-soft);}
+  .puz .badge.moderate{color:var(--together);border-color:var(--together-soft);background:var(--together-soft);}
+  .puz .id{font-family:var(--mono);font-size:13px;color:var(--muted);font-weight:600;}
+  .pill{font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--line);
+    border-radius:20px;padding:3px 10px;color:var(--muted);}
+  .pill.warn{color:var(--danger);border-color:var(--danger-soft);background:var(--danger-soft);}
+
+  /* timer + pause */
+  .timer{display:inline-flex;align-items:baseline;gap:1px;font-family:var(--mono);font-weight:800;
+    padding:5px 15px;border-radius:999px;background:var(--panel);border:2px solid var(--line);
+    color:var(--ink);font-size:clamp(15px,2.3vh,20px);line-height:1.3;}
+  .timer.paused{border-color:var(--accent);color:var(--accent-deep);background:var(--accent-soft);}
+  .icon-btn{border:1px solid var(--line);background:var(--panel);height:38px;min-width:38px;padding:0 10px;
+    border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    font-size:15px;font-weight:600;color:var(--ink);transition:background .12s,border-color .12s,transform .05s;}
+  .icon-btn:hover{background:var(--panel-2);} .icon-btn:active{transform:translateY(1px);}
+  .icon-btn.on{background:var(--board);color:#fff;border-color:var(--board);}
+
+  /* ── stage: board + pad ── */
+  .stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+    gap:clamp(12px,2.4vw,30px);padding:clamp(10px,2vh,22px);}
+
+  .board-area{position:relative;flex:none;}
+  .board{
+    --bs:min( calc(100dvh - 184px), calc(100vw - 400px) );
+    width:var(--bs);height:var(--bs);
+    display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);
+    background:var(--panel);border:3px solid var(--grid-strong);border-radius:12px;overflow:hidden;
+    box-shadow:0 10px 34px rgba(20,40,33,.22);
+    touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;}
+
+  .cell{position:relative;border-right:1px solid var(--grid-soft);border-bottom:1px solid var(--grid-soft);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    transition:background .08s;background:transparent;}
+  .cell.br3{border-right:2.5px solid var(--grid-strong);}   /* right edge of a 3×3 box */
+  .cell.bb3{border-bottom:2.5px solid var(--grid-strong);}  /* bottom edge of a 3×3 box */
+  .cell:nth-child(9n){border-right:none;}                   /* outer frame handles the far edges */
+  .cell:nth-child(n+73){border-bottom:none;}
+
+  /* highlight layers (painted under the digit) */
+  .cell.peer{background:var(--peer);}
+  .cell.same{background:var(--same);}
+  .cell.sel{background:var(--sel);box-shadow:inset 0 0 0 2.5px var(--accent);z-index:1;}
+
+  /* the final digit */
+  .cell .val{display:none;font-family:var(--mono);font-weight:600;line-height:1;
+    font-size:clamp(20px,4.7vmin,54px);color:var(--user);pointer-events:none;}
+  .cell.has-val .val{display:flex;}
+  .cell.given .val{color:var(--given);font-weight:800;}
+  .cell.bad .val{color:var(--danger);}
+
+  /* the two pencil-note layers, laid out 1-9 in a fixed 3×3 grid */
+  .cell .notes{display:grid;position:absolute;inset:7%;
+    grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
+    pointer-events:none;}
+  .cell.has-val .notes{display:none;}
+  .cell .notes span{display:flex;align-items:center;justify-content:center;line-height:1;
+    font-family:var(--mono);font-weight:600;font-size:clamp(8px,1.7vmin,18px);}
+  .cell .notes span.g{color:var(--note-grey);}
+  .cell .notes span.b{color:var(--note-blue);}   /* blue layer wins the slot when a digit is in both */
+
+  /* pause / solved cover — hides the board behind a frosted, opaque panel */
+  .cover{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    border-radius:12px;z-index:6;text-align:center;padding:18px;}
+  .cover.show{display:flex;}
+  .cover.pause{cursor:pointer;background:rgba(233,237,240,.84);
+    -webkit-backdrop-filter:blur(16px) saturate(1.05);backdrop-filter:blur(16px) saturate(1.05);}
+  .cover.solved{background:rgba(23,48,41,.30);
+    -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
+  .cover .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 18px 50px rgba(20,40,33,.30);padding:26px 30px;display:flex;flex-direction:column;
+    align-items:center;gap:14px;max-width:88%;}
+  .cover .big{font-size:clamp(22px,4vh,34px);font-weight:800;letter-spacing:.01em;display:flex;
+    align-items:center;gap:10px;}
+  .cover .big .em{font-size:1.25em;}
+  .cover.pause .big{color:var(--board);}
+  .cover.solved .big{color:var(--ok);}
+  .cover .sub{color:var(--muted);font-size:14px;}
+  .cover .sub b{font-family:var(--mono);color:var(--ink);font-weight:700;}
+  .cover .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+
+  /* ── number pad ── */
+  .pad{flex:none;width:min(340px,40vw);display:flex;flex-direction:column;gap:clamp(8px,1.4vh,14px);}
+  .pad-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .mode{border:1.5px solid var(--line);background:var(--panel);border-radius:11px;cursor:pointer;
+    padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;
+    font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+    transition:background .12s,border-color .12s,color .12s,transform .05s;}
+  .mode:active{transform:translateY(1px);}
+  .mode .dot{width:13px;height:13px;border-radius:50%;}
+  .mode[data-mode=digit] .dot{background:var(--user);}
+  .mode[data-mode=grey]  .dot{background:var(--note-grey);}
+  .mode[data-mode=blue]  .dot{background:var(--note-blue);}
+  .mode.active{color:#fff;}
+  .mode.active[data-mode=digit]{background:var(--board);border-color:var(--board);}
+  .mode.active[data-mode=grey]{background:var(--note-grey);border-color:var(--note-grey);}
+  .mode.active[data-mode=blue]{background:var(--note-blue);border-color:var(--note-blue);}
+  .mode.active .dot{background:#fff;box-shadow:inset 0 0 0 2px rgba(0,0,0,.12);}
+
+  .pad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(7px,1.2vh,12px);}
+  .num{position:relative;border:1px solid var(--line);background:var(--panel);border-radius:13px;cursor:pointer;
+    aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-weight:700;font-size:clamp(22px,4.6vmin,40px);color:var(--ink);
+    box-shadow:var(--shadow-sm);transition:background .1s,border-color .1s,transform .06s,color .1s;}
+  .num:hover{background:var(--panel-2);border-color:var(--grid-strong);}
+  .num:active{transform:scale(.95);}
+  .num .left{position:absolute;right:7px;bottom:5px;font-family:var(--mono);font-size:10.5px;font-weight:700;
+    color:var(--muted);opacity:.8;}
+  .num.done{color:var(--muted);background:var(--panel-2);}      /* all nine of this digit placed */
+  .num.done .left{color:var(--ok);}
+  /* pad takes on the active mode's accent so a tap's effect is obvious */
+  .pad.m-grey .num:hover{border-color:var(--note-grey);}
+  .pad.m-blue .num:hover{border-color:var(--note-blue);}
+
+  .pad-actions{display:grid;grid-template-columns:1fr 1fr;gap:clamp(7px,1.2vh,12px);}
+  .pad-actions .btn{justify-content:center;padding:12px;font-size:15px;}
+  .pad-actions .btn .ic{font-size:18px;}
+
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.45;text-align:center;}
+
+  /* ── responsive: stack the pad under the board on narrow screens ── */
+  @media (max-width:900px){
+    .stage{flex-direction:column;gap:14px;}
+    .board{--bs:min( calc(100dvh - 360px), 94vw );}
+    .pad{width:min(440px,94vw);}
+    .pad-grid{gap:8px;}
+  }
+  @media (max-width:680px){
+    .toolbar .desk{display:none;}      /* trim long labels on phones */
+    .statusbar{gap:8px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .num:active,.mode:active,.btn:active,.icon-btn:active{transform:none;}
+    *{scroll-behavior:auto;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Sudoku <small class="desk">classroom · notes &amp; timer</small></div>
+
+    <div class="seg" id="diffSeg">
+      <span class="lab">Level</span>
+      <button data-diff="all" class="active">All</button>
+      <button data-diff="moderate">Moderate</button>
+      <button data-diff="hard">Hard</button>
+    </div>
+    <button class="btn primary" id="newBtn"><span class="ic">＋</span>New puzzle</button>
+    <select class="picker" id="picker" aria-label="Choose a specific puzzle"></select>
+
+    <div class="spacer"></div>
+    <button class="btn" id="restartBtn"><span class="ic">↺</span><span class="desk">Restart</span></button>
+    <button class="btn" id="fsBtn" aria-pressed="false" title="Full screen (F)"><span class="ic">⛶</span><span class="desk fs-label">Full screen</span></button>
+  </header>
+
+  <div class="statusbar">
+    <span class="puz">
+      <span class="badge" id="puzBadge">—</span>
+      <span class="id" id="puzId">#—</span>
+    </span>
+    <span class="pill" id="progress">0 / 81</span>
+    <span class="pill warn" id="conflicts" hidden>0 conflicts</span>
+    <div class="spacer"></div>
+    <span class="timer" id="timer"><span id="tval">00:00</span></span>
+    <button class="icon-btn" id="pauseBtn" title="Pause (P)" aria-label="Pause">⏸ <span class="desk">Pause</span></button>
+  </div>
+
+  <main class="stage">
+    <div class="board-area">
+      <div class="board" id="board" aria-label="Sudoku board"></div>
+      <div class="cover" id="cover"></div>
+    </div>
+
+    <section class="pad" id="pad" aria-label="Number pad">
+      <div class="pad-modes" id="modes">
+        <button class="mode active" data-mode="digit"><span class="dot"></span>Digit</button>
+        <button class="mode" data-mode="grey"><span class="dot"></span>Grey</button>
+        <button class="mode" data-mode="blue"><span class="dot"></span>Blue</button>
+      </div>
+      <div class="pad-grid" id="padGrid"></div>
+      <div class="pad-actions">
+        <button class="btn" id="eraseBtn"><span class="ic">⌫</span>Erase</button>
+        <button class="btn" id="undoBtn"><span class="ic">↶</span>Undo</button>
+      </div>
+      <p class="hint">Drag across cells to select several at once, then tap a number to note them all. Switch <b>Digit / Grey / Blue</b> above.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+(function(){
+  /* ============================================================
+     Puzzle library — the "import" slot.
+     These 24 boards were lifted straight from the uploaded PDF
+     booklet (every one verified to have a single solution). New
+     puzzles drop in here as {id, diff, givens, solution}; givens
+     and solution are 81-char strings read left→right, top→bottom,
+     with '0' for a blank.
+     ============================================================ */
+  const PUZZLES = [
+    {id:'#50294', diff:'hard', givens:'000027000040000080000300601501009400090106020800000000007500000682030000100700008', solution:'918627534346915782275384691521879463793146825864253179437598216682431957159762348'},
+    {id:'#99290', diff:'hard', givens:'004690005009000000208040700030418000000000000000000983000102600000500408076000200', solution:'314697825769825314258341796937418562685239147421756983843172659192563478576984231'},
+    {id:'#206394', diff:'moderate', givens:'000800000006010000000000524000000000570004900008300600040000007000120000050906008', solution:'435892761726415389891763524964251873573684912218379645642538197389127456157946238'},
+    {id:'#174454', diff:'moderate', givens:'600000007030200000000700000040300005800000960020006813408000020090080000070020590', solution:'652849137734251689189763452946318275813572964527496813468935721295187346371624598'},
+    {id:'#132862', diff:'moderate', givens:'002900000083200000000008000008400000000031420070050008000000100060000090040010853', solution:'712963584983245671456178239128497365695831427374652918837529146561384792249716853'},
+    {id:'#40295', diff:'moderate', givens:'000000100806500030007000020000096450700000061000800000001000200005630090040080000', solution:'352978146816524937497163528138796452729345861564812379671459283285631794943287615'},
+    {id:'#116567', diff:'moderate', givens:'010000005067000000400003900750200006000004200000000300000000800200096040370010020', solution:'813942675967185432425763918754239186138654297692871354549327861281596743376418529'},
+    {id:'#98416', diff:'hard', givens:'000090000682300500100700008045000000000000000000003072900200006010000083060040000', solution:'574698321682314597139725468745182639321976854896453172958231746417569283263847915'},
+    {id:'#181821', diff:'moderate', givens:'000000050000010904000400060920000000800064000074080000030000080407900300000051040', solution:'342896157768513924195472863926135478813764295574289631231647589457928316689351742'},
+    {id:'#16706', diff:'hard', givens:'004006000000000820006092000020004750580000600000001003900130000000000504000700000', solution:'254816379193457826876392415329684751581973642467521983945138267718269534632745198'},
+    {id:'#132929', diff:'moderate', givens:'200006008000000000005000600000830900087004000000000500470008000060051302030060000', solution:'213946758698725413745183629156832947987514236324679581472398165869451372531267894'},
+    {id:'#133177', diff:'moderate', givens:'000470001080031000904006050000020070270000008500040000400000000000003205001000869', solution:'632475981785931624914286753149328576273569418568147392456892137897613245321754869'},
+    {id:'#91098', diff:'moderate', givens:'000500000015000000764090000002004500601000000070306000000000320007200850200803006', solution:'923547618815632974764198235392784561641925783578316492186459327437261859259873146'},
+    {id:'#109344', diff:'moderate', givens:'200006317003200040000095000007000000000180090000000076015000000002009060000034080', solution:'259846317683271945741395628397462851564187293128953476415628739832719564976534182'},
+    {id:'#224526', diff:'moderate', givens:'207000000500000400000006005704080200035020074100030000010070006000003020000104009', solution:'247395861596718432381246795764589213835621974129437658913872546458963127672154389'},
+    {id:'#121055', diff:'moderate', givens:'020600030008000000000001090006200000152300406000007009000700010800030005403000000', solution:'921675834648923751537481692796214583152398476384567129265749318879136245413852967'},
+    {id:'#61522', diff:'hard', givens:'500000000000000060040605100000003024090000800003001009010048052007060000980010000', solution:'569127348731894265842635197178953624495276813623481579316748952257369481984512736'},
+    {id:'#118067', diff:'moderate', givens:'003000000000000049070508000000000000097425300068900000000009008000070902200006103', solution:'913764825685312749472598631324681597197425386568937214731259468846173952259846173'},
+    {id:'#5388', diff:'moderate', givens:'080050900290000600300070000007000040000001080000609300000302000050000000004000018', solution:'786254931295183674341976852927835146463721589518649327879312465152468793634597218'},
+    {id:'#55225', diff:'moderate', givens:'000000600100407000004010000400060803890000000020700100200000000030800705007100090', solution:'782395641169487532354612987475961823891253476623748159218579364936824715547136298'},
+    {id:'#128766', diff:'moderate', givens:'001000008000001009870540020003000097527000000000406000700000000000800750002030806', solution:'491362578235781469876549321643258197527193684918476235784625913369814752152937846'},
+    {id:'#105012', diff:'hard', givens:'300504006000103700508000000009000003000040900006001005001090234070000001000800000', solution:'327584196694123758518769342749258613185346927236971485851697234972435861463812579'},
+    {id:'#102038', diff:'hard', givens:'000200093004000000000700501100040007080090010070005004600800000003000000042000750', solution:'567281493214539678938764521125648937486397215379125864651872349793456182842913756'},
+    {id:'#50226', diff:'moderate', givens:'008000003000010607001063002583027004006000000400300000300051200060070000800002900', solution:'678294513234518697951763482583927164726145839419386725397851246162479358845632971'}
+  ];
+
+  const $ = id => document.getElementById(id);
+  const boardEl = $('board');
+
+  /* ---------- precomputed unit lookups (peers for highlight + conflicts) ---------- */
+  const rowOf = i => (i/9)|0, colOf = i => i%9;
+  const boxOf = i => (((i/9)|0)/3|0)*3 + ((i%9)/3|0);
+  const ROWS=[], COLS=[], BOXES=[];
+  for(let u=0;u<9;u++){ ROWS.push([]); COLS.push([]); BOXES.push([]); }
+  for(let i=0;i<81;i++){ ROWS[rowOf(i)].push(i); COLS[colOf(i)].push(i); BOXES[boxOf(i)].push(i); }
+
+  /* ---------- state ---------- */
+  let puzzle = null;              // current PUZZLES entry
+  let cells  = [];               // 81 × {given, val(0-9), grey:Set, blue:Set}
+  const selection = new Set();    // selected cell indices
+  let anchor = -1;                // primary cell (drives peer / same-digit highlight)
+  let mode = 'digit';             // 'digit' | 'grey' | 'blue'
+  let diffFilter = 'all';
+  let history = [];               // undo stack of board snapshots
+  let solved = false;
+  let paused = false;
+
+  /* ---------- build the board DOM once ---------- */
+  const cellEls = [], valEls = [], noteSpanEls = [];
+  for(let i=0;i<81;i++){
+    const el = document.createElement('div');
+    el.className = 'cell';
+    if(colOf(i)%3===2) el.classList.add('br3');
+    if(rowOf(i)%3===2) el.classList.add('bb3');
+    el.dataset.i = i;
+    const val = document.createElement('div'); val.className='val';
+    const notes = document.createElement('div'); notes.className='notes';
+    const spans = [];
+    for(let n=0;n<9;n++){ const s=document.createElement('span'); notes.appendChild(s); spans.push(s); }
+    el.appendChild(val); el.appendChild(notes);
+    boardEl.appendChild(el);
+    cellEls.push(el); valEls.push(val); noteSpanEls.push(spans);
+  }
+
+  /* build the 1-9 number pad */
+  const padGrid = $('padGrid'); const numEls = [];
+  for(let n=1;n<=9;n++){
+    const b = document.createElement('button');
+    b.className='num'; b.dataset.n=n;
+    b.innerHTML = n + '<span class="left"></span>';
+    b.addEventListener('click', ()=>pressNumber(n));
+    padGrid.appendChild(b); numEls.push(b);
+  }
+
+  /* ---------- load / reset ---------- */
+  function loadPuzzle(p){
+    puzzle = p;
+    cells = [];
+    for(let i=0;i<81;i++){
+      const g = p.givens[i] !== '0';
+      cells.push({ given:g, val: g ? +p.givens[i] : 0, grey:new Set(), blue:new Set() });
+    }
+    selection.clear(); anchor = -1; history = []; solved = false; paused = false;
+    setCover('none');
+    resetTimer(); startTimer();
+    syncPicker();
+    render();
+  }
+  function restart(){ if(puzzle) loadPuzzle(puzzle); }
+
+  // Pick a fresh random puzzle obeying the difficulty filter (avoid an instant repeat).
+  function newPuzzle(){
+    const pool = PUZZLES.filter(p => diffFilter==='all' || p.diff===diffFilter);
+    let choices = pool.filter(p => p !== puzzle);
+    if(!choices.length) choices = pool;
+    loadPuzzle(choices[(Math.random()*choices.length)|0]);
+  }
+
+  /* ---------- snapshots for undo ---------- */
+  function snapshot(){
+    history.push(cells.map(c => ({ v:c.val, g:[...c.grey], b:[...c.blue] })));
+    if(history.length > 400) history.shift();
+    updateUndo();
+  }
+  function undo(){
+    if(!history.length) return;
+    const snap = history.pop();
+    snap.forEach((s,i)=>{ cells[i].val=s.v; cells[i].grey=new Set(s.g); cells[i].blue=new Set(s.b); });
+    if(solved){ solved=false; setCover('none'); startTimer(); }
+    render(); updateUndo();
+  }
+  function updateUndo(){ $('undoBtn').disabled = history.length===0; }
+
+  /* ---------- conflicts (a digit repeated in a row, column or box) ---------- */
+  function computeConflicts(){
+    const bad = new Array(81).fill(false);
+    const scan = unit => {
+      const seen = {};
+      for(const i of unit){ const v=cells[i].val; if(v){ (seen[v]=seen[v]||[]).push(i); } }
+      for(const v in seen){ if(seen[v].length>1) seen[v].forEach(i=>bad[i]=true); }
+    };
+    for(let u=0;u<9;u++){ scan(ROWS[u]); scan(COLS[u]); scan(BOXES[u]); }
+    return bad;
+  }
+
+  /* ---------- render everything from state ---------- */
+  function render(){
+    const bad = computeConflicts();
+    const single = selection.size===1 ? anchor : -1;
+    const anchorVal = single>=0 ? cells[single].val : 0;
+    let peerSet=null, sameVal=0;
+    if(single>=0){
+      peerSet = new Set([...ROWS[rowOf(single)], ...COLS[colOf(single)], ...BOXES[boxOf(single)]]);
+      sameVal = anchorVal;
+    }
+
+    let filled=0, conflictCount=0;
+    for(let i=0;i<81;i++){
+      const c = cells[i], el = cellEls[i];
+      if(c.val) filled++;
+      if(bad[i]) conflictCount++;
+
+      el.classList.toggle('given', c.given);
+      el.classList.toggle('has-val', c.val!==0);
+      el.classList.toggle('bad', bad[i] && c.val!==0);
+      el.classList.toggle('sel', selection.has(i));
+      el.classList.toggle('peer', peerSet ? (peerSet.has(i) && !selection.has(i)) : false);
+      el.classList.toggle('same', (sameVal && c.val===sameVal && !selection.has(i)));
+
+      if(c.val){
+        valEls[i].textContent = c.val;
+      }else{
+        valEls[i].textContent = '';
+        const spans = noteSpanEls[i];
+        for(let n=1;n<=9;n++){
+          const s = spans[n-1];
+          const isB = c.blue.has(n), isG = c.grey.has(n);
+          if(isB || isG){ s.textContent = n; s.className = isB ? 'b' : 'g'; }
+          else { s.textContent=''; s.className=''; }
+        }
+      }
+    }
+
+    // statusbar
+    $('progress').textContent = filled + ' / 81';
+    const conf = $('conflicts');
+    conf.hidden = conflictCount===0;
+    conf.textContent = conflictCount + (conflictCount===1?' conflict':' conflicts');
+
+    // per-digit "remaining" counts on the pad
+    const counts = new Array(10).fill(0);
+    for(const c of cells) if(c.val) counts[c.val]++;
+    for(let n=1;n<=9;n++){
+      const left = 9 - counts[n];
+      numEls[n-1].querySelector('.left').textContent = left>0 ? left : '✓';
+      numEls[n-1].classList.toggle('done', left<=0);
+    }
+  }
+
+  /* ---------- selection ---------- */
+  function selectOnly(i){ selection.clear(); selection.add(i); anchor=i; render(); }
+  function addToSelection(i){ if(!selection.has(i)){ selection.add(i); anchor=i; render(); } }
+  function clearSelection(){ selection.clear(); anchor=-1; render(); }
+
+  let dragging=false;
+  function cellFromPoint(x,y){
+    const el = document.elementFromPoint(x,y);
+    const cell = el && el.closest && el.closest('.cell');
+    return cell ? +cell.dataset.i : -1;
+  }
+  boardEl.addEventListener('pointerdown', e=>{
+    if(paused||solved) return;
+    const i = e.target.closest('.cell'); if(!i) return;
+    e.preventDefault();
+    const idx = +i.dataset.i;
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+    if(additive){ addToSelection(idx); } else { selectOnly(idx); }
+    dragging = true;
+    try{ boardEl.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  boardEl.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const idx = cellFromPoint(e.clientX, e.clientY);
+    if(idx>=0 && !selection.has(idx)) addToSelection(idx);
+  });
+  const endDrag = e=>{ dragging=false; try{ boardEl.releasePointerCapture(e.pointerId); }catch(_){} };
+  boardEl.addEventListener('pointerup', endDrag);
+  boardEl.addEventListener('pointercancel', endDrag);
+
+  /* ---------- entering digits & notes ---------- */
+  function editableTargets(){ return [...selection].filter(i => !cells[i].given); }
+
+  function pressNumber(n){
+    if(paused || solved) return;
+    const targets = editableTargets();
+    if(!targets.length) return;
+
+    if(mode==='digit'){
+      // Toggle: if every target already holds n, clear them; otherwise stamp n in.
+      const allN = targets.every(i => cells[i].val===n);
+      snapshot();
+      for(const i of targets){
+        if(allN){ cells[i].val=0; }
+        else { cells[i].val=n; cells[i].grey.clear(); cells[i].blue.clear(); }
+      }
+    }else{
+      // Notes only land in empty cells. Toggle across the whole selection at once:
+      // if they all already have the note, remove it; otherwise add it everywhere.
+      const layer = mode==='grey' ? 'grey' : 'blue';
+      const notable = targets.filter(i => cells[i].val===0);
+      if(!notable.length) return;
+      const allHave = notable.every(i => cells[i][layer].has(n));
+      snapshot();
+      for(const i of notable){
+        if(allHave) cells[i][layer].delete(n); else cells[i][layer].add(n);
+      }
+    }
+    render();
+    checkSolved();
+  }
+
+  function eraseSelected(){
+    if(paused || solved) return;
+    const targets = editableTargets().filter(i => cells[i].val || cells[i].grey.size || cells[i].blue.size);
+    if(!targets.length) return;
+    snapshot();
+    for(const i of targets){ cells[i].val=0; cells[i].grey.clear(); cells[i].blue.clear(); }
+    render();
+  }
+
+  /* ---------- win check (board full and free of conflicts) ---------- */
+  function checkSolved(){
+    for(const c of cells) if(!c.val) return;
+    const bad = computeConflicts();
+    if(bad.some(Boolean)) return;
+    solved = true; stopTimer();
+    setCover('solved');
+  }
+
+  /* ---------- mode switching ---------- */
+  function setMode(m){
+    mode = m;
+    document.querySelectorAll('#modes .mode').forEach(b=>b.classList.toggle('active', b.dataset.mode===m));
+    const pad = $('pad');
+    pad.classList.toggle('m-grey', m==='grey');
+    pad.classList.toggle('m-blue', m==='blue');
+  }
+  $('modes').addEventListener('click', e=>{ const b=e.target.closest('.mode'); if(b) setMode(b.dataset.mode); });
+
+  /* ============================================================
+     Timer — counts up from 00:00, anchored to performance.now()
+     so it never drifts. Pausing drops a frosted cover over the
+     board so nobody can peek while the clock is stopped.
+     ============================================================ */
+  const timer = { elapsed:0, running:false, startAt:0 };
+  let tickIv = null;
+  const now = () => performance.now();
+  function fmt(ms){
+    const s = Math.floor(ms/1000);
+    const h = (s/3600)|0, m = ((s%3600)/60)|0, sec = s%60;
+    const p = x => String(x).padStart(2,'0');
+    return h>0 ? `${h}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
+  }
+  function renderTime(){ $('tval').textContent = fmt(timer.elapsed); }
+  function tick(){ if(timer.running){ timer.elapsed = now() - timer.startAt; renderTime(); } }
+  function startTimer(){
+    if(timer.running || solved) return;
+    timer.startAt = now() - timer.elapsed; timer.running = true;
+    if(!tickIv) tickIv = setInterval(tick, 250);
+    $('timer').classList.remove('paused');
+    syncPauseBtn();
+  }
+  function stopTimer(){
+    if(timer.running){ timer.elapsed = now() - timer.startAt; timer.running = false; }
+    syncPauseBtn();
+  }
+  function resetTimer(){ timer.elapsed=0; timer.running=false; renderTime(); syncPauseBtn(); }
+  function pauseGame(){
+    if(solved) return;
+    stopTimer(); paused = true;
+    $('timer').classList.add('paused');
+    setCover('pause');
+    syncPauseBtn();
+  }
+  function resumeGame(){
+    paused = false;
+    $('timer').classList.remove('paused');
+    setCover('none');
+    startTimer();
+    syncPauseBtn();
+  }
+  function togglePause(){ if(solved) return; paused ? resumeGame() : pauseGame(); }
+  function syncPauseBtn(){
+    const b = $('pauseBtn');
+    b.classList.toggle('on', paused);
+    b.innerHTML = paused ? '▶ <span class="desk">Resume</span>' : '⏸ <span class="desk">Pause</span>';
+    b.title = paused ? 'Resume (P)' : 'Pause (P)';
+  }
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden && timer.running && !solved) pauseGame(); });
+
+  /* ---------- the pause / solved cover ---------- */
+  function setCover(type){
+    const cover = $('cover');
+    cover.className = 'cover';
+    if(type==='none'){ cover.innerHTML=''; return; }
+    if(type==='pause'){
+      cover.classList.add('show','pause');
+      cover.innerHTML = `<div class="card">
+        <div class="big"><span class="em">⏸</span> Paused</div>
+        <div class="sub">The board is hidden. Tap to keep playing.</div>
+        <div class="row"><button class="btn primary" id="resumeBtn"><span class="ic">▶</span>Resume</button></div>
+      </div>`;
+      cover.addEventListener('click', resumeOnCover);
+      $('resumeBtn').addEventListener('click', e=>{ e.stopPropagation(); resumeGame(); });
+    }else if(type==='solved'){
+      cover.classList.add('show','solved');
+      cover.innerHTML = `<div class="card">
+        <div class="big"><span class="em">✓</span> Solved!</div>
+        <div class="sub">${puzzle.diff[0].toUpperCase()+puzzle.diff.slice(1)} ${puzzle.id} · finished in <b>${fmt(timer.elapsed)}</b></div>
+        <div class="row">
+          <button class="btn primary" id="againBtn"><span class="ic">＋</span>New puzzle</button>
+          <button class="btn" id="restart2Btn"><span class="ic">↺</span>Replay</button>
+        </div>
+      </div>`;
+      $('againBtn').addEventListener('click', newPuzzle);
+      $('restart2Btn').addEventListener('click', restart);
+    }
+  }
+  function resumeOnCover(){ resumeGame(); }
+
+  /* ---------- pickers / buttons ---------- */
+  function syncPicker(){
+    const sel = $('picker');
+    if(!sel.options.length){
+      // group by difficulty for an easy "library" browse
+      ['hard','moderate'].forEach(diff=>{
+        const og = document.createElement('optgroup');
+        og.label = diff[0].toUpperCase()+diff.slice(1);
+        PUZZLES.forEach((p,idx)=>{ if(p.diff===diff){
+          const o=document.createElement('option'); o.value=idx;
+          o.textContent = `${p.id} · ${diff}`; og.appendChild(o);
+        }});
+        sel.appendChild(og);
+      });
+    }
+    sel.value = PUZZLES.indexOf(puzzle);
+    // status badge
+    const badge = $('puzBadge');
+    badge.textContent = puzzle.diff;
+    badge.className = 'badge ' + puzzle.diff;
+    $('puzId').textContent = puzzle.id;
+  }
+  $('picker').addEventListener('change', e=>{ loadPuzzle(PUZZLES[+e.target.value]); });
+  $('diffSeg').addEventListener('click', e=>{
+    const b = e.target.closest('button[data-diff]'); if(!b) return;
+    diffFilter = b.dataset.diff;
+    document.querySelectorAll('#diffSeg button').forEach(x=>x.classList.toggle('active', x===b));
+  });
+  $('newBtn').addEventListener('click', newPuzzle);
+  $('restartBtn').addEventListener('click', restart);
+  $('eraseBtn').addEventListener('click', eraseSelected);
+  $('undoBtn').addEventListener('click', undo);
+  $('pauseBtn').addEventListener('click', togglePause);
+
+  /* ---------- full screen ---------- */
+  const fsBtn = $('fsBtn');
+  function fsActive(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFs(){
+    if(fsActive()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+    else { const el=document.documentElement; (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  }
+  function syncFs(){
+    const on=fsActive();
+    fsBtn.setAttribute('aria-pressed', on?'true':'false');
+    const lab=fsBtn.querySelector('.fs-label'); if(lab) lab.textContent = on?'Exit full screen':'Full screen';
+  }
+  fsBtn.addEventListener('click', toggleFs);
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+
+  /* ---------- keyboard (mirrors the on-screen controls, handy for testing) ---------- */
+  function moveAnchor(dr,dc){
+    let i = anchor<0 ? 40 : anchor;
+    let r = Math.min(8, Math.max(0, rowOf(i)+dr));
+    let c = Math.min(8, Math.max(0, colOf(i)+dc));
+    selectOnly(r*9+c);
+  }
+  document.addEventListener('keydown', e=>{
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if(/INPUT|SELECT|TEXTAREA/.test(tag)) return;
+    if(e.key==='p'||e.key==='P'){ togglePause(); return; }
+    if(e.key==='f'||e.key==='F'){ toggleFs(); return; }
+    if((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')){ e.preventDefault(); undo(); return; }
+    if(paused||solved) return;
+    if(e.key>='1' && e.key<='9'){ pressNumber(+e.key); return; }
+    if(e.key==='Backspace'||e.key==='Delete'||e.key==='0'){ e.preventDefault(); eraseSelected(); return; }
+    if(e.key==='d'||e.key==='D'){ setMode('digit'); return; }
+    if(e.key==='g'||e.key==='G'){ setMode('grey'); return; }
+    if(e.key==='b'||e.key==='B'){ setMode('blue'); return; }
+    if(e.key==='ArrowUp'){ e.preventDefault(); moveAnchor(-1,0); }
+    else if(e.key==='ArrowDown'){ e.preventDefault(); moveAnchor(1,0); }
+    else if(e.key==='ArrowLeft'){ e.preventDefault(); moveAnchor(0,-1); }
+    else if(e.key==='ArrowRight'){ e.preventDefault(); moveAnchor(0,1); }
+    else if(e.key==='Escape'){ clearSelection(); }
+  });
+
+  /* ---------- go ---------- */
+  setMode('digit');
+  loadPuzzle(PUZZLES[(Math.random()*PUZZLES.length)|0]);
+})();
+</script>
+</body>
+</html>
