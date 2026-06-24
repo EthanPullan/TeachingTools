@@ -115,6 +115,16 @@
   .seg button{border:none;background:#fff;padding:8px 13px;cursor:pointer;font-size:13px;font-weight:700;
     color:var(--muted);font-family:var(--mono);}
   .seg button.active{background:var(--board);color:#fff;}
+  .seg button:disabled{cursor:not-allowed;}
+  .seg button:disabled:not(.active){opacity:.4;}
+  .seg-input{width:54px;border:none;border-left:1px solid var(--line);background:#fff;
+    padding:8px 6px;font-family:var(--mono);font-weight:700;font-size:13px;color:var(--ink);text-align:center;}
+  .seg-input::placeholder{color:var(--muted);font-weight:600;}
+  .seg-input:focus{outline:none;background:var(--accent-soft);}
+  .seg-input.active{background:var(--board);color:#fff;}
+  .seg-input.active::placeholder{color:rgba(255,255,255,.7);}
+  .seg-input::-webkit-outer-spin-button,.seg-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  .seg-input{-moz-appearance:textfield;}
   .seg .lab{display:flex;align-items:center;padding:0 10px;font-size:10.5px;font-weight:700;letter-spacing:.08em;
     text-transform:uppercase;color:var(--muted);background:var(--panel-2);}
 
@@ -146,11 +156,16 @@
     <div class="seg" id="modeSeg"><span class="lab">Win by</span>
       <button data-mode="line" class="active">3 in a row</button>
       <button data-mode="most">5+ boards</button></div>
+    <div class="seg" id="redirectSeg"><span class="lab">Won box</span>
+      <button data-redirect="free" class="active" title="If you're sent to a board that's already won, play in any open board">Anywhere</button>
+      <button data-redirect="forced" title="Always play in the board you're sent to, even if it's already won">Same box</button></div>
     <div class="seg" id="timerSeg"><span class="lab">Turn timer</span>
       <button data-sec="0" class="active">Off</button>
+      <button data-sec="5">5s</button>
       <button data-sec="15">15s</button>
       <button data-sec="30">30s</button>
-      <button data-sec="60">60s</button></div>
+      <input type="number" id="timerCustom" class="seg-input" min="1" max="600" placeholder="…s"
+             inputmode="numeric" aria-label="Custom turn timer in seconds" title="Custom seconds"></div>
     <button class="btn" id="fsBtn" aria-pressed="false" title="Toggle full screen"><span class="ic">⛶</span><span class="fs-label">Full screen</span></button>
     <button class="btn" id="undoBtn"><span class="ic">↶</span>Undo</button>
     <button class="btn primary" id="newBtn"><span class="ic">＋</span>New game</button>
@@ -189,6 +204,7 @@
   let active;        // forced mini-board index, or null = play anywhere
   let history;       // {b,c,prevActive} for undo
   let mode = 'line'; // 'line' = 3 big boxes in a row · 'most' = first to 5+ big boxes
+  let forced = false;// false = sent to a won box → play anywhere · true = must still play in it
   let result;        // null while playing, else {winner:'X'|'O'|'D', line:number[]|null}
 
   // Build DOM once: 9 minis, each with 9 cells + a claim overlay.
@@ -225,29 +241,35 @@
     startTurnTimer();
   }
 
-  // Is this mini board still in play (not won, not full)?
-  function playable(b){ return winners[b]===''; }
+  function boardFull(b){ return boards[b].every(Boolean); }
+  // A board is "closed" (no token may be placed) when it's full — and, in the default
+  // "play anywhere" mode, also once it has been won. In forced mode only full closes it.
+  function closed(b){ return boardFull(b) || (!forced && winners[b]!==''); }
+  function openForPlay(b){ return !closed(b); }
+  function movesRemain(){ for(let b=0;b<9;b++) if(openForPlay(b)) return true; return false; }
   function boardCount(s){ let n=0; for(const w of winners) if(w===s) n++; return n; }
 
   function play(b,c){
     if(result) return;                        // game already decided
-    if(!playable(b)) return;
+    if(closed(b)) return;                     // board full (or won, in play-anywhere mode)
     if(active!==null && active!==b) return;   // must play in the forced board
     if(boards[b][c]) return;                  // cell taken
 
     history.push({b, c, prevActive: active});
     boards[b][c] = turn;
 
-    // did this move capture the mini board?
-    const line = miniWin(boards[b]);
-    if(line){ winners[b] = turn; }
-    else if(boards[b].every(Boolean)){ winners[b] = 'D'; }
+    // a board can only be captured once — already-won boards keep their winner
+    if(winners[b]===''){
+      const line = miniWin(boards[b]);
+      if(line){ winners[b] = turn; }
+      else if(boardFull(b)){ winners[b] = 'D'; }
+    }
 
     // did the player who just moved win the whole game (or has it ended)?
     result = evaluate(turn);
 
-    // the cell position c dictates the next forced board.
-    active = playable(c) ? c : null;
+    // the cell position c dictates the next board; a closed target frees up play.
+    active = closed(c) ? null : c;
 
     if(!result){ turn = turn==='X' ? 'O' : 'X'; }
     render();
@@ -273,8 +295,8 @@
     }else{                                     // 'most' — first to capture 5+ big boxes
       if(boardCount(mover) >= MOST_TARGET) return {winner:mover, line:null};
     }
-    // no big boxes left to play → settle the game
-    if(!winners.some(w=>w==='')){
+    // no legal moves left → settle the game
+    if(!movesRemain()){
       if(mode==='most'){
         const x=boardCount('X'), o=boardCount('O');
         if(x>o) return {winner:'X', line:null};
@@ -302,10 +324,11 @@
 
   function render(){
     const over = !!result;
-    const anyOpen = winners.some(w=>w==='');
+    const anyOpen = movesRemain();
     const forcedList = (!over && active!==null) ? [active]
-                     : (!over ? Array.from({length:9},(_,i)=>i).filter(playable) : []);
+                     : (!over ? Array.from({length:9},(_,i)=>i).filter(openForPlay) : []);
     const winLine = (result && result.line) ? result.line : [];
+    syncLocks();
 
     megaEl.classList.toggle('next-x', !over && turn==='X');
     megaEl.classList.toggle('next-o', !over && turn==='O');
@@ -417,10 +440,10 @@
   function autoMove(){
     if(result) return;
     const consider = active!==null ? [active]
-                   : Array.from({length:9},(_,i)=>i).filter(playable);
+                   : Array.from({length:9},(_,i)=>i).filter(openForPlay);
     const legal = [];
     for(const b of consider){
-      if(!playable(b)) continue;
+      if(!openForPlay(b)) continue;
       for(let c=0;c<9;c++){ if(!boards[b][c]) legal.push([b,c]); }
     }
     if(!legal.length) return;
@@ -444,26 +467,54 @@
   document.addEventListener('fullscreenchange', syncFs);
   document.addEventListener('webkitfullscreenchange', syncFs);
 
-  /* ----- settings: win mode + turn timer ----- */
+  /* ----- settings: win mode · play mode · turn timer ----- */
+  // Win mode and play mode lock once the first token is played; New game frees them again.
+  function syncLocks(){
+    const locked = !!(history && history.length);
+    document.querySelectorAll('#modeSeg button, #redirectSeg button')
+            .forEach(b=>{ b.disabled = locked; });
+  }
   document.querySelectorAll('#modeSeg button').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      if(btn.dataset.mode===mode) return;
+      if(btn.disabled || btn.dataset.mode===mode) return;
       mode = btn.dataset.mode;
       document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('active', x===btn));
-      reset();                       // changing the win condition starts a fresh game
     });
   });
-  document.querySelectorAll('#timerSeg button').forEach(btn=>{
+  document.querySelectorAll('#redirectSeg button').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      document.querySelectorAll('#timerSeg button').forEach(x=>x.classList.toggle('active', x===btn));
-      turnTimer.setDuration(+btn.dataset.sec);
-      startTurnTimer();              // apply immediately to the current turn
+      if(btn.disabled) return;
+      forced = btn.dataset.redirect==='forced';
+      document.querySelectorAll('#redirectSeg button').forEach(x=>x.classList.toggle('active', x===btn));
     });
   });
+
+  // turn timer — presets + a custom seconds field (always adjustable)
+  const timerCustom = document.getElementById('timerCustom');
+  function selectTimer(sec, srcBtn){
+    turnTimer.setDuration(sec);
+    document.querySelectorAll('#timerSeg button').forEach(x=>x.classList.toggle('active', x===srcBtn));
+    timerCustom.classList.toggle('active', srcBtn===null);
+    startTurnTimer();                // apply immediately to the current turn
+  }
+  document.querySelectorAll('#timerSeg button').forEach(btn=>{
+    btn.addEventListener('click', ()=> selectTimer(+btn.dataset.sec, btn));
+  });
+  function applyCustomTimer(){
+    let n = parseInt(timerCustom.value, 10);
+    if(!Number.isFinite(n) || n<1) return;          // ignore empty / invalid
+    n = Math.min(600, n);
+    timerCustom.value = n;
+    selectTimer(n, null);                           // null source → custom is the active choice
+  }
+  timerCustom.addEventListener('change', applyCustomTimer);
+  timerCustom.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); applyCustomTimer(); timerCustom.blur(); } });
+  timerCustom.addEventListener('focus', ()=> timerCustom.select());
 
   document.getElementById('newBtn').addEventListener('click', reset);
   undoBtn.addEventListener('click', undo);
   document.addEventListener('keydown', e=>{
+    if(/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     if(e.key==='u'||e.key==='U') undo();
     else if(e.key==='r'||e.key==='R') reset();
     else if(e.key==='f'||e.key==='F') toggleFs();
