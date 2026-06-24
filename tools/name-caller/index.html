@@ -183,7 +183,12 @@
   .winner-card .who{margin:10px 0 4px;font-size:clamp(40px,9vh,104px);font-weight:800;letter-spacing:-.01em;
     color:var(--board);line-height:1.05;word-break:break-word;}
   .winner-card .from{font-size:14px;color:var(--muted);font-weight:600;min-height:1.2em;}
-  .winner-actions{margin-top:24px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+  .hat-state{display:inline-flex;align-items:center;gap:7px;margin-top:14px;font-size:13px;font-weight:700;
+    letter-spacing:.02em;color:var(--ok);}
+  .hat-state .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(63,158,107,.16);}
+  .hat-state.out{color:var(--accent-deep);}
+  .hat-state.out .dot{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+  .winner-actions{margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
   .winner-actions .btn{font-size:15px;padding:12px 22px;}
 
   /* confetti */
@@ -260,8 +265,8 @@
 
         <div class="picked-wrap" id="pickedWrap" style="display:none">
           <div class="picked-head">
-            <h3 class="section-title">Already drawn <span class="count-pill" id="pickedCount">0</span></h3>
-            <button class="btn small" id="resetPicked">Reset</button>
+            <h3 class="section-title">Out of the hat <span class="count-pill" id="pickedCount">0</span></h3>
+            <button class="btn small" id="resetPicked">Put all back</button>
           </div>
           <ul class="picked-list" id="pickedList"></ul>
         </div>
@@ -271,7 +276,7 @@
       <section class="tabpanel" data-panel="options">
         <label class="opt">
           <input type="checkbox" id="optNoRepeat" checked>
-          <span class="lab"><b>No repeats</b><span>Set each name aside after it's drawn, so everyone gets a turn before any repeats.</span></span>
+          <span class="lab"><b>No repeats</b><span>Automatically take each name out of the hat after it's drawn, so everyone gets a turn before any repeats. You can always take a name out or put it back by hand.</span></span>
         </label>
         <label class="opt">
           <input type="checkbox" id="optCombine">
@@ -289,7 +294,7 @@
           <div class="lab"><span>Draw length</span><b id="speedVal">3s</b></div>
           <input type="range" id="optSpeed" min="2" max="6" step="1" value="3">
         </div>
-        <p class="hint">Tip: tap the hat — or press <b>Space</b> — to draw. Names you add here stay saved on this computer, separately for each class. Manage your shared <b>Class Lists</b> on the Teaching Tools home page.</p>
+        <p class="hint">Tip: tap the hat — or press <b>Space</b> — to draw. When a name comes up you can <b>take it out of the hat</b> or <b>put it back in</b>. Names you add here stay saved on this computer, separately for each class. Manage your shared <b>Class Lists</b> on the Teaching Tools home page.</p>
       </section>
     </aside>
 
@@ -332,7 +337,7 @@
         <span class="dotline"></span>
         <span class="stat">In the hat <b id="sbRemain">0</b></span>
         <span class="dotline"></span>
-        <span class="stat">Drawn <b id="sbPicked">0</b></span>
+        <span class="stat">Out of hat <b id="sbPicked">0</b></span>
         <span class="last" id="sbLast"></span>
       </div>
     </section>
@@ -342,10 +347,12 @@
 <!-- winner overlay -->
 <div class="winner" id="winner">
   <div class="winner-card">
-    <div class="eyebrow">Out of the hat…</div>
+    <div class="eyebrow">The hat picks…</div>
     <div class="who" id="winnerName">—</div>
     <div class="from" id="winnerFrom"></div>
+    <div class="hat-state" id="hatState"><span class="dot"></span><span id="hatStateText">In the hat</span></div>
     <div class="winner-actions">
+      <button class="btn" id="hatToggle"><span class="ic">✋</span>Take out of the hat</button>
       <button class="btn" id="winClose">Close</button>
       <button class="btn primary" id="winAgain">Draw again</button>
     </div>
@@ -405,10 +412,13 @@
 
   /* ---------- helpers ---------- */
   const curClass=()=>state.classes[state.active];
+  // Names still in the hat for class ci = its names minus any set aside (picked).
+  // "No repeats" only controls whether a draw sets a name aside automatically;
+  // names can also be taken out / put back by hand at any time.
   function availOf(ci){
     const c=state.classes[ci];
-    if(state.opts.noRepeat){ const pk=new Set(c.picked); return c.names.filter(n=>!pk.has(n)).map(n=>({name:n,ci})); }
-    return c.names.map(n=>({name:n,ci}));
+    const pk=new Set(c.picked);
+    return c.names.filter(n=>!pk.has(n)).map(n=>({name:n,ci}));
   }
   function entries(){
     return state.opts.combine ? availOf(0).concat(availOf(1)) : availOf(state.active);
@@ -467,16 +477,29 @@
   function showWinner(entry){
     $('winnerName').textContent=entry.name;
     $('winnerFrom').textContent = state.opts.combine ? ('from '+(state.classes[entry.ci].name||('Class '+(entry.ci+1)))) : '';
-    if(state.opts.noRepeat){ markPicked(entry); }   // set aside so everyone gets a turn
+    if(state.opts.noRepeat){ setOut(entry, true); }   // auto-set-aside so everyone gets a turn
     $('winner').classList.add('show');
+    renderHatState();
     $('winAgain').focus();
   }
   function hideWinner(){ $('winner').classList.remove('show'); }
 
-  function markPicked(entry){
+  function isOut(entry){ return state.classes[entry.ci].picked.includes(entry.name); }
+  // Take a name out of the hat (out=true) or put it back (out=false).
+  function setOut(entry, out){
     const c=state.classes[entry.ci];
-    if(!c.picked.includes(entry.name)) c.picked.push(entry.name);
-    save(); renderPicked(); updateStatus();
+    if(out){ if(!c.picked.includes(entry.name)) c.picked.push(entry.name); }
+    else   { c.picked=c.picked.filter(n=>n!==entry.name); }
+    save(); renderPicked(); renderStage(); updateStatus();
+  }
+  // Reflect the current pick's in/out state on the winner overlay.
+  function renderHatState(){
+    if(!lastWinner) return;
+    const out=isOut(lastWinner);
+    $('hatState').classList.toggle('out', out);
+    $('hatStateText').textContent = out ? 'Out of the hat' : 'In the hat';
+    $('hatToggle').innerHTML = out ? '<span class="ic">↩</span>Put back in the hat'
+                                   : '<span class="ic">✋</span>Take out of the hat';
   }
 
   /* ---------- rendering panel ---------- */
@@ -495,7 +518,7 @@
   function renderPicked(){
     const c=curClass();
     const wrap=$('pickedWrap');
-    if(!state.opts.noRepeat || c.picked.length===0){ wrap.style.display='none'; }
+    if(c.picked.length===0){ wrap.style.display='none'; }
     else{
       wrap.style.display='flex';
       $('pickedCount').textContent=c.picked.length;
@@ -505,7 +528,7 @@
         li.innerHTML=`<span></span><button class="undo" title="Put back in the hat">↩</button>`;
         li.querySelector('span').textContent=name;
         li.querySelector('.undo').addEventListener('click',()=>{
-          c.picked=c.picked.filter(n=>n!==name); save(); renderPicked(); updateStatus();
+          setOut({name, ci:state.active}, false); renderHatState();
         });
         ul.appendChild(li);
       });
@@ -543,7 +566,7 @@
     }
     $('sbNames').textContent=total;
     $('sbRemain').textContent=remain;
-    $('sbPicked').textContent = state.opts.noRepeat ? picked : 0;
+    $('sbPicked').textContent = picked;
     $('sbLast').innerHTML = lastWinner ? ('Last pick <b>'+escapeHtml(lastWinner.name)+'</b>') : '';
   }
   function renderAll(){ renderClassBar(); renderNames(); renderPicked(); renderOptions(); renderStage(); updateStatus(); }
@@ -702,7 +725,7 @@
     if(!confirm('Clear all names in “'+(curClass().name||'this class')+'”?')) return;
     curClass().names=[]; curClass().picked=[]; save(); renderAll();
   });
-  $('resetPicked').addEventListener('click',()=>{ curClass().picked=[]; save(); renderStage(); renderPicked(); updateStatus(); });
+  $('resetPicked').addEventListener('click',()=>{ curClass().picked=[]; save(); renderStage(); renderPicked(); updateStatus(); renderHatState(); });
 
   // import
   $('fromListBtn').addEventListener('click',openClassLists);
@@ -728,6 +751,8 @@
   $('hatWrap').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.code==='Space'){ e.preventDefault(); draw(); } });
   $('winAgain').addEventListener('click',()=>{ hideWinner(); draw(); });
   $('winClose').addEventListener('click',hideWinner);
+  // take the current pick out of the hat / put it back, right from the reveal
+  $('hatToggle').addEventListener('click',()=>{ if(lastWinner){ setOut(lastWinner, !isOut(lastWinner)); renderHatState(); } });
 
   // present mode
   $('presentBtn').addEventListener('click',()=>{
