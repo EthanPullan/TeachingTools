@@ -165,6 +165,42 @@
   .confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:2px;animation:fall linear forwards;}
   @keyframes fall{to{transform:translateY(110vh) rotate(720deg);}}
 
+  /* ── badges ── */
+  .tier-tin{--tc:#94a0a8;} .tier-silver{--tc:#8fa6bd;} .tier-gold{--tc:#cf9b2e;}
+  .scorebadges{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;}
+  .bchip{font-size:10px;font-weight:700;border-radius:20px;padding:1px 7px;border:1px solid var(--tc,var(--line));
+    color:var(--tc,var(--muted));background:#fff;white-space:nowrap;}
+  .badgebar{flex:none;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;min-height:0;}
+  .badgebar:empty{display:none;}
+  .badgebtn{border:1px solid var(--tc,var(--line));background:#fff;border-radius:10px;padding:8px 13px;cursor:pointer;
+    font-size:13px;font-weight:700;color:var(--ink);display:inline-flex;align-items:center;gap:7px;transition:background .12s,transform .05s,box-shadow .12s;}
+  .badgebtn .bt{width:8px;height:8px;border-radius:50%;background:var(--tc,var(--muted));flex:none;}
+  .badgebtn .ch{font-family:var(--mono);font-size:12px;color:var(--muted);}
+  .badgebtn:hover{background:var(--panel-2);} .badgebtn:active{transform:translateY(1px);}
+  .badgebtn.armed{background:var(--accent-soft);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+  .badgebtn[disabled]{opacity:.4;cursor:not-allowed;}
+  .badgebtn.info{cursor:default;background:var(--panel-2);}
+  /* shop */
+  .shop-tabs{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .shop-tab{flex:1;min-width:200px;border:2px solid var(--line);border-radius:12px;background:var(--panel-2);cursor:pointer;padding:10px 12px;text-align:left;}
+  .shop-tab.active.p1{border-color:var(--p1);box-shadow:0 0 0 3px var(--p1-soft);}
+  .shop-tab.active.p2{border-color:var(--p2);box-shadow:0 0 0 3px var(--p2-soft);}
+  .shop-tab .st-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .shop-tab .st-name{font-weight:700;font-size:13.5px;} .shop-tab .st-coins{font-family:var(--mono);font-weight:800;color:var(--accent-deep);font-size:13px;}
+  .shop-tab .st-slots{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap;}
+  .shop-tab .sslot{font-size:10.5px;font-weight:700;border:1px dashed var(--line);border-radius:16px;padding:2px 9px;color:var(--muted);min-width:48px;text-align:center;}
+  .shop-tab .sslot.filled{border-style:solid;border-color:var(--tc,var(--line));color:#3a3a3a;background:#fff;cursor:pointer;}
+  .shop-tab .sslot.filled:hover{background:var(--danger-soft);border-color:var(--danger);color:var(--danger);}
+  .tier-group{margin-bottom:14px;}
+  .tier-group h4{margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--tc);}
+  .tier-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:10px;}
+  .bcard{border:1px solid var(--tc,var(--line));border-left-width:5px;border-radius:11px;background:var(--panel);padding:10px 12px;text-align:left;cursor:pointer;transition:background .12s,transform .05s;}
+  .bcard:hover{background:var(--panel-2);} .bcard:active{transform:translateY(1px);}
+  .bcard[disabled]{opacity:.5;cursor:not-allowed;}
+  .bcard .bc-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+  .bcard .bc-name{font-weight:700;font-size:14px;} .bcard .bc-cost{font-family:var(--mono);font-weight:800;color:var(--accent-deep);font-size:13.5px;}
+  .bcard .bc-desc{font-size:12px;color:var(--muted);line-height:1.35;margin-top:3px;}
+
   @media (max-width:880px){ .scorebar{flex-wrap:wrap;} .vs{order:-1;width:100%;flex-direction:row;gap:8px;} .controls .btn{flex:1;justify-content:center;} .bag-cols{grid-template-columns:1fr;} }
   @media (prefers-reduced-motion:reduce){ .die.roll,.felt.farkle,.card{animation:none;} .confetti{display:none;} .btn:active{transform:none;} }
 </style>
@@ -181,6 +217,7 @@
     <div class="seg" id="stakeSeg"><span class="lab">Stake</span>
       <button data-s="5">5</button><button data-s="10" class="active">10</button><button data-s="25">25</button></div>
     <button class="btn" id="bagBtn"><span class="ic">🎲</span>Dice bag</button>
+    <button class="btn" id="badgesBtn"><span class="ic">🛡️</span>Badges</button>
     <button class="btn" id="soundBtn" aria-pressed="false"><span class="ic">🔈</span>Sound</button>
     <button class="btn primary" id="newBtn"><span class="ic">＋</span>New game</button>
   </header>
@@ -191,7 +228,8 @@
       <div class="meta">
         <input class="pname" id="nm0" value="Player 1" maxlength="16" aria-label="Player 1 name">
         <div class="row"><span class="total" id="tot0">0</span><span class="turn-add" id="add0"></span></div>
-        <span class="coins" id="coin0">⬤ 100</span>
+        <span class="coins" id="coin0">⬤ 250</span>
+        <div class="scorebadges" id="badges0"></div>
       </div>
     </div>
     <div class="vs">vs<span class="pot" id="potLbl">pot 20</span></div>
@@ -200,7 +238,8 @@
       <div class="meta">
         <input class="pname" id="nm1" value="Player 2" maxlength="16" aria-label="Player 2 name">
         <div class="row"><span class="total" id="tot1">0</span><span class="turn-add" id="add1"></span></div>
-        <span class="coins" id="coin1">⬤ 100</span>
+        <span class="coins" id="coin1">⬤ 250</span>
+        <div class="scorebadges" id="badges1"></div>
       </div>
     </div>
   </section>
@@ -216,6 +255,7 @@
       <div class="kept" id="kept"></div>
       <div class="turn-tally"><span>This turn</span><b id="turnTally">0</b></div>
     </div>
+    <div class="badgebar" id="badgeBar"></div>
     <div class="controls">
       <button class="btn go" id="rollBtn"><span class="ic">🎲</span>Roll</button>
       <button class="btn" id="setBtn">Score &amp; roll on</button>
@@ -240,6 +280,23 @@
       <div class="palette-title">Tap a slot above, then choose a die</div>
       <div class="palette" id="palette"></div>
       <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" id="bagDone">Done</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- badge shop modal -->
+<div class="overlay" id="shop">
+  <div class="card">
+    <div class="card-head">
+      <h2>Badge Shop</h2><span class="sub">Spend coins on badges in Tin, Silver &amp; Gold tiers — up to 3 each — then start the match. Badges last one match.</span>
+    </div>
+    <div class="card-body">
+      <div class="shop-tabs" id="shopTabs"></div>
+      <div id="shopCatalog"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:12px;flex-wrap:wrap">
+        <span class="hint" id="shopHint"></span>
+        <button class="btn primary" id="shopStart">Start match →</button>
+      </div>
     </div>
   </div>
 </div>
@@ -359,25 +416,59 @@
     if(c[1]||c[5]) return true; if(c[2]>=3||c[3]>=3||c[4]>=3||c[6]>=3) return true; return false; }
 
   /* =========================================================================
+     BADGES — bought with coins before a match (Tin / Silver / Gold tiers) and
+     used up that match. Effects are data; the engine reads fx/val/charges so it
+     never special-cases an individual badge.
+       passive: headstart (start points), might (extra dice in your cup)
+       active:  fortune (reroll up to N dice), transmute (turn a die into V),
+                warlord (double your turn when you bank)
+       on-bust: resurrect (reroll instead of busting, N times)
+     ========================================================================= */
+  const BADGES=[
+    {id:'head_t', name:'Headstart',   tier:'tin',    cost:20,  fx:'headstart', val:300,            desc:'Start the match with +300 points'},
+    {id:'fort_t', name:'Fortune',     tier:'tin',    cost:25,  fx:'fortune',   val:1, charges:1,   desc:'Reroll up to 1 of your dice (once)'},
+    {id:'res_t',  name:'Second Wind', tier:'tin',    cost:30,  fx:'resurrect',        charges:1,   desc:'Survive one bust this match'},
+    {id:'head_s', name:'Headstart',   tier:'silver', cost:45,  fx:'headstart', val:800,            desc:'Start the match with +800 points'},
+    {id:'fort_s', name:'Fortune',     tier:'silver', cost:50,  fx:'fortune',   val:2, charges:1,   desc:'Reroll up to 2 of your dice (once)'},
+    {id:'might_s',name:'Extra Die',   tier:'silver', cost:55,  fx:'might',     val:1,              desc:'Roll 1 extra die all match'},
+    {id:'tran_s', name:'Transmute',   tier:'silver', cost:55,  fx:'transmute', val:5, charges:1,   desc:'Turn one die into a 5 (once)'},
+    {id:'fort_g', name:'Fortune',     tier:'gold',   cost:95,  fx:'fortune',   val:3, charges:1,   desc:'Reroll up to 3 of your dice (once)'},
+    {id:'might_g',name:'Extra Dice',  tier:'gold',   cost:100, fx:'might',     val:2,              desc:'Roll 2 extra dice all match'},
+    {id:'tran_g', name:'Transmute',   tier:'gold',   cost:100, fx:'transmute', val:1, charges:1,   desc:'Turn one die into a 1 (once)'},
+    {id:'war_g',  name:'Warlord',     tier:'gold',   cost:120, fx:'warlord',          charges:1,   desc:'Double your turn score when you bank (once)'},
+    {id:'res_g',  name:'Resurrection',tier:'gold',   cost:110, fx:'resurrect',        charges:2,   desc:'Survive two busts this match'}
+  ];
+  const BADGE_BY_ID={}; BADGES.forEach(b=>BADGE_BY_ID[b.id]=b);
+  const defOf=inst=>BADGE_BY_ID[inst.id];
+  const TIER_NAME={tin:'Tin',silver:'Silver',gold:'Gold'};
+
+  /* =========================================================================
      3. GAME STATE
      ========================================================================= */
+  const START_COINS=250, MAX_BADGES=3;
   const players=[
-    {name:'Player 1', total:0, coins:100, loadout:Array(RULES.diceCount).fill('fair'), dice:[]},
-    {name:'Player 2', total:0, coins:100, loadout:Array(RULES.diceCount).fill('fair'), dice:[]}
+    {name:'Player 1', total:0, coins:START_COINS, loadout:Array(RULES.diceCount).fill('fair'), badges:[], dice:[]},
+    {name:'Player 2', total:0, coins:START_COINS, loadout:Array(RULES.diceCount).fill('fair'), badges:[], dice:[]}
   ];
   let target=RULES.target, stake=10;
   let cur=0, turnPoints=0, dice=[], phase='idle', finalTrigger=-1, farkleTimer=null;
+  let armed=null, warlordArmed=false, flash='';
+  const cupSize=p=>RULES.diceCount + p.badges.filter(b=>defOf(b).fx==='might').reduce((s,b)=>s+(defOf(b).val||0),0);
 
   function startTurn(){
-    turnPoints=0; phase='idle';
-    players[cur].dice=players[cur].loadout.map(id=>specFor(id));
-    dice=players[cur].dice.map((spec,i)=>({id:i, spec, value:0, state:'idle', rot:rndRot(), fresh:false}));
+    turnPoints=0; phase='idle'; armed=null; warlordArmed=false;
+    const lo=players[cur].loadout, n=cupSize(players[cur]);   // Might badges add dice to the cup
+    dice=Array.from({length:n},(_,i)=>({id:i, spec:specFor(lo[i%lo.length]), value:0, state:'idle', rot:rndRot(), fresh:false}));
     render();
   }
-  function newGame(){
+  // Begin a match with whatever badges are equipped (Headstart points + reset charges).
+  function startMatch(){
     if(farkleTimer){ clearTimeout(farkleTimer); farkleTimer=null; }
-    players.forEach(p=>p.total=0);
-    cur=0; finalTrigger=-1; hide('winner'); startTurn();
+    players.forEach(p=>{
+      p.total=p.badges.filter(b=>defOf(b).fx==='headstart').reduce((s,b)=>s+(defOf(b).val||0),0);
+      p.badges.forEach(b=>{ const d=defOf(b); if(d.charges) b.charges=d.charges; });
+    });
+    cur=0; finalTrigger=-1; armed=null; warlordArmed=false; hide('winner'); hide('shop'); startTurn();
   }
   const selInfo=()=>{ const r=scoreSelection(dice.filter(d=>d.state==='selected').map(d=>d.value), RULES);
     return {count:dice.filter(d=>d.state==='selected').length, points:r.points, valid:r.valid && r.points>0}; };
@@ -405,11 +496,21 @@
     if(phase!=='select' && phase!=='hotdice') return; const s=selInfo();
     if(phase==='select' && s.count>0){ if(!s.valid) return; turnPoints+=s.points; dice.forEach(d=>{ if(d.state==='selected') d.state='kept'; }); }
     if(turnPoints<=0) return;
+    if(warlordArmed){ const w=players[cur].badges.find(b=>defOf(b).fx==='warlord' && b.charges>0); if(w){ w.charges--; turnPoints*=2; } warlordArmed=false; }
     const p=players[cur]; p.total+=turnPoints;
     if(p.total>=target && finalTrigger<0) finalTrigger=cur;
     endTurn();
   }
-  function farkle(){ phase='farkle';
+  function farkle(){
+    // Resurrection badge: spend a charge to reroll the busted dice instead of losing the turn.
+    const res=players[cur].badges.find(b=>defOf(b).fx==='resurrect' && b.charges>0);
+    if(res){ res.charges--; flash='🜂 Saved! Your throw is rerolled.';
+      dice.forEach(d=>{ if(d.state==='active'){ d.value=rollDie(d.spec); d.fresh=true; } });
+      clack(3);
+      if(hasAnyScore(dice.filter(d=>d.state==='active').map(d=>d.value))){ phase='select'; render(); return; }
+      return farkle();   // reroll also busted — try the next charge, else fall through
+    }
+    phase='farkle'; flash='';
     const f=$('felt'); if(f){ f.classList.remove('farkle'); void f.offsetWidth; f.classList.add('farkle'); }
     render(); farkleTimer=setTimeout(()=>{ turnPoints=0; endTurn(); }, 1500);
   }
@@ -421,6 +522,43 @@
     let wi = players[0].total>players[1].total ? 0 : players[1].total>players[0].total ? 1 : -1;
     if(wi>=0){ players[wi].coins+=stake; players[1-wi].coins=Math.max(0,players[1-wi].coins-stake); }
     render(); showWinner(wi);
+    players.forEach(p=>p.badges=[]);   // badges are spent each match — re-buy in the shop next time
+  }
+
+  /* ---- badge activation (in-turn) ---- */
+  function dieClick(id){
+    const d=dice.find(x=>x.id===id); if(!d) return;
+    if(armed && armed.fx==='fortune'){
+      if(d.state==='active'){ d.value=rollDie(d.spec); d.fresh=true; armed.remaining--; clack(1);
+        if(armed.remaining<=0){ armed=null; afterFortune(); } else render(); }
+      return;
+    }
+    if(armed && armed.fx==='transmute'){
+      if(d.state==='active'||d.state==='selected'){ d.value=armed.value; armed=null; render(); }
+      return;
+    }
+    toggleSelect(id);
+  }
+  function afterFortune(){
+    if(!hasAnyScore(dice.filter(d=>d.state==='active').map(d=>d.value)) && !dice.some(d=>d.state==='selected')) return farkle();
+    render();
+  }
+  function armBadge(inst){
+    const d=defOf(inst);
+    if(d.fx==='warlord'){ if(warlordArmed) warlordArmed=false; else if(inst.charges>0 && (phase==='select'||phase==='hotdice')) warlordArmed=true; render(); return; }
+    if(phase!=='select') return;
+    if(armed){ const same=armed.badge===inst; cancelArm(); if(same){ render(); return; } }
+    if(inst.charges<=0) return;
+    inst.charges--;
+    if(d.fx==='fortune') armed={fx:'fortune', remaining:d.val, full:d.val, badge:inst};
+    else if(d.fx==='transmute') armed={fx:'transmute', value:d.val, badge:inst};
+    render();
+  }
+  function cancelArm(){
+    if(!armed) return;
+    if(armed.fx==='fortune'){ if(armed.remaining===armed.full) armed.badge.charges++; }   // refund only if unused
+    else if(armed.fx==='transmute'){ armed.badge.charges++; }
+    armed=null;
   }
 
   /* =========================================================================
@@ -444,14 +582,14 @@
     const inPlay=dice.filter(d=>d.state==='active'||d.state==='selected');
     $('trayEmpty').style.display=inPlay.length?'none':'flex';
     $('trayEmpty').innerHTML = phase==='idle' ? `${tag(cur)} — press <b>Roll</b> to throw the dice`
-      : (phase==='hotdice' ? `🔥 Hot dice! Press <b>Roll</b> for all six again, or bank` : '');
+      : (phase==='hotdice' ? `🔥 Hot dice! Press <b>Roll</b> for all your dice again, or bank` : '');
     inPlay.forEach((d,i)=>{
       const el=document.createElement('div');
       el.className='die pick'+(d.state==='selected'?' sel':'')+(d.fresh?' roll':'');
       el.style.setProperty('--rot', d.rot);
       if(d.fresh) el.style.animationDelay=(i%8*0.05)+'s';
       el.innerHTML=d6SVG(d.value, d.spec.color);
-      el.addEventListener('click',()=>toggleSelect(d.id));
+      el.addEventListener('click',()=>dieClick(d.id));
       tray.appendChild(el); d.fresh=false;
     });
     const kept=$('kept'); kept.innerHTML='';
@@ -471,17 +609,89 @@
     const bankVal=turnPoints+(s.valid?s.points:0);
     const badPick=phase==='select' && s.count>0 && !s.valid;
     bankBtn.disabled=!((phase==='select'||phase==='hotdice') && bankVal>0 && !badPick);
-    bankBtn.textContent=bankVal>0?`Bank ${fmt(bankVal)} & pass`:'Bank & pass';
+    bankBtn.textContent=(warlordArmed&&bankVal>0)?`Bank ${fmt(bankVal*2)} & pass`:(bankVal>0?`Bank ${fmt(bankVal)} & pass`:'Bank & pass');
+    if(armed){ rollBtn.disabled=setBtn.disabled=bankBtn.disabled=true; }   // resolve the badge first
 
     const st=$('status');
-    if(phase==='idle') st.innerHTML=`${tag(cur)} — roll to start the turn`;
-    else if(phase==='hotdice') st.innerHTML=`🔥 Hot dice, ${tag(cur)}! Roll all six again or bank ${fmt(turnPoints)}`;
+    if(armed && armed.fx==='fortune') st.innerHTML=`🎲 Reroll — tap up to <b>${armed.remaining}</b> ${armed.remaining===1?'die':'dice'}, or tap Fortune again to stop`;
+    else if(armed && armed.fx==='transmute') st.innerHTML=`✨ Transmute — tap a die to turn it into a <b>${armed.value}</b>`;
+    else if(flash){ st.innerHTML=flash; flash=''; }
+    else if(phase==='idle') st.innerHTML=`${tag(cur)} — roll to start the turn`;
+    else if(phase==='hotdice') st.innerHTML=`🔥 Hot dice, ${tag(cur)}! Roll again or bank ${fmt(turnPoints)}`;
     else if(phase==='farkle') st.innerHTML=`<span class="warn">💀 Farkle! ${tag(cur)} loses this turn's points.</span>`;
     else if(phase==='over') st.innerHTML='';
     else { if(badPick) st.innerHTML=`<span class="warn">Those dice don’t all score — adjust your pick.</span>`;
       else if(s.count>0) st.innerHTML=`${tag(cur)}: keep going or bank. Selected <b>+${fmt(s.points)}</b>.`;
       else st.innerHTML=`${tag(cur)} — tap the dice that score, then roll on or bank`; }
+    if(warlordArmed && (phase==='select'||phase==='hotdice')) st.innerHTML+=` <b style="color:var(--accent-deep)">⚔ Warlord: bank doubled</b>`;
+
+    renderBadgeBar(); renderScoreBadges();
   }
+
+  function renderBadgeBar(){
+    const bar=$('badgeBar'); bar.innerHTML='';
+    if(phase==='over') return;
+    players[cur].badges.forEach(inst=>{
+      const d=defOf(inst);
+      if(d.fx==='fortune'||d.fx==='transmute'||d.fx==='warlord'){
+        const isArmed=(d.fx==='warlord'&&warlordArmed)||(armed&&armed.badge===inst);
+        let usable;
+        if(d.fx==='warlord') usable=isArmed||(inst.charges>0&&(phase==='select'||phase==='hotdice'));
+        else usable=inst.charges>0 && phase==='select';
+        const btn=document.createElement('button'); btn.className='badgebtn tier-'+d.tier+(isArmed?' armed':'');
+        btn.disabled=!usable && !isArmed;
+        btn.innerHTML=`<span class="bt"></span>${d.name}<span class="ch">${isArmed?'●':'×'+inst.charges}</span>`;
+        btn.title=d.desc;
+        btn.addEventListener('click',()=>armBadge(inst));
+        bar.appendChild(btn);
+      } else if(d.fx==='resurrect'){
+        const chip=document.createElement('span'); chip.className='badgebtn info tier-'+d.tier;
+        chip.innerHTML=`<span class="bt"></span>${d.name}<span class="ch">×${inst.charges}</span>`; chip.title=d.desc;
+        bar.appendChild(chip);
+      }
+    });
+  }
+  function renderScoreBadges(){
+    for(let i=0;i<2;i++){ const wrap=$('badges'+i); if(!wrap) continue; wrap.innerHTML='';
+      players[i].badges.forEach(inst=>{ const d=defOf(inst); const c=document.createElement('span');
+        c.className='bchip tier-'+d.tier; c.textContent=d.name+(d.charges?' ×'+inst.charges:''); c.title=d.desc; wrap.appendChild(c); }); }
+  }
+
+  /* ---- badge shop ---- */
+  let shopFor=0;
+  function openShop(){ shopFor=0; renderShop(); show('shop'); }
+  function renderShop(){
+    const tabs=$('shopTabs'); tabs.innerHTML='';
+    for(let i=0;i<2;i++){
+      const t=document.createElement('button'); t.className='shop-tab p'+(i+1)+(shopFor===i?' active':'');
+      const filled=players[i].badges.map((inst,si)=>{ const d=defOf(inst); return `<span class="sslot filled tier-${d.tier}" data-sell="${i}:${si}" title="Sell ${escapeHtml(d.name)}">${d.name}</span>`; }).join('');
+      const empties=Array.from({length:Math.max(0,MAX_BADGES-players[i].badges.length)},()=>`<span class="sslot">empty</span>`).join('');
+      t.innerHTML=`<div class="st-top"><span class="st-name">${escapeHtml(players[i].name||('Player '+(i+1)))}</span><span class="st-coins">⬤ ${fmt(players[i].coins)}</span></div><div class="st-slots">${filled}${empties}</div>`;
+      t.addEventListener('click',e=>{ const sell=e.target.closest('[data-sell]'); if(sell){ const a=sell.dataset.sell.split(':'); sellBadge(+a[0],+a[1]); return; } shopFor=i; renderShop(); });
+      tabs.appendChild(t);
+    }
+    const cat=$('shopCatalog'); cat.innerHTML='';
+    ['tin','silver','gold'].forEach(tier=>{
+      const grp=document.createElement('div'); grp.className='tier-group tier-'+tier;
+      grp.innerHTML=`<h4>${TIER_NAME[tier]}</h4>`;
+      const cards=document.createElement('div'); cards.className='tier-cards';
+      BADGES.filter(b=>b.tier===tier).forEach(d=>{
+        const full=players[shopFor].badges.length>=MAX_BADGES, afford=players[shopFor].coins>=d.cost;
+        const card=document.createElement('button'); card.className='bcard tier-'+tier; card.disabled=full||!afford;
+        card.innerHTML=`<div class="bc-top"><span class="bc-name">${d.name}</span><span class="bc-cost">${d.cost}</span></div><div class="bc-desc">${d.desc}</div>`;
+        card.title=full?('Slots full (max '+MAX_BADGES+')'):(!afford?'Not enough coins':d.desc);
+        card.addEventListener('click',()=>buyBadge(d.id));
+        cards.appendChild(card);
+      });
+      grp.appendChild(cards); cat.appendChild(grp);
+    });
+    $('shopHint').textContent=`Shopping as ${players[shopFor].name||('Player '+(shopFor+1))} · tap a badge to buy, a filled slot to sell · up to ${MAX_BADGES} each`;
+  }
+  function buyBadge(id){ const d=BADGE_BY_ID[id], p=players[shopFor];
+    if(p.badges.length>=MAX_BADGES || p.coins<d.cost) return;
+    p.coins-=d.cost; p.badges.push({id, charges:d.charges||0}); renderShop(); render(); }
+  function sellBadge(pi,si){ const p=players[pi], inst=p.badges[si]; if(!inst) return;
+    p.coins+=defOf(inst).cost; p.badges.splice(si,1); renderShop(); render(); }
 
   /* winner */
   function showWinner(wi){
@@ -541,13 +751,16 @@
   $('rollBtn').addEventListener('click',roll);
   $('setBtn').addEventListener('click',setAsideAndRoll);
   $('bankBtn').addEventListener('click',bank);
-  $('newBtn').addEventListener('click',()=>{ if((players[0].total>0||players[1].total>0||turnPoints>0) && phase!=='over'){ if(!confirm('Start a new game? Current scores will be cleared (coins are kept).')) return; } newGame(); });
-  $('winNew').addEventListener('click',newGame);
+  $('newBtn').addEventListener('click',openShop);
+  $('badgesBtn').addEventListener('click',openShop);
+  $('winNew').addEventListener('click',()=>{ hide('winner'); openShop(); });
+  $('shopStart').addEventListener('click',startMatch);
+  $('shop').addEventListener('click',e=>{ if(e.target===$('shop')) hide('shop'); });
   $('nm0').addEventListener('input',e=>{ players[0].name=e.target.value; render(); });
   $('nm1').addEventListener('input',e=>{ players[1].name=e.target.value; render(); });
   $('targetSeg').addEventListener('click',e=>{ const b=e.target.closest('button[data-t]'); if(!b) return;
-    if((players[0].total>0||players[1].total>0) && phase!=='over' && !confirm('Change the target and start a new game?')) return;
-    target=+b.dataset.t; [...$('targetSeg').querySelectorAll('button')].forEach(x=>x.classList.toggle('active',x===b)); newGame(); });
+    if((players[0].total>0||players[1].total>0) && phase!=='over' && !confirm('Change the target and start a new match?')) return;
+    target=+b.dataset.t; [...$('targetSeg').querySelectorAll('button')].forEach(x=>x.classList.toggle('active',x===b)); startMatch(); });
   $('stakeSeg').addEventListener('click',e=>{ const b=e.target.closest('button[data-s]'); if(!b) return;
     stake=+b.dataset.s; [...$('stakeSeg').querySelectorAll('button')].forEach(x=>x.classList.toggle('active',x===b)); render(); });
   $('bagBtn').addEventListener('click',openBag);
@@ -563,12 +776,14 @@
   document.addEventListener('keydown',e=>{
     if(/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     if($('bag').classList.contains('show')){ if(e.key==='Escape') hide('bag'); return; }
-    if($('winner').classList.contains('show')){ if(e.key==='Enter'){ e.preventDefault(); newGame(); } return; }
+    if($('shop').classList.contains('show')){ if(e.key==='Escape') hide('shop'); return; }
+    if($('winner').classList.contains('show')){ if(e.key==='Enter'){ e.preventDefault(); hide('winner'); openShop(); } return; }
+    if(armed){ if(e.key==='Escape'){ cancelArm(); render(); } return; }
     if(e.code==='Space'){ e.preventDefault(); if(phase==='idle'||phase==='hotdice') roll(); else if(phase==='select' && selInfo().valid) setAsideAndRoll(); }
     else if(e.key==='Enter'){ e.preventDefault(); bank(); }
   });
 
-  buildPalette(); newGame();
+  buildPalette(); startMatch();
 })();
 </script>
 </body>
