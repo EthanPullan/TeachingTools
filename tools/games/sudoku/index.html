@@ -27,7 +27,7 @@
     --user:#2f7d68;         /* a digit the player entered */
     --note-grey:#9aa4a3;    /* first pencil-note layer — light grey */
     --note-grey-dim:#bdc5c3; /* dimmer grey for a struck (eliminated) note */
-    --note-blue:#2f6f9f;    /* second pencil-note layer — blue */
+    --note-blue:#1668cc;    /* second pencil-note layer — a vivid, visible blue */
     --sel:rgba(224,152,46,.22);   /* selected cell wash (amber) */
     --peer:rgba(31,61,53,.055);   /* row/col/box of the focused cell */
     --hl-cell:rgba(255,206,69,.34);  /* cells holding the highlighted digit (light yellow) */
@@ -141,7 +141,7 @@
   .cell .notes span{position:relative;display:flex;align-items:center;justify-content:center;line-height:1;
     font-family:var(--mono);font-weight:600;font-size:clamp(8px,1.7vmin,18px);}
   .cell .notes span.g{color:var(--note-grey);}
-  .cell .notes span.b{color:var(--note-blue);}   /* blue layer wins the slot when a digit is in all three */
+  .cell .notes span.b{color:var(--note-blue);font-weight:800;}   /* blue layer wins the slot when a digit is in all three */
   .cell .notes span.s{color:var(--note-grey-dim);}   /* struck: a dimmed grey note crossed out in red */
   .cell .notes span.s::after{content:'';position:absolute;left:4%;right:4%;top:50%;
     border-top:2px solid var(--note-strike);transform:rotate(-18deg);transform-origin:center;}
@@ -443,10 +443,9 @@
     const single = selection.size===1 ? anchor : -1;
     let peerSet=null;
     if(single>=0) peerSet = new Set([...ROWS[rowOf(single)], ...COLS[colOf(single)], ...BOXES[boxOf(single)]]);
-    // which digit to light up (light yellow): an explicit number-highlight, or — when a single
-    // big-number cell is selected — that cell's digit.
-    let hl = highlightNum;
-    if(!hl && single>=0 && cells[single].val) hl = cells[single].val;
+    // the digit to light up (light yellow). highlightNum is kept in step with the selection
+    // (see syncHighlight), so clicking a new cell always refreshes the highlight.
+    const hl = highlightNum;
     // while Digit mode is active, the selection wash signals the count: exactly 2 → blue, 3+ → grey
     const selTint = mode==='digit' ? (selection.size===2 ? 'blue' : selection.size>2 ? 'grey' : '') : '';
 
@@ -499,9 +498,13 @@
   }
 
   /* ---------- selection ---------- */
-  function selectOnly(i){ selection.clear(); selection.add(i); anchor=i; render(); }
-  function addToSelection(i){ if(!selection.has(i)){ selection.add(i); anchor=i; render(); } }
-  function clearSelection(){ selection.clear(); anchor=-1; render(); }
+  // Tie the match-highlight to the selection: a single selected cell lights up its own
+  // digit; any other selection state clears the highlight. This keeps clicking a new cell
+  // from leaving a stale highlight stuck on the previous number.
+  function syncHighlight(){ highlightNum = (selection.size===1) ? (cells[anchor].val || 0) : 0; }
+  function selectOnly(i){ selection.clear(); selection.add(i); anchor=i; syncHighlight(); render(); }
+  function addToSelection(i){ if(!selection.has(i)){ selection.add(i); anchor=i; syncHighlight(); render(); } }
+  function clearSelection(){ selection.clear(); anchor=-1; syncHighlight(); render(); }
 
   let dragging=false, dragMoved=false;
   function cellFromPoint(x,y){
@@ -561,7 +564,7 @@
           if(hit) cleared.add(j);
         }
       }
-      highlightNum = 0;
+      highlightNum = n;                   // a placed number lights up all its matches
       render();
       flashCleared(cleared, n);          // …and briefly flash what was removed
     }else{
@@ -580,7 +583,9 @@
         snapshot();
         for(const i of addable) cells[i][layer].add(n);
       }
-      highlightNum = 0;
+      // grey/blue notes light up that number across the board, like a placed digit;
+      // a struck note is an elimination, so it doesn't.
+      highlightNum = (layer==='strike') ? 0 : n;
       render();
     }
     checkSolved();
@@ -807,7 +812,7 @@
     else if(e.key==='ArrowDown'){ e.preventDefault(); moveAnchor(1,0); }
     else if(e.key==='ArrowLeft'){ e.preventDefault(); moveAnchor(0,-1); }
     else if(e.key==='ArrowRight'){ e.preventDefault(); moveAnchor(0,1); }
-    else if(e.key==='Escape'){ highlightNum=0; clearSelection(); }
+    else if(e.key==='Escape'){ clearSelection(); }
   });
 
   /* ---------- go ---------- */
