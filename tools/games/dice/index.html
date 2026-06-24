@@ -151,6 +151,7 @@
   <header class="toolbar">
     <div class="brand"><span class="mark"></span>Dice <small>roll &amp; total</small></div>
     <div class="spacer"></div>
+    <button class="btn" id="fsBtn" aria-pressed="false" title="Toggle full screen"><span class="ic">⛶</span><span class="fs-label">Full screen</span></button>
     <button class="btn" id="rerollBtn"><span class="ic">🎲</span>Roll again</button>
     <button class="btn" id="soundBtn" aria-pressed="false"><span class="ic">🔈</span>Sound</button>
     <button class="btn" id="clearBtn"><span class="ic">🧹</span>Clear tray</button>
@@ -420,12 +421,29 @@
     b.querySelector('.ic').textContent = soundOn ? '🔊' : '🔈';
   });
 
-  // keyboard: R re-rolls, Space rolls the pool, C clears
+  /* ---- full screen ---- */
+  const fsBtn=$('fsBtn');
+  function fsOn(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFs(){
+    if(fsOn()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+    else{ const el=document.documentElement; (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  }
+  function syncFs(){
+    const on=fsOn();
+    fsBtn.setAttribute('aria-pressed', on?'true':'false');
+    fsBtn.querySelector('.fs-label').textContent = on?'Exit full screen':'Full screen';
+  }
+  fsBtn.addEventListener('click', toggleFs);
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+
+  // keyboard: R re-rolls, Space rolls the pool, C clears, F toggles full screen
   document.addEventListener('keydown',e=>{
     if(/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     if(e.key==='r'||e.key==='R') rerollAll();
     else if(e.code==='Space'){ e.preventDefault(); rollPool(); }
     else if(e.key==='c'||e.key==='C'){ tray=[]; render(); }
+    else if(e.key==='f'||e.key==='F') toggleFs();
   });
 
   buildRack(); buildPool(); buildPresets(); syncPool(); render();

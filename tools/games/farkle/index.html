@@ -172,6 +172,7 @@
   <header class="toolbar">
     <div class="brand"><span class="mark"></span>Farkle <small>press your luck</small></div>
     <div class="spacer"></div>
+    <button class="btn" id="fsBtn" aria-pressed="false" title="Toggle full screen"><span class="ic">⛶</span><span class="fs-label">Full screen</span></button>
     <div class="seg" id="targetSeg">
       <span class="lab">First to</span>
       <button data-t="2500">2,500</button>
@@ -618,8 +619,26 @@
     const b=$('soundBtn'); b.setAttribute('aria-pressed',soundOn); b.classList.toggle('primary',soundOn);
     b.querySelector('.ic').textContent = soundOn ? '🔊' : '🔈';
   });
+
+  /* full screen */
+  const fsBtn=$('fsBtn');
+  function fsOn(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFs(){
+    if(fsOn()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+    else{ const el=document.documentElement; (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  }
+  function syncFs(){
+    const on=fsOn();
+    fsBtn.setAttribute('aria-pressed', on?'true':'false');
+    fsBtn.querySelector('.fs-label').textContent = on?'Exit full screen':'Full screen';
+  }
+  fsBtn.addEventListener('click', toggleFs);
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+
   document.addEventListener('keydown',e=>{
     if(/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    if(e.key==='f'||e.key==='F'){ toggleFs(); return; }
     if($('winner').classList.contains('show')){ if(e.key==='Enter'){ e.preventDefault(); newGame(); } return; }
     if(e.code==='Space'){ e.preventDefault();
       if(phase==='idle'||phase==='hotdice') roll();

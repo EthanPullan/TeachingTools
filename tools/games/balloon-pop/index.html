@@ -82,8 +82,8 @@
   .lives{display:flex;align-items:center;gap:10px;font-size:clamp(14px,2.4vh,18px);font-weight:700;color:var(--muted);}
   .lives b{font-family:var(--mono);color:var(--danger);}
 
-  .balloons{flex:none;display:flex;align-items:flex-end;justify-content:center;gap:clamp(10px,2.4vw,34px);
-    padding:10px 26px 4px;min-height:clamp(90px,16vh,150px);}
+  .balloons{flex:none;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:center;
+    gap:clamp(8px,2.4vw,34px);padding:10px 26px 4px;min-height:clamp(90px,16vh,150px);}
   .balloon{position:relative;width:clamp(46px,7vw,86px);height:clamp(58px,9vw,108px);
     transition:transform .18s;transform-origin:bottom center;}
   .balloon .body{width:100%;height:84%;border-radius:50% 50% 48% 48%;position:relative;
@@ -143,6 +143,7 @@
   <header class="toolbar">
     <div class="brand"><span class="mark"></span>Balloon Pop <small>word guessing game</small></div>
     <div class="spacer"></div>
+    <button class="btn" id="fsBtn" aria-pressed="false" title="Toggle full screen"><span class="ic">⛶</span><span class="fs-label">Full screen</span></button>
     <button class="btn" id="restartBtn" style="display:none"><span class="ic">↺</span>Same word</button>
     <button class="btn primary" id="newBtn"><span class="ic">＋</span>New word</button>
   </header>
@@ -169,6 +170,13 @@
                placeholder="e.g. a kind of animal">
       </div>
 
+      <div class="field">
+        <label for="balloonCount">Balloons (wrong guesses allowed)</label>
+        <input id="balloonCount" class="clue-input" type="number" inputmode="numeric"
+               min="2" max="12" value="6" style="max-width:130px;" aria-describedby="balloonHint">
+        <span id="balloonHint" class="hide-note">More balloons = easier. Default is 6 (2–12).</span>
+      </div>
+
       <div class="err" id="err"></div>
       <button class="btn primary go" id="startBtn">Start game →</button>
     </div>
@@ -178,7 +186,7 @@
   <section class="view" id="play">
     <div class="playtop">
       <div class="clue-chip" id="clueChip"></div>
-      <div class="lives"><span>Balloons left</span> <b id="livesNum">6</b> / 6</div>
+      <div class="lives"><span>Balloons left</span> <b id="livesNum">6</b> / <span id="livesMax">6</span></div>
     </div>
     <div class="balloons" id="balloons"></div>
     <div class="stage">
@@ -191,16 +199,17 @@
 
 <script>
 (function(){
-  const MAX = 6;
+  const DEFAULT_BALLOONS = 6, MIN_BALLOONS = 2, MAX_BALLOONS = 12;
+  let MAX = DEFAULT_BALLOONS;        // number of balloons (wrong guesses allowed)
   const BALLOON_COLORS = ['#c43d35','#e0982e','#3f9e6b','#2f6f9f','#b9781f','#1f3d35'];
   const ROWS = ['QWERTYUIOP','ASDFGHJKL','ZXCVBNM'];
 
   // elements
   const $ = id=>document.getElementById(id);
   const setupView=$('setup'), playView=$('play');
-  const secretIn=$('secret'), clueIn=$('clue'), errEl=$('err');
+  const secretIn=$('secret'), clueIn=$('clue'), errEl=$('err'), countIn=$('balloonCount');
   const balloonsEl=$('balloons'), wordEl=$('word'), msgEl=$('msg'),
-        kbEl=$('keyboard'), clueChip=$('clueChip'), livesNum=$('livesNum');
+        kbEl=$('keyboard'), clueChip=$('clueChip'), livesNum=$('livesNum'), livesMax=$('livesMax');
   const restartBtn=$('restartBtn'), newBtn=$('newBtn');
 
   // state
@@ -216,6 +225,7 @@
   });
   secretIn.addEventListener('keydown', e=>{ if(e.key==='Enter') startGame(); });
   clueIn.addEventListener('keydown', e=>{ if(e.key==='Enter') startGame(); });
+  countIn.addEventListener('keydown', e=>{ if(e.key==='Enter') startGame(); });
   $('startBtn').addEventListener('click', startGame);
 
   function startGame(){
@@ -225,6 +235,10 @@
     errEl.textContent='';
     secret = raw.toUpperCase();
     clue = clueIn.value.trim();
+    let n = parseInt(countIn.value, 10);
+    if(!Number.isFinite(n)) n = DEFAULT_BALLOONS;
+    MAX = Math.max(MIN_BALLOONS, Math.min(MAX_BALLOONS, n));
+    countIn.value = MAX;          // reflect the clamped value back to the field
     guessed = new Set();
     wrong = 0;
     status = 'playing';
@@ -254,7 +268,7 @@
     balloonsEl.innerHTML='';
     for(let i=0;i<MAX;i++){
       const b=document.createElement('div');
-      b.className='balloon float b'+i;
+      b.className='balloon float b'+((i%5)+1);   // cycle the 5 defined bob delays
       b.style.color=BALLOON_COLORS[i%BALLOON_COLORS.length];
       b.innerHTML='<div class="body" style="background:'+BALLOON_COLORS[i%BALLOON_COLORS.length]+'"></div><div class="string"></div>';
       balloonsEl.appendChild(b);
@@ -304,6 +318,7 @@
 
   function render(){
     livesNum.textContent = MAX - wrong;
+    livesMax.textContent = MAX;
     livesNum.style.color = (MAX-wrong)<=2 ? 'var(--danger)' : 'var(--accent-deep)';
 
     // word
@@ -344,6 +359,22 @@
 
   newBtn.addEventListener('click', showSetup);
   restartBtn.addEventListener('click', restartSame);
+
+  /* ----- full screen ----- */
+  const fsBtn=$('fsBtn');
+  function fsOn(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFs(){
+    if(fsOn()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+    else{ const el=document.documentElement; (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  }
+  function syncFs(){
+    const on=fsOn();
+    fsBtn.setAttribute('aria-pressed', on?'true':'false');
+    fsBtn.querySelector('.fs-label').textContent = on?'Exit full screen':'Full screen';
+  }
+  fsBtn.addEventListener('click', toggleFs);
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
 
   // physical keyboard for guessing
   document.addEventListener('keydown', e=>{

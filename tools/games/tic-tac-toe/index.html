@@ -104,6 +104,23 @@
   .board.next-x .cell:hover:not(.filled)::after{color:var(--x);}
   .board.next-o .cell:hover:not(.filled)::after{color:var(--o);}
 
+  /* ── segmented control (toolbar settings) ── */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:8px 13px;cursor:pointer;font-size:13px;font-weight:700;
+    color:var(--muted);font-family:var(--mono);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .seg .lab{display:flex;align-items:center;padding:0 10px;font-size:10.5px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);background:var(--panel-2);}
+
+  /* ── turn-timer pill ── */
+  .turn-timer{display:inline-flex;align-items:baseline;gap:1px;font-family:var(--mono);font-weight:800;
+    padding:5px 16px;border-radius:999px;background:var(--panel);border:2px solid var(--line);
+    color:var(--ink);font-size:clamp(15px,2.4vh,20px);line-height:1.3;}
+  .turn-timer .tt-unit{font-size:.72em;color:var(--muted);font-weight:700;margin-left:1px;}
+  .turn-timer.low{border-color:var(--danger);color:var(--danger);background:var(--danger-soft);}
+  .turn-timer.low .tt-unit{color:var(--danger);}
+  .turn-timer[hidden]{display:none;}
+
   @media (prefers-reduced-motion:reduce){
     .cell .glyph{animation:none;} .btn:active{transform:none;} .cell:active{transform:none;}
   }
@@ -114,6 +131,12 @@
   <header class="toolbar">
     <div class="brand"><span class="mark"></span>Tic-Tac-Toe <small>tap to play</small></div>
     <div class="spacer"></div>
+    <div class="seg" id="timerSeg"><span class="lab">Turn timer</span>
+      <button data-sec="0" class="active">Off</button>
+      <button data-sec="15">15s</button>
+      <button data-sec="30">30s</button>
+      <button data-sec="60">60s</button></div>
+    <button class="btn" id="fsBtn" aria-pressed="false" title="Toggle full screen"><span class="ic">⛶</span><span class="fs-label">Full screen</span></button>
     <button class="btn" id="undoBtn"><span class="ic">↶</span>Undo</button>
     <button class="btn" id="resetScoreBtn"><span class="ic">⟲</span>Reset scores</button>
     <button class="btn primary" id="newBtn"><span class="ic">＋</span>New round</button>
@@ -133,6 +156,7 @@
 
   <main class="stage">
     <div class="status" id="status"><b class="x">X</b> to move</div>
+    <div class="turn-timer" id="turnTimer" hidden><span class="tt-num">0</span><span class="tt-unit">s</span></div>
     <div class="board next-x" id="board" role="grid" aria-label="Tic-tac-toe board"></div>
   </main>
 </div>
@@ -209,6 +233,7 @@
       cellEls.forEach((el,k)=>{ if(!line.includes(k)) el.classList.add('dim'); });
       const w = turn;
       statusEl.innerHTML = '<b class="'+w.toLowerCase()+'">'+w+'</b> wins!';
+      startTurnTimer();
       return;
     }
 
@@ -216,12 +241,14 @@
       over = true;
       render();
       statusEl.textContent = "Cat's game — it's a draw";
+      startTurnTimer();
       return;
     }
 
     turn = turn==='X' ? 'O' : 'X';
     render();
     statusEl.innerHTML = '<b class="'+turn.toLowerCase()+'">'+turn+'</b> to move';
+    startTurnTimer();
   }
 
   function winningLine(){
@@ -240,6 +267,7 @@
     turn = (history.length % 2 === 0) ? 'X' : 'O';
     render();
     statusEl.innerHTML = '<b class="'+turn.toLowerCase()+'">'+turn+'</b> to move';
+    startTurnTimer();
   }
 
   function newRound(){
@@ -249,6 +277,7 @@
     turn = 'X';
     render();
     statusEl.innerHTML = '<b class="x">X</b> to move';
+    startTurnTimer();
   }
 
   function resetScores(){
@@ -262,14 +291,96 @@
   document.getElementById('undoBtn').addEventListener('click', undo);
   document.getElementById('resetScoreBtn').addEventListener('click', resetScores);
 
-  // Keyboard: 1-9 play the matching cell (top-left to bottom-right), R = new round, U = undo.
+  /* ----- full screen ----- */
+  const fsBtn = document.getElementById('fsBtn');
+  function fsOn(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFs(){
+    if(fsOn()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+    else{ const el=document.documentElement; (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  }
+  function syncFs(){
+    const on=fsOn();
+    fsBtn.setAttribute('aria-pressed', on?'true':'false');
+    fsBtn.querySelector('.fs-label').textContent = on?'Exit full screen':'Full screen';
+  }
+  fsBtn.addEventListener('click', toggleFs);
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+
+  /* ===== Reusable turn timer (drop-in, dependency-free) =====
+     const t = createTurnTimer({onTick, onExpire});
+       t.setDuration(seconds)  // 0 disables the timer
+       t.start()               // (re)start the countdown for a turn
+       t.stop()                // halt (e.g. on game over)
+     onTick(remainingSec|null, durationSec) fires while counting; null = off/cleared.
+     onExpire() fires once when the countdown hits 0. */
+  function createTurnTimer({onTick, onExpire}={}){
+    let duration = 0, deadline = 0, iv = null;
+    function clear(){ if(iv){ clearInterval(iv); iv = null; } }
+    function tick(){
+      const remMs = Math.max(0, deadline - Date.now());
+      if(onTick) onTick(Math.ceil(remMs/1000), duration);
+      if(remMs<=0){ clear(); if(onExpire) onExpire(); }
+    }
+    return {
+      setDuration(sec){ duration = Math.max(0, Math.floor(sec)||0); },
+      getDuration(){ return duration; },
+      start(){
+        clear();
+        if(duration<=0){ if(onTick) onTick(null, 0); return; }
+        deadline = Date.now() + duration*1000;
+        if(onTick) onTick(duration, duration);
+        iv = setInterval(tick, 200);
+      },
+      stop(){ clear(); }
+    };
+  }
+
+  const ttEl  = document.getElementById('turnTimer');
+  const ttNum = ttEl.querySelector('.tt-num');
+  const turnTimer = createTurnTimer({
+    onTick(remSec, dur){
+      if(remSec===null){ ttEl.hidden = true; return; }
+      ttEl.hidden = false;
+      ttNum.textContent = remSec;
+      ttEl.classList.toggle('low', dur>0 && remSec<=Math.max(3, Math.ceil(dur/4)));
+    },
+    onExpire(){ autoMove(); }
+  });
+
+  // (Re)start the countdown for the player to move — or clear it when the round is over.
+  function startTurnTimer(){
+    if(over){ turnTimer.stop(); ttEl.hidden = true; return; }
+    turnTimer.start();   // start() clears the pill itself when the timer is Off
+  }
+
+  // Time's up: play a random empty cell, with no strategy at all.
+  function autoMove(){
+    if(over) return;
+    const empties = [];
+    cells.forEach((v,i)=>{ if(!v) empties.push(i); });
+    if(!empties.length) return;
+    play(empties[Math.floor(Math.random()*empties.length)]);
+  }
+
+  document.querySelectorAll('#timerSeg button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#timerSeg button').forEach(x=>x.classList.toggle('active', x===btn));
+      turnTimer.setDuration(+btn.dataset.sec);
+      startTurnTimer();              // apply immediately to the current turn
+    });
+  });
+
+  // Keyboard: 1-9 play the matching cell (top-left to bottom-right), R = new round, U = undo, F = full screen.
   document.addEventListener('keydown', e=>{
     if(e.key>='1' && e.key<='9'){ play(Number(e.key)-1); }
     else if(e.key==='r' || e.key==='R'){ newRound(); }
     else if(e.key==='u' || e.key==='U'){ undo(); }
+    else if(e.key==='f' || e.key==='F'){ toggleFs(); }
   });
 
   render();
+  startTurnTimer();
 })();
 </script>
 </body>

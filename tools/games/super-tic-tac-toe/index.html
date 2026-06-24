@@ -110,6 +110,29 @@
   .mega.next-x .mini.active .cell.open:hover::after{color:var(--x);}
   .mega.next-o .mini.active .cell.open:hover::after{color:var(--o);}
 
+  /* ── segmented controls (toolbar settings) ── */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:8px 13px;cursor:pointer;font-size:13px;font-weight:700;
+    color:var(--muted);font-family:var(--mono);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .seg .lab{display:flex;align-items:center;padding:0 10px;font-size:10.5px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);background:var(--panel-2);}
+
+  /* ── turn-timer pill (in the status strip) ── */
+  .turn-timer{display:inline-flex;align-items:baseline;gap:1px;font-family:var(--mono);font-weight:800;
+    padding:3px 12px;border-radius:999px;background:var(--panel);border:2px solid var(--line);
+    color:var(--ink);font-size:.78em;line-height:1.4;}
+  .turn-timer .tt-unit{font-size:.72em;color:var(--muted);font-weight:700;margin-left:1px;}
+  .turn-timer.low{border-color:var(--danger);color:var(--danger);background:var(--danger-soft);}
+  .turn-timer.low .tt-unit{color:var(--danger);}
+  .turn-timer[hidden]{display:none;}
+  .turnchip.tie{background:var(--muted);}
+
+  /* ── mega-board win state ── */
+  .mini.megawin{box-shadow:0 0 0 5px var(--accent),0 0 26px rgba(224,152,46,.55);}
+  .mega.over .mini{transition:opacity .25s,box-shadow .15s;}
+  .mega.over .mini:not(.megawin){opacity:.5;}
+
   @media (prefers-reduced-motion:reduce){
     .cell .glyph,.mini .claim{animation:none;} .btn:active,.cell:active{transform:none;}
   }
@@ -120,6 +143,15 @@
   <header class="toolbar">
     <div class="brand"><span class="mark"></span>Super Tic-Tac-Toe <small>ultimate · tap to play</small></div>
     <div class="spacer"></div>
+    <div class="seg" id="modeSeg"><span class="lab">Win by</span>
+      <button data-mode="line" class="active">3 in a row</button>
+      <button data-mode="most">5+ boards</button></div>
+    <div class="seg" id="timerSeg"><span class="lab">Turn timer</span>
+      <button data-sec="0" class="active">Off</button>
+      <button data-sec="15">15s</button>
+      <button data-sec="30">30s</button>
+      <button data-sec="60">60s</button></div>
+    <button class="btn" id="fsBtn" aria-pressed="false" title="Toggle full screen"><span class="ic">⛶</span><span class="fs-label">Full screen</span></button>
     <button class="btn" id="undoBtn"><span class="ic">↶</span>Undo</button>
     <button class="btn primary" id="newBtn"><span class="ic">＋</span>New game</button>
   </header>
@@ -127,6 +159,7 @@
   <div class="statusbar">
     <span class="turnchip x" id="turnchip">X</span>
     <span class="status" id="status"><b class="x">X</b> to move <span class="sub">— play anywhere</span></span>
+    <span class="turn-timer" id="turnTimer" hidden><span class="tt-num">0</span><span class="tt-unit">s</span></span>
   </div>
 
   <main class="stage">
@@ -142,6 +175,8 @@
     [0,4,8],[2,4,6]
   ];
 
+  const MOST_TARGET = 5;   // "win by 5+ boards": first to capture 5 of the 9 big boxes
+
   const megaEl   = document.getElementById('mega');
   const statusEl = document.getElementById('status');
   const chipEl   = document.getElementById('turnchip');
@@ -153,6 +188,8 @@
   let turn;          // 'X' | 'O'
   let active;        // forced mini-board index, or null = play anywhere
   let history;       // {b,c,prevActive} for undo
+  let mode = 'line'; // 'line' = 3 big boxes in a row · 'most' = first to 5+ big boxes
+  let result;        // null while playing, else {winner:'X'|'O'|'D', line:number[]|null}
 
   // Build DOM once: 9 minis, each with 9 cells + a claim overlay.
   const cellEls = [];   // cellEls[b][c]
@@ -183,13 +220,17 @@
     turn = 'X';
     active = null;     // first player may go anywhere
     history = [];
+    result = null;
     render();
+    startTurnTimer();
   }
 
   // Is this mini board still in play (not won, not full)?
   function playable(b){ return winners[b]===''; }
+  function boardCount(s){ let n=0; for(const w of winners) if(w===s) n++; return n; }
 
   function play(b,c){
+    if(result) return;                        // game already decided
     if(!playable(b)) return;
     if(active!==null && active!==b) return;   // must play in the forced board
     if(boards[b][c]) return;                  // cell taken
@@ -202,11 +243,15 @@
     if(line){ winners[b] = turn; }
     else if(boards[b].every(Boolean)){ winners[b] = 'D'; }
 
+    // did the player who just moved win the whole game (or has it ended)?
+    result = evaluate(turn);
+
     // the cell position c dictates the next forced board.
     active = playable(c) ? c : null;
 
-    turn = turn==='X' ? 'O' : 'X';
+    if(!result){ turn = turn==='X' ? 'O' : 'X'; }
     render();
+    startTurnTimer();
   }
 
   function miniWin(cells){
@@ -217,29 +262,63 @@
     return null;
   }
 
+  // Decide whether the game is over. `mover` is the player who just moved.
+  function evaluate(mover){
+    if(mode==='line'){                         // three captured big boxes in a row
+      for(const ln of WINS){
+        const [a,b2,c2]=ln;
+        if(winners[a]===mover && winners[b2]===mover && winners[c2]===mover)
+          return {winner:mover, line:ln};
+      }
+    }else{                                     // 'most' — first to capture 5+ big boxes
+      if(boardCount(mover) >= MOST_TARGET) return {winner:mover, line:null};
+    }
+    // no big boxes left to play → settle the game
+    if(!winners.some(w=>w==='')){
+      if(mode==='most'){
+        const x=boardCount('X'), o=boardCount('O');
+        if(x>o) return {winner:'X', line:null};
+        if(o>x) return {winner:'O', line:null};
+      }
+      return {winner:'D', line:null};          // a line never formed / boards tied
+    }
+    return null;
+  }
+
   function undo(){
     if(!history.length) return;
     const {b,c,prevActive} = history.pop();
     boards[b][c] = '';
     winners[b] = '';           // a move can only have created (not removed) a winner
     active = prevActive;
-    turn = turn==='X' ? 'O' : 'X';
+    if(result){
+      result = null;           // the move we removed had ended the game; that player moves again
+    }else{
+      turn = turn==='X' ? 'O' : 'X';
+    }
     render();
+    startTurnTimer();
   }
 
   function render(){
-    const anyOpen = winners.some((w,i)=>w==='');
-    const forcedList = active!==null ? [active]
-                     : Array.from({length:9},(_,i)=>i).filter(playable);
+    const over = !!result;
+    const anyOpen = winners.some(w=>w==='');
+    const forcedList = (!over && active!==null) ? [active]
+                     : (!over ? Array.from({length:9},(_,i)=>i).filter(playable) : []);
+    const winLine = (result && result.line) ? result.line : [];
 
-    megaEl.classList.toggle('next-x', turn==='X');
-    megaEl.classList.toggle('next-o', turn==='O');
+    megaEl.classList.toggle('next-x', !over && turn==='X');
+    megaEl.classList.toggle('next-o', !over && turn==='O');
+    megaEl.classList.toggle('over', over);
 
     for(let b=0;b<9;b++){
       const decided = winners[b] !== '';
-      const isActive = anyOpen && forcedList.includes(b);
+      const isActive = !over && anyOpen && forcedList.includes(b);
+      const isWinBox = over && (winLine.includes(b) ||
+        (result.winner!=='D' && result.line===null && winners[b]===result.winner));
       miniEls[b].classList.toggle('active', isActive);
       miniEls[b].classList.toggle('decided', decided);
+      miniEls[b].classList.toggle('megawin', isWinBox);
 
       // claim overlay (winners only — drawn boards get no marker)
       const cl = claimEls[b];
@@ -264,24 +343,130 @@
       }
     }
 
-    chipEl.textContent = turn;
-    chipEl.className = 'turnchip ' + turn.toLowerCase();
-    const t = '<b class="'+turn.toLowerCase()+'">'+turn+'</b> to move';
-    if(!anyOpen){
-      statusEl.innerHTML = 'All boards decided <span class="sub">— press New game</span>';
-    }else if(active===null){
-      statusEl.innerHTML = t + ' <span class="sub">— play anywhere</span>';
+    if(over){
+      if(result.winner==='D'){
+        chipEl.textContent = '='; chipEl.className = 'turnchip tie';
+        statusEl.innerHTML = "It's a draw <span class=\"sub\">— press New game</span>";
+      }else{
+        const w = result.winner, wl = w.toLowerCase();
+        const how = mode==='line' ? 'three boards in a row' : boardCount(w)+' of 9 boards';
+        chipEl.textContent = w; chipEl.className = 'turnchip ' + wl;
+        statusEl.innerHTML = '<b class="'+wl+'">'+w+'</b> wins! <span class="sub">— '+how+'</span>';
+      }
     }else{
-      statusEl.innerHTML = t + ' <span class="sub">— play in the highlighted board</span>';
+      chipEl.textContent = turn;
+      chipEl.className = 'turnchip ' + turn.toLowerCase();
+      const t = '<b class="'+turn.toLowerCase()+'">'+turn+'</b> to move';
+      if(active===null){
+        statusEl.innerHTML = t + ' <span class="sub">— play anywhere</span>';
+      }else{
+        statusEl.innerHTML = t + ' <span class="sub">— play in the highlighted board</span>';
+      }
     }
     undoBtn.disabled = history.length===0;
   }
+
+  /* ===== Reusable turn timer (drop-in, dependency-free) =====
+     const t = createTurnTimer({onTick, onExpire});
+       t.setDuration(seconds)  // 0 disables the timer
+       t.start()               // (re)start the countdown for a turn
+       t.stop()                // halt (e.g. on game over)
+     onTick(remainingSec|null, durationSec) fires while counting; null = off/cleared.
+     onExpire() fires once when the countdown hits 0. */
+  function createTurnTimer({onTick, onExpire}={}){
+    let duration = 0, deadline = 0, iv = null;
+    function clear(){ if(iv){ clearInterval(iv); iv = null; } }
+    function tick(){
+      const remMs = Math.max(0, deadline - Date.now());
+      if(onTick) onTick(Math.ceil(remMs/1000), duration);
+      if(remMs<=0){ clear(); if(onExpire) onExpire(); }
+    }
+    return {
+      setDuration(sec){ duration = Math.max(0, Math.floor(sec)||0); },
+      getDuration(){ return duration; },
+      start(){
+        clear();
+        if(duration<=0){ if(onTick) onTick(null, 0); return; }
+        deadline = Date.now() + duration*1000;
+        if(onTick) onTick(duration, duration);
+        iv = setInterval(tick, 200);
+      },
+      stop(){ clear(); }
+    };
+  }
+
+  const ttEl  = document.getElementById('turnTimer');
+  const ttNum = ttEl.querySelector('.tt-num');
+  const turnTimer = createTurnTimer({
+    onTick(remSec, dur){
+      if(remSec===null){ ttEl.hidden = true; return; }
+      ttEl.hidden = false;
+      ttNum.textContent = remSec;
+      ttEl.classList.toggle('low', dur>0 && remSec<=Math.max(3, Math.ceil(dur/4)));
+    },
+    onExpire(){ autoMove(); }
+  });
+
+  // (Re)start the countdown for whoever is to move — or clear it when the game is over.
+  function startTurnTimer(){
+    if(result){ turnTimer.stop(); ttEl.hidden = true; return; }
+    turnTimer.start();   // start() clears the pill itself when the timer is Off
+  }
+
+  // Time's up: play a random legal move, with no strategy at all.
+  function autoMove(){
+    if(result) return;
+    const consider = active!==null ? [active]
+                   : Array.from({length:9},(_,i)=>i).filter(playable);
+    const legal = [];
+    for(const b of consider){
+      if(!playable(b)) continue;
+      for(let c=0;c<9;c++){ if(!boards[b][c]) legal.push([b,c]); }
+    }
+    if(!legal.length) return;
+    const [b,c] = legal[Math.floor(Math.random()*legal.length)];
+    play(b,c);
+  }
+
+  /* ----- full screen ----- */
+  const fsBtn = document.getElementById('fsBtn');
+  function fsActive(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFs(){
+    if(fsActive()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+    else{ const el=document.documentElement; (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  }
+  function syncFs(){
+    const on=fsActive();
+    fsBtn.setAttribute('aria-pressed', on?'true':'false');
+    fsBtn.querySelector('.fs-label').textContent = on?'Exit full screen':'Full screen';
+  }
+  fsBtn.addEventListener('click', toggleFs);
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+
+  /* ----- settings: win mode + turn timer ----- */
+  document.querySelectorAll('#modeSeg button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(btn.dataset.mode===mode) return;
+      mode = btn.dataset.mode;
+      document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('active', x===btn));
+      reset();                       // changing the win condition starts a fresh game
+    });
+  });
+  document.querySelectorAll('#timerSeg button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#timerSeg button').forEach(x=>x.classList.toggle('active', x===btn));
+      turnTimer.setDuration(+btn.dataset.sec);
+      startTurnTimer();              // apply immediately to the current turn
+    });
+  });
 
   document.getElementById('newBtn').addEventListener('click', reset);
   undoBtn.addEventListener('click', undo);
   document.addEventListener('keydown', e=>{
     if(e.key==='u'||e.key==='U') undo();
     else if(e.key==='r'||e.key==='R') reset();
+    else if(e.key==='f'||e.key==='F') toggleFs();
   });
 
   reset();

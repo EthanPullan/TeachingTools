@@ -220,6 +220,7 @@
   <header class="toolbar">
     <div class="brand"><span class="mark"></span>Tavern Dice <small>loaded-dice farkle</small></div>
     <div class="spacer"></div>
+    <button class="btn" id="fsBtn" aria-pressed="false" title="Toggle full screen"><span class="ic">⛶</span><span class="fs-label">Full screen</span></button>
     <div class="seg" id="targetSeg"><span class="lab">First to</span>
       <button data-t="2000" class="active">2,000</button><button data-t="5000">5,000</button><button data-t="10000">10,000</button></div>
     <div class="seg" id="stakeSeg"><span class="lab">Stake</span>
@@ -783,8 +784,26 @@
   $('soundBtn').addEventListener('click',()=>{ soundOn=!soundOn; ensureAudio();
     const b=$('soundBtn'); b.setAttribute('aria-pressed',soundOn); b.classList.toggle('primary',soundOn);
     b.querySelector('.ic').textContent=soundOn?'🔊':'🔈'; });
+
+  /* full screen */
+  const fsBtn=$('fsBtn');
+  function fsOn(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFs(){
+    if(fsOn()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+    else{ const el=document.documentElement; (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  }
+  function syncFs(){
+    const on=fsOn();
+    fsBtn.setAttribute('aria-pressed', on?'true':'false');
+    fsBtn.querySelector('.fs-label').textContent = on?'Exit full screen':'Full screen';
+  }
+  fsBtn.addEventListener('click', toggleFs);
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+
   document.addEventListener('keydown',e=>{
     if(/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    if(e.key==='f'||e.key==='F'){ toggleFs(); return; }
     if($('bag').classList.contains('show')){ if(e.key==='Escape') hide('bag'); return; }
     if($('shop').classList.contains('show')){ if(e.key==='Escape') hide('shop'); return; }
     if($('winner').classList.contains('show')){ if(e.key==='Enter'){ e.preventDefault(); hide('winner'); openShop(); } return; }
