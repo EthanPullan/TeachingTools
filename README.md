@@ -17,6 +17,15 @@ works offline, and can be downloaded on its own.
 | [Name Wheel](https://ethanpullan.github.io/TeachingTools/tools/name-wheel/) | Spin to pick a name — pulls from the seating chart, no repeats |
 | [Movie Picker](https://ethanpullan.github.io/TeachingTools/tools/movie-picker/) | Cinema board with a ballot, votes and a weighted draw |
 
+### Daily
+
+Live boards that refresh from the internet but cache the last update, so they
+still open and look right offline.
+
+| Tool | What it does |
+| --- | --- |
+| [Daily Update](https://ethanpullan.github.io/TeachingTools/tools/daily-update/) | Today's weather with an "outdoor day?" call (pick any place) **and** NASA's Astronomy Picture of the Day, in one board |
+
 ### Games
 
 | Game | What it does |

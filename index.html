@@ -50,6 +50,7 @@
 
   .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
     color:var(--muted);margin:30px 0 12px;}
+  .section-note{margin:-4px 0 14px;color:var(--muted);font-size:13px;line-height:1.55;max-width:64ch;}
 
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(264px,1fr));gap:16px;}
   .card{display:flex;flex-direction:column;gap:10px;text-decoration:none;color:inherit;
@@ -180,6 +181,27 @@
 
     </div>
 
+    <h2 class="section-title">Daily</h2>
+    <p class="section-note">Live boards that pull in fresh data each morning. They need the
+      internet to refresh, but save the last update so they still open and look right offline.</p>
+    <div class="grid" id="dailyGrid">
+
+      <a class="card" href="tools/daily-update/index.html">
+        <div class="top">
+          <span class="mark">🌅</span>
+          <h2>Daily Update</h2>
+        </div>
+        <div class="tags">
+          <span class="tag">weather board</span>
+          <span class="tag">outdoor-day call</span>
+          <span class="tag">NASA picture of the day</span>
+          <span class="tag">offline-graceful</span>
+        </div>
+        <span class="open">Open tool <span class="arr">→</span></span>
+      </a>
+
+    </div>
+
     <h2 class="section-title">Games</h2>
     <div class="grid" id="gameGrid">
 
@@ -275,7 +297,7 @@
   <script>
     // Keep the tool count in the top bar honest as tools are added.
     (function(){
-      const n = document.querySelectorAll('#toolGrid .card:not(.soon)').length;
+      const n = document.querySelectorAll('#toolGrid .card:not(.soon), #dailyGrid .card:not(.soon)').length;
       document.getElementById('toolCount').textContent = n + (n===1 ? ' tool' : ' tools');
     })();
   </script>

@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A morning-board for the classroom — today's weather with an 'outdoor day?' call, plus NASA's Astronomy Picture of the Day. Online-enhanced, but opens and looks right offline from its last saved copy.">
+<meta name="theme-color" content="#1f3d35">
+<title>Daily Update</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%231f3d35'/%3E%3Ccircle cx='8' cy='8' r='3.2' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;overflow:hidden;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  a{color:var(--board);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* ---- toolbar ---- */
+  .toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);z-index:5;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.small{padding:6px 10px;font-size:12px;border-radius:8px;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:15px;line-height:1;display:inline-block;}
+
+  /* segmented toggle (view switch + units) */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel);}
+  .seg button{border:none;background:#fff;padding:8px 13px;cursor:pointer;font-size:12.5px;font-weight:600;
+    color:var(--muted);display:inline-flex;align-items:center;gap:6px;}
+  .seg button:hover{background:var(--panel-2);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .seg.units button{padding:7px 11px;font-family:var(--mono);font-size:12px;}
+
+  .loc-btn .pin{font-size:13px;}
+  .hideTab{display:none !important;}
+
+  /* ---- stage (scrolling viewport for the active panel) ---- */
+  .stage{flex:1;min-height:0;overflow:auto;background:var(--app-bg);}
+  .view{display:none;}
+  .view.active{display:block;}
+  .wrap{max-width:920px;margin:0 auto;padding:22px 18px 40px;}
+
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);margin:26px 0 12px;}
+  .section-title:first-child{margin-top:6px;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;}
+
+  /* ---- generic loading / error / empty ---- */
+  .state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    text-align:center;color:var(--muted);padding:54px 18px;}
+  .state .big{font-size:34px;line-height:1;}
+  .state h3{margin:0;color:var(--ink);font-size:16px;}
+  .state p{margin:0;max-width:46ch;line-height:1.55;font-size:13px;}
+  .spin{display:inline-block;width:22px;height:22px;border:2.5px solid var(--line);
+    border-top-color:var(--board);border-radius:50%;animation:rot .7s linear infinite;}
+  @keyframes rot{to{transform:rotate(360deg);}}
+  .refreshing .ic{animation:rot .7s linear infinite;}
+
+  /* ===================== WEATHER ===================== */
+  .wx-place{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:2px 0 4px;}
+  .wx-place h1{margin:0;font-size:22px;letter-spacing:-.01em;}
+  .wx-place .sub{font-family:var(--mono);font-size:12px;color:var(--muted);}
+
+  .wx-now{display:flex;gap:22px;flex-wrap:wrap;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 22px;box-shadow:var(--shadow);}
+  .wx-lead{display:flex;align-items:center;gap:18px;flex:1;min-width:240px;}
+  .wx-icon{font-size:62px;line-height:1;flex:none;}
+  .wx-temp{font-family:var(--mono);font-weight:700;font-size:58px;line-height:.95;color:var(--board);}
+  .wx-cond{font-size:15px;font-weight:600;margin-top:4px;}
+  .wx-feels{font-size:12.5px;color:var(--muted);margin-top:2px;}
+
+  .wx-stats{display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:9px 26px;flex:none;}
+  .wx-stat{display:flex;flex-direction:column;gap:1px;}
+  .wx-stat .lab{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .wx-stat .val{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--ink);}
+
+  /* outdoor-day verdict banner */
+  .wx-verdict{display:flex;align-items:center;gap:14px;margin-top:14px;padding:14px 18px;
+    border-radius:var(--radius);border:1px solid var(--line);background:var(--panel-2);}
+  .wx-verdict .vico{font-size:30px;line-height:1;flex:none;}
+  .wx-verdict .vtxt b{display:block;font-size:15.5px;}
+  .wx-verdict .vtxt span{font-size:12.5px;color:var(--muted);}
+  .wx-verdict.good{background:#e7f3ec;border-color:#bfe0cd;}
+  .wx-verdict.good .vtxt b{color:#256b48;}
+  .wx-verdict.caution{background:var(--accent-soft);border-color:#f0d29c;}
+  .wx-verdict.caution .vtxt b{color:var(--accent-deep);}
+  .wx-verdict.indoor{background:var(--together-soft);border-color:#bcd3e6;}
+  .wx-verdict.indoor .vtxt b{color:#235b82;}
+
+  /* 7-day strip */
+  .wx-days{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;}
+  .wx-day{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:11px 6px;text-align:center;box-shadow:var(--shadow-sm);}
+  .wx-day .dn{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .wx-day.istoday .dn{color:var(--accent-deep);}
+  .wx-day .di{font-size:24px;line-height:1.2;margin:3px 0;}
+  .wx-day .dhi{font-family:var(--mono);font-weight:700;font-size:13.5px;color:var(--ink);}
+  .wx-day .dlo{font-family:var(--mono);font-size:12px;color:var(--muted);}
+  .wx-day .dp{font-family:var(--mono);font-size:10.5px;color:var(--together);margin-top:3px;min-height:14px;}
+
+  /* hourly strip */
+  .wx-hours{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;}
+  .wx-hour{flex:none;width:64px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:9px 4px;text-align:center;box-shadow:var(--shadow-sm);}
+  .wx-hour .ht{font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .wx-hour .hi{font-size:19px;line-height:1.3;}
+  .wx-hour .hv{font-family:var(--mono);font-weight:600;font-size:13px;color:var(--ink);}
+  .wx-hour .hp{font-family:var(--mono);font-size:10px;color:var(--together);min-height:13px;}
+
+  /* ===================== APOD ===================== */
+  .apod-head{margin-bottom:14px;}
+  .apod-title{margin:0 0 5px;font-size:23px;line-height:1.2;letter-spacing:-.01em;}
+  .apod-meta{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:5px 12px;}
+  .apod-stage{display:flex;justify-content:center;background:#0d0f12;border:1px solid var(--line);
+    border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);}
+  .apod-media{display:block;max-width:100%;max-height:62vh;object-fit:contain;}
+  .apod-frame{position:relative;width:100%;aspect-ratio:16/9;background:#0d0f12;}
+  .apod-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+  .apod-imgnote{padding:38px 18px;text-align:center;color:#c7ced6;font-size:13px;line-height:1.6;}
+  .apod-text{margin:16px auto 0;max-width:72ch;font-size:14.5px;line-height:1.7;color:var(--ink);}
+  .apod-links{margin-top:16px;display:flex;flex-wrap:wrap;gap:10px;}
+  .apod-credit{font-size:12px;color:var(--muted);margin-top:10px;}
+
+  /* ---- location popover ---- */
+  .pop{position:fixed;z-index:1200;width:300px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;box-shadow:0 12px 30px rgba(20,40,33,.22);padding:12px;}
+  .pop h4{margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .pop input.search{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel-2);}
+  .pop .results{list-style:none;margin:9px 0 0;padding:0;max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:3px;}
+  .pop .results li{padding:8px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;}
+  .pop .results li:hover,.pop .results li.sel{background:var(--panel-2);border-color:var(--line);}
+  .pop .results .nm{font-weight:600;font-size:13px;}
+  .pop .results .rg{font-size:11.5px;color:var(--muted);}
+  .pop .results .empty{padding:10px;color:var(--muted);font-size:12.5px;text-align:center;}
+
+  /* ---- status bar ---- */
+  .statusbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:0 16px;height:40px;
+    border-top:1px solid var(--line);background:var(--panel);font-size:12.5px;color:var(--muted);flex:none;}
+  .statusbar .stat b{font-family:var(--mono);font-weight:600;color:var(--ink);}
+  .statusbar .dotline{width:1px;height:16px;background:var(--line);}
+  .statusbar .src{font-weight:600;}
+  .statusbar .src.cached{color:var(--accent-deep);}
+  .statusbar .src.live{color:var(--ok);}
+  .net{margin-left:auto;font-family:var(--mono);font-size:11.5px;display:inline-flex;align-items:center;gap:6px;}
+  .net .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);}
+  .net.off .dot{background:var(--muted);}
+  .net.off{color:var(--muted);}
+
+  /* ---- toast ---- */
+  .toast-wrap{position:fixed;left:50%;bottom:52px;transform:translateX(-50%);z-index:1000;
+    display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .toast{background:var(--ink);color:#fff;padding:10px 15px;border-radius:10px;font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,560px);
+    border-left:3px solid var(--accent);animation:tin .2s ease both;}
+  .toast.err{border-left-color:var(--danger);}
+  .toast.ok{border-left-color:var(--ok);}
+  @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  @media (max-width:720px){
+    .brand small{display:none;}
+    .btn .lbl{display:none;}
+    .seg button .lbl{display:none;}
+    .wx-now{padding:16px;}
+    .wx-temp{font-size:48px;} .wx-icon{font-size:50px;}
+    .wx-days{grid-template-columns:repeat(4,1fr);}
+  }
+  @media (max-width:430px){ .wx-days{grid-template-columns:repeat(3,1fr);} }
+  @media (prefers-reduced-motion:reduce){
+    .spin,.refreshing .ic{animation:none;} .btn:active{transform:none;} *{scroll-behavior:auto;}
+  }
+  @media print{
+    .toolbar,.statusbar,.toast-wrap,.apod-links{display:none !important;}
+    body{overflow:visible;} .stage{overflow:visible;height:auto;background:#fff;}
+    .apod-stage{background:#fff;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Daily Update <small>morning board</small></div>
+
+    <div class="seg" role="tablist" aria-label="View">
+      <button id="tabWeather" class="active" role="tab" aria-selected="true" aria-controls="weatherView">
+        <span class="ic">🌤️</span><span class="lbl">Weather</span></button>
+      <button id="tabApod" role="tab" aria-selected="false" aria-controls="apodView">
+        <span class="ic">🔭</span><span class="lbl">Space Picture</span></button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <button class="btn small loc-btn" id="locBtn" title="Change location">
+      <span class="pin">📍</span><span id="locLabel">Calgary</span></button>
+    <div class="seg units" role="group" aria-label="Units" id="unitSeg">
+      <button id="unitC" class="active" title="Metric (°C, km/h)">°C</button>
+      <button id="unitF" title="Imperial (°F, mph)">°F</button>
+    </div>
+    <button class="btn small" id="refreshBtn" title="Refresh now">
+      <span class="ic">↻</span><span class="lbl">Refresh</span></button>
+    <button class="btn small" id="fsBtn" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
+  </header>
+
+  <div class="stage" id="stage">
+    <!-- Weather -->
+    <section class="view active" id="weatherView" role="tabpanel" aria-label="Weather">
+      <div class="wrap" id="weatherBody"></div>
+    </section>
+    <!-- APOD -->
+    <section class="view" id="apodView" role="tabpanel" aria-label="Astronomy Picture of the Day">
+      <div class="wrap" id="apodBody"></div>
+    </section>
+  </div>
+
+  <div class="statusbar">
+    <span class="stat" id="stampStat">Loading…</span>
+    <span class="dotline"></span>
+    <span class="src" id="srcStat"></span>
+    <span class="net" id="netStat"><span class="dot"></span><span class="t">Online</span></span>
+  </div>
+</div>
+
+<!-- location search popover -->
+<div class="pop" id="locPop" style="display:none">
+  <h4>Search for a place</h4>
+  <input class="search" id="locSearch" type="text" placeholder="City or town…" autocomplete="off" aria-label="Search for a city">
+  <ul class="results" id="locResults"></ul>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* =====================================================================
+   Daily Update — single-file, online-enhanced, offline-graceful.
+
+   A morning bell-ringer board that holds two daily things in one tool:
+     • WEATHER  — today's conditions for a place you choose, an
+       "is it an outdoor day?" call for recess/PE, a 7-day strip and the
+       next few hours. Data: Open-Meteo (keyless, CORS, HTTPS).
+     • SPACE PICTURE — NASA's Astronomy Picture of the Day: the image (or
+       video) plus its written explanation. Data: api.nasa.gov APOD with
+       the shared DEMO_KEY (fine at classroom volume).
+
+   OFFLINE BEHAVIOUR — the whole suite's promise is "opens by double-click,
+   works offline". A live page can't fully keep that, so instead:
+     1. the last successful response for each panel is saved to
+        localStorage and rendered FIRST (instantly, stamped with its date);
+     2. a fresh fetch then runs in the background and replaces it on success;
+     3. with no network we keep showing the saved copy, clearly marked
+        "Showing saved copy"; the weather data still reads fully, and the
+        space picture shows its saved text (and image, if it fit in storage).
+   So the page still opens and looks right by double-click — it just can't
+   refresh until it's back online. No accounts, no server, no tracking.
+   ===================================================================== */
+
+const $ = id => document.getElementById(id);
+
+/* ---- storage (best-effort; private mode / quota just degrades gracefully) ---- */
+const KEY = {
+  loc:'teachingtools.daily.location.v1',
+  wx:'teachingtools.daily.weather.v1',
+  apod:'teachingtools.daily.apod.v1',
+  apodImg:'teachingtools.daily.apodimg.v1',
+  units:'teachingtools.daily.units.v1',
+  tab:'teachingtools.daily.tab.v1',
+};
+const LS = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } },
+  getRaw(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  setRaw(k,v){ try{ localStorage.setItem(k, v); return true; }catch(e){ return false; } },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} },
+};
+
+const DEFAULT_LOC = { name:'Calgary', admin1:'Alberta', country:'Canada',
+  lat:51.0501, lon:-114.0853 };
+
+const NASA_KEY = 'DEMO_KEY';   // shared demo key — adequate at classroom volume
+
+/* ---- runtime state ---- */
+const state = {
+  tab:   LS.get(KEY.tab) || 'weather',
+  units: LS.get(KEY.units) || 'metric',
+  loc:   LS.get(KEY.loc) || DEFAULT_LOC,
+  wx:    null,   // {data, fetchedAt, loc}
+  apod:  null,   // {data, fetchedAt}
+  fetched: { weather:false, apod:false },   // has a live fetch been attempted this session
+  cached:  { weather:false, apod:false },   // is the currently-shown panel from cache (stale)
+};
+
+/* ---- small helpers ---- */
+function E(tag, cls, text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+function toast(msg, kind){
+  const t = E('div', 'toast' + (kind?' '+kind:''), msg);
+  $('toastWrap').appendChild(t);
+  setTimeout(()=>{ t.style.transition='opacity .3s'; t.style.opacity='0'; setTimeout(()=>t.remove(),300); }, 3400);
+}
+
+async function fetchJSON(url, ms=12000){
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), ms);
+  try{
+    const r = await fetch(url, { signal:ctrl.signal, cache:'no-store' });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+
+/* ---- unit-aware formatting (we always fetch metric, convert on display) ---- */
+function tNum(c){ return state.units==='imperial' ? c*9/5+32 : c; }
+function tStr(c){ return (c==null||isNaN(c)) ? '—' : Math.round(tNum(c)) + '°'; }
+function tUnit(){ return state.units==='imperial' ? '°F' : '°C'; }
+function wStr(kmh){ if(kmh==null||isNaN(kmh)) return '—';
+  return state.units==='imperial' ? Math.round(kmh*0.621371)+' mph' : Math.round(kmh)+' km/h'; }
+function pStr(mm){ if(mm==null||isNaN(mm)) return '—';
+  return state.units==='imperial' ? (mm*0.0393701).toFixed(2)+' in' : (Math.round(mm*10)/10)+' mm'; }
+
+/* ---- date/time formatting (Open-Meteo local ISO strings have no offset:
+   read the clock straight off the string so we show the PLACE's local time) ---- */
+function fmtClock(iso){
+  const t = (iso||'').split('T')[1] || '';
+  const [h,m] = t.split(':'); if(h==null) return '—';
+  let hh = Number(h)%12; if(hh===0) hh=12;
+  const ap = Number(h)>=12 ? 'PM':'AM';
+  return hh + ':' + (m||'00') + ' ' + ap;
+}
+function fmtHour(iso){
+  let h = Number((((iso||'').split('T')[1]||'0').split(':'))[0]);
+  let hh = h%12; if(hh===0) hh=12;
+  return hh + (h>=12 ? 'PM':'AM');
+}
+function fmtStamp(iso){
+  try{ return new Date(iso).toLocaleString(undefined,{weekday:'short',hour:'numeric',minute:'2-digit'}); }
+  catch(e){ return iso; }
+}
+function dayLabel(dstr, i){
+  if(i===0) return 'Today';
+  const [Y,M,D] = dstr.split('-').map(Number);
+  return new Date(Y, M-1, D).toLocaleDateString(undefined,{weekday:'short'});
+}
+
+/* ---- WMO weather code -> [label, day icon, night icon] ---- */
+const WMO = {
+  0:['Clear sky','☀️','🌙'], 1:['Mainly clear','🌤️','🌙'], 2:['Partly cloudy','⛅','☁️'], 3:['Overcast','☁️','☁️'],
+  45:['Fog','🌫️','🌫️'], 48:['Rime fog','🌫️','🌫️'],
+  51:['Light drizzle','🌦️','🌧️'], 53:['Drizzle','🌦️','🌧️'], 55:['Heavy drizzle','🌧️','🌧️'],
+  56:['Freezing drizzle','🌧️','🌧️'], 57:['Freezing drizzle','🌧️','🌧️'],
+  61:['Light rain','🌦️','🌧️'], 63:['Rain','🌧️','🌧️'], 65:['Heavy rain','🌧️','🌧️'],
+  66:['Freezing rain','🌧️','🌧️'], 67:['Freezing rain','🌧️','🌧️'],
+  71:['Light snow','🌨️','🌨️'], 73:['Snow','🌨️','🌨️'], 75:['Heavy snow','❄️','❄️'], 77:['Snow grains','🌨️','🌨️'],
+  80:['Rain showers','🌦️','🌧️'], 81:['Rain showers','🌧️','🌧️'], 82:['Violent showers','⛈️','⛈️'],
+  85:['Snow showers','🌨️','🌨️'], 86:['Heavy snow showers','❄️','❄️'],
+  95:['Thunderstorm','⛈️','⛈️'], 96:['Thunderstorm, hail','⛈️','⛈️'], 99:['Thunderstorm, hail','⛈️','⛈️'],
+};
+function wmo(code, isDay){ const e = WMO[code] || ['—','🌡️','🌡️']; return { label:e[0], icon: isDay ? e[1] : (e[2]||e[1]) }; }
+
+/* ================= tab switching ================= */
+function setTab(tab){
+  state.tab = tab;
+  LS.set(KEY.tab, tab);
+  const isWx = tab==='weather';
+  $('tabWeather').classList.toggle('active', isWx);
+  $('tabApod').classList.toggle('active', !isWx);
+  $('tabWeather').setAttribute('aria-selected', isWx);
+  $('tabApod').setAttribute('aria-selected', !isWx);
+  $('weatherView').classList.toggle('active', isWx);
+  $('apodView').classList.toggle('active', !isWx);
+  // location + units controls only make sense for weather
+  $('locBtn').classList.toggle('hideTab', !isWx);
+  $('unitSeg').classList.toggle('hideTab', !isWx);
+  closeLocPop();
+  updateStatus();
+  // lazy-fetch the panel the first time it's viewed
+  if(tab==='weather' && !state.fetched.weather) fetchWeather();
+  if(tab==='apod' && !state.fetched.apod) fetchApod();
+}
+
+/* ================= WEATHER ================= */
+function weatherUrl(loc){
+  return 'https://api.open-meteo.com/v1/forecast'
+    + '?latitude='  + encodeURIComponent(loc.lat)
+    + '&longitude=' + encodeURIComponent(loc.lon)
+    + '&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,is_day'
+    + '&hourly=temperature_2m,precipitation_probability,weather_code,is_day'
+    + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max'
+    + '&timezone=auto&forecast_days=7&wind_speed_unit=kmh&temperature_unit=celsius&precipitation_unit=mm';
+}
+
+async function fetchWeather(){
+  state.fetched.weather = true;
+  if(!state.wx) showLoading('weatherBody', 'Getting the forecast…');
+  setRefreshing(true);
+  try{
+    const data = await fetchJSON(weatherUrl(state.loc));
+    if(!data || !data.current) throw new Error('bad payload');
+    const rec = { data, fetchedAt:new Date().toISOString(), loc:state.loc };
+    LS.set(KEY.wx, rec);
+    state.wx = rec; state.cached.weather = false;
+    renderWeather(rec);
+  }catch(e){
+    const cache = state.wx || LS.get(KEY.wx);
+    if(cache){ state.wx = cache; state.cached.weather = true; renderWeather(cache);
+      if(navigator.onLine) toast('Couldn’t refresh the forecast — showing the saved copy.', 'err'); }
+    else { renderWeatherError(); }
+  } finally { setRefreshing(false); updateStatus(); }
+}
+
+function outdoorVerdict(data){
+  const cur = data.current, day = data.daily || {};
+  const code = cur.weather_code;
+  const feels = cur.apparent_temperature;
+  const precipProb = (day.precipitation_probability_max||[])[0] ?? 0;
+  const gust = (day.wind_gusts_10m_max||[])[0] ?? cur.wind_gusts_10m ?? 0;
+  const wet  = [51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code);
+  const snow = [71,73,75,77,85,86].includes(code);
+  const storm= [95,96,99].includes(code);
+
+  if(storm) return {level:'indoor', icon:'⛈️', head:'Indoor day', detail:'Thunderstorms around — keep recess inside.'};
+  if(feels <= -20) return {level:'indoor', icon:'🥶', head:'Indoor recess', detail:'Feels like '+tStr(feels)+' — too cold to be out long.'};
+  if(precipProb >= 70 || ((wet||snow) && precipProb >= 50))
+    return {level:'indoor', icon: snow?'🌨️':'🌧️', head:'Likely indoor', detail:precipProb+'% chance of '+(snow?'snow':'rain')+' today.'};
+  if(feels <= -12) return {level:'caution', icon:'🧥', head:'Bundle up', detail:'Feels like '+tStr(feels)+' — hats and mitts for outside.'};
+  if(gust >= 50) return {level:'caution', icon:'💨', head:'Windy out', detail:'Gusts to '+wStr(gust)+' — hold onto the hats.'};
+  if(precipProb >= 40 || wet || snow) return {level:'caution', icon:'☔', head:'Maybe pack a jacket', detail:precipProb+'% chance of precipitation.'};
+  if(feels >= 30) return {level:'caution', icon:'🥵', head:'Hot one', detail:'Feels like '+tStr(feels)+' — water bottles and shade.'};
+  return {level:'good', icon:'✅', head:'Great day to be outside', detail:'Clear enough for recess and outdoor PE.'};
+}
+
+function renderWeather(rec){
+  const data = rec.data;
+  const cur = data.current, day = data.daily || {}, hourly = data.hourly || {};
+  const loc = rec.loc || state.loc;
+  const body = $('weatherBody'); body.innerHTML = '';
+
+  // place heading
+  const place = E('div','wx-place');
+  place.appendChild(E('h1', null, loc.name || 'Weather'));
+  const region = [loc.admin1, loc.country].filter(Boolean).join(', ');
+  if(region) place.appendChild(E('span','sub', region));
+  body.appendChild(place);
+
+  // current conditions card
+  const now = E('div','wx-now');
+  const lead = E('div','wx-lead');
+  const w = wmo(cur.weather_code, cur.is_day===1);
+  lead.appendChild(E('div','wx-icon', w.icon));
+  const col = E('div');
+  col.appendChild(E('div','wx-temp', tStr(cur.temperature_2m)));
+  col.appendChild(E('div','wx-cond', w.label));
+  col.appendChild(E('div','wx-feels', 'Feels like '+tStr(cur.apparent_temperature)));
+  lead.appendChild(col);
+  now.appendChild(lead);
+
+  const stats = E('div','wx-stats');
+  const addStat = (lab,val)=>{ const s=E('div','wx-stat'); s.appendChild(E('div','lab',lab)); s.appendChild(E('div','val',val)); stats.appendChild(s); };
+  addStat('Humidity', (cur.relative_humidity_2m!=null? cur.relative_humidity_2m+'%' : '—'));
+  addStat('Wind', wStr(cur.wind_speed_10m));
+  addStat('Gusts', wStr(cur.wind_gusts_10m));
+  addStat('UV index', ((day.uv_index_max||[])[0]!=null ? Math.round(day.uv_index_max[0]) : '—'));
+  addStat('Sunrise', fmtClock((day.sunrise||[])[0]));
+  addStat('Sunset', fmtClock((day.sunset||[])[0]));
+  now.appendChild(stats);
+  body.appendChild(now);
+
+  // outdoor-day verdict
+  const v = outdoorVerdict(data);
+  const vb = E('div','wx-verdict '+v.level);
+  vb.appendChild(E('div','vico', v.icon));
+  const vt = E('div','vtxt'); vt.appendChild(E('b', null, v.head)); vt.appendChild(E('span', null, v.detail));
+  vb.appendChild(vt);
+  body.appendChild(vb);
+
+  // 7-day
+  body.appendChild(E('h2','section-title','7-Day Forecast'));
+  const days = E('div','wx-days');
+  const dt = day.time || [];
+  for(let i=0;i<dt.length;i++){
+    const d = E('div','wx-day' + (i===0?' istoday':''));
+    d.appendChild(E('div','dn', dayLabel(dt[i], i)));
+    d.appendChild(E('div','di', wmo((day.weather_code||[])[i], true).icon));
+    d.appendChild(E('div','dhi', tStr((day.temperature_2m_max||[])[i])));
+    d.appendChild(E('div','dlo', tStr((day.temperature_2m_min||[])[i])));
+    const pp = (day.precipitation_probability_max||[])[i];
+    d.appendChild(E('div','dp', (pp!=null && pp>0) ? '💧'+pp+'%' : ''));
+    days.appendChild(d);
+  }
+  body.appendChild(days);
+
+  // hourly (from the current hour forward)
+  const ht = hourly.time || [];
+  if(ht.length){
+    body.appendChild(E('h2','section-title','Next Hours'));
+    const hours = E('div','wx-hours');
+    let start = 0;
+    const nowKey = cur.time;
+    for(let i=0;i<ht.length;i++){ if(ht[i] >= nowKey){ start=i; break; } }
+    for(let i=start; i<Math.min(start+16, ht.length); i++){
+      const h = E('div','wx-hour');
+      h.appendChild(E('div','ht', i===start ? 'Now' : fmtHour(ht[i])));
+      h.appendChild(E('div','hi', wmo((hourly.weather_code||[])[i], (hourly.is_day||[])[i]!==0).icon));
+      h.appendChild(E('div','hv', tStr((hourly.temperature_2m||[])[i])));
+      const pp = (hourly.precipitation_probability||[])[i];
+      h.appendChild(E('div','hp', (pp!=null && pp>0) ? pp+'%' : ''));
+      hours.appendChild(h);
+    }
+    body.appendChild(hours);
+  }
+}
+
+function renderWeatherError(){
+  const body = $('weatherBody'); body.innerHTML='';
+  const s = E('div','state');
+  s.appendChild(E('div','big','📡'));
+  s.appendChild(E('h3', null, 'Can’t reach the forecast'));
+  s.appendChild(E('p', null, 'Connect to the internet once and today’s weather will be saved here for offline use. Then press Refresh.'));
+  const b = E('button','btn','Try again'); b.addEventListener('click', fetchWeather);
+  s.appendChild(b);
+  body.appendChild(s);
+}
+
+/* ================= APOD ================= */
+function apodUrl(){ return 'https://api.nasa.gov/planetary/apod?thumbs=true&api_key=' + NASA_KEY; }
+function apodPermalink(dstr){
+  if(!dstr) return 'https://apod.nasa.gov/apod/astropix.html';
+  const [Y,M,D] = dstr.split('-');
+  return 'https://apod.nasa.gov/apod/ap' + Y.slice(2) + M + D + '.html';
+}
+
+async function fetchApod(){
+  state.fetched.apod = true;
+  if(!state.apod) showLoading('apodBody', 'Fetching today’s picture…');
+  setRefreshing(true);
+  try{
+    const data = await fetchJSON(apodUrl());
+    if(!data || !data.title) throw new Error('bad payload');
+    const rec = { data, fetchedAt:new Date().toISOString() };
+    LS.set(KEY.apod, rec);
+    state.apod = rec; state.cached.apod = false;
+    renderApod(rec);
+    if(data.media_type === 'image') cacheApodImage(data);   // best-effort for offline
+  }catch(e){
+    const cache = state.apod || LS.get(KEY.apod);
+    if(cache){ state.apod = cache; state.cached.apod = true; renderApod(cache);
+      if(navigator.onLine) toast('Couldn’t refresh the picture — showing the saved copy.', 'err'); }
+    else { renderApodError(); }
+  } finally { setRefreshing(false); updateStatus(); }
+}
+
+// Try to keep a copy of the image for true offline viewing. Best-effort only:
+// capped small so we don't crowd the shared-origin storage, and silent on any
+// CORS / quota failure (the page still works, it just won't show it offline).
+function cacheApodImage(data){
+  const src = data.url;
+  if(!src) return;
+  fetch(src, { cache:'force-cache' })
+    .then(r => r.ok ? r.blob() : Promise.reject())
+    .then(blob => {
+      if(blob.size > 1300000) { LS.del(KEY.apodImg); return; }   // too big — skip
+      const fr = new FileReader();
+      fr.onload = ()=> LS.setRaw(KEY.apodImg, JSON.stringify({ date:data.date, dataURL:fr.result }));
+      fr.readAsDataURL(blob);
+    })
+    .catch(()=>{ /* cross-origin or offline — ignore */ });
+}
+
+function renderApod(rec){
+  const data = rec.data;
+  const body = $('apodBody'); body.innerHTML='';
+
+  // header: title + meta
+  const head = E('div','apod-head');
+  head.appendChild(E('h1','apod-title', data.title || 'Astronomy Picture of the Day'));
+  const meta = E('div','apod-meta');
+  if(data.date){
+    const [Y,M,D] = data.date.split('-').map(Number);
+    meta.appendChild(E('span', null, new Date(Y,M-1,D).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'})));
+  }
+  if(data.copyright) meta.appendChild(E('span', null, '© ' + data.copyright.replace(/\s+/g,' ').trim()));
+  head.appendChild(meta);
+  body.appendChild(head);
+
+  // media stage
+  const stage = E('div','apod-stage');
+  const isVideo = data.media_type === 'video';
+  const isImage = data.media_type === 'image';
+
+  if(isImage){
+    const img = E('img','apod-media');
+    img.alt = data.title || 'Astronomy picture of the day';
+    img.loading = 'eager';
+    img.src = data.url;
+    img.addEventListener('error', ()=>{
+      // offline fallback: use the saved copy if it's for THIS picture
+      const saved = LS.get(KEY.apodImg);
+      if(saved && saved.date === data.date && saved.dataURL){ img.src = saved.dataURL; return; }
+      stage.innerHTML='';
+      stage.appendChild(E('div','apod-imgnote','🖼️ The image can’t load offline. Reconnect and press Refresh to see it.'));
+    });
+    stage.appendChild(img);
+  } else if(isVideo && /\.(mp4|webm|ogg)(\?|$)/i.test(data.url||'')){
+    const vid = document.createElement('video');
+    vid.className='apod-media'; vid.controls=true; vid.playsInline=true; vid.preload='metadata';
+    if(data.thumbnail_url) vid.poster = data.thumbnail_url;
+    vid.src = data.url;
+    stage.appendChild(vid);
+  } else if(isVideo){
+    // embeddable video (YouTube / Vimeo)
+    const frame = E('div','apod-frame');
+    const ifr = document.createElement('iframe');
+    ifr.src = data.url; ifr.title = data.title || 'APOD video';
+    ifr.allow = 'accelerometer; encrypted-media; picture-in-picture; fullscreen';
+    ifr.setAttribute('allowfullscreen','');
+    ifr.loading = 'lazy';
+    frame.appendChild(ifr);
+    stage.appendChild(frame);
+  } else {
+    stage.appendChild(E('div','apod-imgnote','Today’s entry isn’t an image or video — read the explanation below, or open it on NASA.'));
+  }
+  body.appendChild(stage);
+
+  // explanation
+  if(data.explanation) body.appendChild(E('p','apod-text', data.explanation));
+
+  // links
+  const links = E('div','apod-links');
+  if(isImage){
+    const hd = E('a','btn small', '🔍 View full resolution');
+    hd.href = data.hdurl || data.url; hd.target='_blank'; hd.rel='noopener';
+    links.appendChild(hd);
+  } else if(isVideo){
+    const wv = E('a','btn small', '▶ Watch the video');
+    wv.href = data.url; wv.target='_blank'; wv.rel='noopener';
+    links.appendChild(wv);
+  }
+  const open = E('a','btn small', '🛰️ Open on NASA APOD');
+  open.href = apodPermalink(data.date); open.target='_blank'; open.rel='noopener';
+  links.appendChild(open);
+  body.appendChild(links);
+}
+
+function renderApodError(){
+  const body = $('apodBody'); body.innerHTML='';
+  const s = E('div','state');
+  s.appendChild(E('div','big','🔭'));
+  s.appendChild(E('h3', null, 'Can’t reach NASA right now'));
+  s.appendChild(E('p', null, 'Connect to the internet once and the picture of the day will be saved here. Then press Refresh.'));
+  const b = E('button','btn','Try again'); b.addEventListener('click', fetchApod);
+  s.appendChild(b);
+  body.appendChild(s);
+}
+
+/* ================= shared UI: loading / status / refresh ================= */
+function showLoading(bodyId, msg){
+  const body = $(bodyId); body.innerHTML='';
+  const s = E('div','state');
+  s.appendChild(E('div','spin'));
+  s.appendChild(E('p', null, msg||'Loading…'));
+  body.appendChild(s);
+}
+let refreshCount = 0;
+function setRefreshing(on){
+  refreshCount = Math.max(0, refreshCount + (on?1:-1));
+  $('refreshBtn').classList.toggle('refreshing', refreshCount>0);
+  $('refreshBtn').disabled = refreshCount>0;
+}
+function updateStatus(){
+  const online = navigator.onLine;
+  const net = $('netStat');
+  net.classList.toggle('off', !online);
+  net.querySelector('.t').textContent = online ? 'Online' : 'Offline';
+
+  const rec = state.tab==='weather' ? state.wx : state.apod;
+  const isCached = state.tab==='weather' ? state.cached.weather : state.cached.apod;
+  const src = $('srcStat');
+  if(!rec){ $('stampStat').textContent = online ? 'Loading…' : 'No saved copy yet'; src.textContent=''; src.className='src'; return; }
+  $('stampStat').innerHTML = 'Updated <b>' + fmtStamp(rec.fetchedAt) + '</b>';
+  if(isCached){ src.textContent='Showing saved copy'; src.className='src cached'; }
+  else { src.textContent='Live'; src.className='src live'; }
+}
+
+/* ================= location popover (geocoding) ================= */
+let geoTimer = null, geoSeq = 0;
+function openLocPop(){
+  const pop = $('locPop');
+  const btn = $('locBtn');
+  pop.style.display='block';
+  const r = btn.getBoundingClientRect();
+  const pw = pop.offsetWidth;
+  pop.style.left = clamp(r.right - pw, 8, window.innerWidth - pw - 8) + 'px';
+  pop.style.top  = (r.bottom + 6) + 'px';
+  const inp = $('locSearch'); inp.value=''; $('locResults').innerHTML='';
+  inp.focus();
+  setTimeout(()=> document.addEventListener('pointerdown', locOutside, true), 0);
+}
+function closeLocPop(){
+  $('locPop').style.display='none';
+  document.removeEventListener('pointerdown', locOutside, true);
+}
+function locOutside(e){ if(!e.target.closest('#locPop') && !e.target.closest('#locBtn')) closeLocPop(); }
+
+function geocode(q){
+  const seq = ++geoSeq;
+  const url = 'https://geocoding-api.open-meteo.com/v1/search?count=6&language=en&format=json&name=' + encodeURIComponent(q);
+  fetchJSON(url, 8000).then(res=>{
+    if(seq !== geoSeq) return;   // a newer keystroke superseded this
+    renderGeoResults(res && res.results ? res.results : []);
+  }).catch(()=>{ if(seq===geoSeq) renderGeoResults(null); });
+}
+function renderGeoResults(list){
+  const ul = $('locResults'); ul.innerHTML='';
+  if(list===null){ ul.appendChild(E('li','empty','Couldn’t search — check your connection.')); return; }
+  if(!list.length){ ul.appendChild(E('li','empty','No matches.')); return; }
+  list.forEach(p=>{
+    const li = E('li');
+    li.appendChild(E('div','nm', p.name));
+    li.appendChild(E('div','rg', [p.admin1, p.country].filter(Boolean).join(', ')));
+    li.addEventListener('click', ()=>{
+      state.loc = { name:p.name, admin1:p.admin1||'', country:p.country||'', lat:p.latitude, lon:p.longitude };
+      LS.set(KEY.loc, state.loc);
+      $('locLabel').textContent = state.loc.name;
+      closeLocPop();
+      state.fetched.weather = true;
+      fetchWeather();
+    });
+    ul.appendChild(li);
+  });
+}
+
+/* ================= units ================= */
+function setUnits(u){
+  state.units = u; LS.set(KEY.units, u);
+  $('unitC').classList.toggle('active', u==='metric');
+  $('unitF').classList.toggle('active', u==='imperial');
+  if(state.wx) renderWeather(state.wx);   // re-render from data, no refetch needed
+}
+
+/* ================= fullscreen ================= */
+function toggleFullscreen(){
+  try{
+    if(document.fullscreenElement) document.exitFullscreen();
+    else if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+  }catch(e){}
+}
+
+/* ================= wiring ================= */
+$('tabWeather').addEventListener('click', ()=> setTab('weather'));
+$('tabApod').addEventListener('click', ()=> setTab('apod'));
+$('unitC').addEventListener('click', ()=> setUnits('metric'));
+$('unitF').addEventListener('click', ()=> setUnits('imperial'));
+$('fsBtn').addEventListener('click', toggleFullscreen);
+$('refreshBtn').addEventListener('click', ()=>{ state.tab==='weather' ? fetchWeather() : fetchApod(); });
+$('locBtn').addEventListener('click', (e)=>{ e.stopPropagation();
+  if($('locPop').style.display==='block') closeLocPop(); else openLocPop(); });
+$('locSearch').addEventListener('input', e=>{
+  clearTimeout(geoTimer);
+  const q = e.target.value.trim();
+  if(q.length < 2){ $('locResults').innerHTML=''; return; }
+  geoTimer = setTimeout(()=> geocode(q), 300);
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeLocPop(); });
+
+// react to connectivity: when we come back online, refresh stale panels
+window.addEventListener('online',  ()=>{ updateStatus();
+  if(state.cached.weather || !state.wx) fetchWeather();
+  if((state.cached.apod || !state.apod) && state.fetched.apod) fetchApod(); });
+window.addEventListener('offline', updateStatus);
+
+// keep a board left up all day reasonably fresh, politely
+setInterval(()=>{
+  if(document.hidden || !navigator.onLine) return;
+  if(state.tab==='weather') fetchWeather();                    // ~every 30 min
+  const today = new Date().toLocaleDateString('en-CA');         // YYYY-MM-DD
+  if(state.apod && state.apod.data && state.apod.data.date < today) fetchApod();  // new day → new picture
+}, 30*60*1000);
+
+/* ================= init ================= */
+(function init(){
+  $('locLabel').textContent = state.loc.name || 'Calgary';
+  setUnits(state.units);
+
+  // paint from cache instantly so the page "opens and looks right"
+  const wxCache = LS.get(KEY.wx);
+  if(wxCache){ state.wx = wxCache; state.cached.weather = true; renderWeather(wxCache); }
+  const apodCache = LS.get(KEY.apod);
+  if(apodCache){ state.apod = apodCache; state.cached.apod = true; renderApod(apodCache); }
+
+  setTab(state.tab);              // shows the right panel + fetches it (lazy guard is unset on init)
+
+  updateStatus();
+})();
+</script>
+</body>
+</html>
