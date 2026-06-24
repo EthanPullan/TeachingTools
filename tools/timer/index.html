@@ -48,6 +48,7 @@
     cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;color:var(--ink);}
   .icon-btn:hover{background:var(--panel-2);}
   .icon-btn.on{background:var(--board);color:#fff;border-color:var(--board);}
+  .icon-btn[hidden]{display:none;}
 
   /* ---------- Stage ---------- */
   .stage{position:relative;flex:1;min-height:0;overflow:hidden;background:#0b1622;}
@@ -71,6 +72,23 @@
 
   .bar{width:min(560px,82%);height:9px;border-radius:20px;background:rgba(255,255,255,.18);overflow:hidden;}
   .bar-fill{height:100%;width:100%;border-radius:20px;background:linear-gradient(90deg,var(--accent),#ffd27a);}
+
+  /* Pie countdown — a "time disc" overlay for the timer. When off, .pie-wrap is
+     display:contents so #display flows exactly as before (keeps DVD bounce intact). */
+  .pie-wrap{display:contents;}
+  .pie{display:none;}
+  #timerView.pie-on{position:relative;}
+  #timerView.pie-on .bar{display:none;}
+  #timerView.pie-on .pie-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;
+    width:min(62vmin,64vh);height:min(62vmin,64vh);}
+  #timerView.pie-on .pie{display:block;position:absolute;inset:0;width:100%;height:100%;
+    filter:drop-shadow(0 10px 34px rgba(0,0,0,.5));}
+  #timerView.pie-on .time{position:relative;z-index:1;font-size:clamp(34px,11vmin,118px);}
+  .pie-face{fill:rgba(255,255,255,.10);}
+  .pie-wedge{fill:url(#pieGrad);transition:fill .45s;}
+  .pie-wedge.low{fill:var(--danger);}
+  .pie-rim{fill:none;stroke:rgba(255,255,255,.5);stroke-width:1.4;}
+  .pie-ticks line{stroke:rgba(255,255,255,.3);stroke-width:.7;stroke-linecap:round;}
 
   .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;}
   .big-btn{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.14);color:#fff;
@@ -144,6 +162,7 @@
       <button data-mode="timer" class="active">Timer</button>
       <button data-mode="stopwatch">Stopwatch</button>
     </div>
+    <button class="icon-btn" id="pieBtn" title="Pie countdown (P)" aria-label="Toggle pie countdown">◔</button>
     <div class="spacer"></div>
     <div class="bg-group">
       <div class="seg" id="bgPicker">
@@ -168,7 +187,21 @@
     <div class="overlay">
       <!-- TIMER -->
       <section class="view" id="timerView">
-        <div class="time" id="display">05:00</div>
+        <div class="pie-wrap">
+          <svg class="pie" id="pie" viewBox="0 0 100 100" aria-hidden="true">
+            <defs>
+              <linearGradient id="pieGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#ffd789"/>
+                <stop offset="1" stop-color="#e0982e"/>
+              </linearGradient>
+            </defs>
+            <circle class="pie-face" cx="50" cy="50" r="46"/>
+            <path class="pie-wedge" id="pieWedge" d=""/>
+            <g class="pie-ticks" id="pieTicks"></g>
+            <circle class="pie-rim" cx="50" cy="50" r="46"/>
+          </svg>
+          <div class="time" id="display">05:00</div>
+        </div>
         <div class="bar"><div class="bar-fill" id="barFill"></div></div>
         <div class="sub" id="timerSub"></div>
         <div class="controls">
@@ -232,6 +265,7 @@ const pad = n=>String(n).padStart(2,'0');
 
 let mode = 'timer';                 // 'timer' | 'stopwatch'
 let soundOn = true;
+let pieOn = false;                  // visual pie countdown overlay (timer only)
 
 /* ---------------- Time formatting ---------------- */
 function fmtTimer(ms){
@@ -309,9 +343,35 @@ function renderTimer(force){
   const str=fmtTimer(timer.remaining);
   if(force || str!==lastTimerStr){ $('display').textContent=str; lastTimerStr=str; }
   const pct = timer.duration>0 ? clamp(timer.remaining/timer.duration,0,1) : 0;
-  if(force || Math.abs(pct-lastPct)>0.001){ $('barFill').style.width=(pct*100)+'%'; lastPct=pct; }
+  if(force || Math.abs(pct-lastPct)>0.001){
+    $('barFill').style.width=(pct*100)+'%';
+    if(pieOn) updatePie(pct);
+    lastPct=pct;
+  }
 }
 function setTimerSub(t){ $('timerSub').textContent = t==="Time's up!" ? t : ''; }
+
+/* Visual pie countdown: the remaining-time wedge, drawn clockwise from 12 o'clock */
+function piePath(frac){
+  frac=clamp(frac,0,1);
+  if(frac<=0) return 'M0 0';                                              // empty disc
+  if(frac>=0.9999) return 'M50 4 A46 46 0 1 1 50 96 A46 46 0 1 1 50 4 Z'; // full disc
+  const ang=frac*2*Math.PI;
+  const x=(50+46*Math.sin(ang)).toFixed(3), y=(50-46*Math.cos(ang)).toFixed(3);
+  return `M50 50 L50 4 A46 46 0 ${frac>0.5?1:0} 1 ${x} ${y} Z`;
+}
+function updatePie(frac){
+  const w=$('pieWedge');
+  w.setAttribute('d', piePath(frac));
+  w.classList.toggle('low', frac>0 && (frac<=0.1 || timer.remaining<=10000));   // amber → red when nearly up
+}
+function setPie(on){
+  pieOn=on;
+  if(on && bg.scene==='dvd') selectScene('plain');   // pie and DVD bounce can't coexist
+  $('timerView').classList.toggle('pie-on',on);
+  $('pieBtn').classList.toggle('on',on);
+  renderTimer(true);
+}
 
 /* ---------------- Stopwatch ---------------- */
 const sw = { elapsed:0, running:false, startAt:0, laps:[] };
@@ -697,18 +757,21 @@ function setMode(m){
   $('timerView').hidden = m!=='timer';
   $('swView').hidden = m!=='stopwatch';
   $('modeToggle').querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+  $('pieBtn').hidden = m!=='timer';
 }
 $('modeToggle').addEventListener('click',e=>{ const b=e.target.closest('button[data-mode]'); if(b) setMode(b.dataset.mode); });
 const SCRIM_SCENES = new Set(['pipes','bubbles','confetti']);   // scenes busy enough to dim behind the timer
 function applyScrim(s){ $('scrim').classList.toggle('show', SCRIM_SCENES.has(s)); }
-$('bgPicker').addEventListener('click',e=>{
-  const b=e.target.closest('button[data-scene]'); if(!b) return;
-  const s=b.dataset.scene;
+function selectScene(s){
   bg.setScene(s);
-  $('bgPicker').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));
+  $('bgPicker').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x.dataset.scene===s));
   if(s==='dvd') dvd.enter(); else dvd.exit();
   if(s==='pipes') pipes3d.activate(); else pipes3d.deactivate();
   applyScrim(s);
+  if(s==='dvd' && pieOn) setPie(false);              // pie and DVD bounce can't coexist
+}
+$('bgPicker').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-scene]'); if(b) selectScene(b.dataset.scene);
 });
 
 /* ---------------- Controls wiring ---------------- */
@@ -733,6 +796,8 @@ $('minBtn').addEventListener('click',()=>{
 $('swStartBtn').addEventListener('click',swToggle);
 $('lapBtn').addEventListener('click',swLap);
 $('swResetBtn').addEventListener('click',swReset);
+
+$('pieBtn').addEventListener('click',()=>setPie(!pieOn));
 
 $('soundBtn').addEventListener('click',()=>{
   soundOn=!soundOn; ensureAudio();
@@ -766,10 +831,20 @@ window.addEventListener('keydown',e=>{
   else if(e.key==='r'||e.key==='R'){ mode==='timer'?timerReset():swReset(); }
   else if(e.key==='f'||e.key==='F'){ toggleFullscreen(); }
   else if((e.key==='l'||e.key==='L')&&mode==='stopwatch'){ swLap(); }
+  else if((e.key==='p'||e.key==='P')&&mode==='timer'){ setPie(!pieOn); }
 });
 window.addEventListener('resize',()=>{ bg.resize(); pipes3d.resize(); });
 
 /* ---------------- Init ---------------- */
+(function buildPieTicks(){            // 12 minute-marks around the pie face
+  const g=$('pieTicks');
+  for(let i=0;i<12;i++){ const a=i/12*2*Math.PI;
+    const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
+    ln.setAttribute('x1',(50+43*Math.sin(a)).toFixed(2)); ln.setAttribute('y1',(50-43*Math.cos(a)).toFixed(2));
+    ln.setAttribute('x2',(50+46*Math.sin(a)).toFixed(2)); ln.setAttribute('y2',(50-46*Math.cos(a)).toFixed(2));
+    g.appendChild(ln);
+  }
+})();
 bg.resize();
 setMode('timer');
 timerSetDuration(300000);   // default 5:00
