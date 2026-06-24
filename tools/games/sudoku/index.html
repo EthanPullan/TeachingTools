@@ -122,6 +122,9 @@
   .cell.peer{background:var(--peer);}
   .cell.hl-cell{background:var(--hl-cell);}
   .cell.sel{background:var(--sel);box-shadow:inset 0 0 0 2.5px var(--accent);z-index:1;}
+  /* in Digit mode the selection recolours by count: 2 cells → blue, 3+ → grey */
+  .cell.sel.sel-blue{background:rgba(47,111,159,.18);box-shadow:inset 0 0 0 2.5px var(--note-blue);}
+  .cell.sel.sel-grey{background:rgba(141,154,160,.26);box-shadow:inset 0 0 0 2.5px #7e8b87;}
 
   /* the final digit */
   .cell .val{display:none;font-family:var(--mono);font-weight:600;line-height:1;
@@ -435,6 +438,7 @@
 
   /* ---------- render everything from state ---------- */
   function render(){
+    if(!cells.length) return;          // nothing to draw until a puzzle is loaded
     const bad = computeConflicts();
     const single = selection.size===1 ? anchor : -1;
     let peerSet=null;
@@ -443,6 +447,8 @@
     // big-number cell is selected — that cell's digit.
     let hl = highlightNum;
     if(!hl && single>=0 && cells[single].val) hl = cells[single].val;
+    // while Digit mode is active, the selection wash signals the count: exactly 2 → blue, 3+ → grey
+    const selTint = mode==='digit' ? (selection.size===2 ? 'blue' : selection.size>2 ? 'grey' : '') : '';
 
     let filled=0, conflictCount=0;
     for(let i=0;i<81;i++){
@@ -450,11 +456,14 @@
       if(c.val) filled++;
       if(bad[i]) conflictCount++;
 
+      const isSel = selection.has(i);
       el.classList.toggle('given', c.given);
       el.classList.toggle('has-val', c.val!==0);
       el.classList.toggle('bad', bad[i] && c.val!==0);
-      el.classList.toggle('sel', selection.has(i));
-      el.classList.toggle('peer', peerSet ? (peerSet.has(i) && !selection.has(i)) : false);
+      el.classList.toggle('sel', isSel);
+      el.classList.toggle('sel-blue', isSel && selTint==='blue');
+      el.classList.toggle('sel-grey', isSel && selTint==='grey');
+      el.classList.toggle('peer', peerSet ? (peerSet.has(i) && !isSel) : false);
       el.classList.toggle('hl-cell', hl>0 && c.val===hl && !selection.has(i));
 
       if(c.val){
@@ -637,6 +646,7 @@
     pad.classList.toggle('m-grey', m==='grey');
     pad.classList.toggle('m-blue', m==='blue');
     pad.classList.toggle('m-strike', m==='strike');
+    render();   // the Digit-mode selection tint depends on the active mode
   }
   $('modes').addEventListener('click', e=>{ const b=e.target.closest('.mode'); if(b) setMode(b.dataset.mode); });
 
