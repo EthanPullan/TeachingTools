@@ -153,6 +153,11 @@
     35%{opacity:1;color:var(--note-strike);transform:scale(1.08);}
     100%{opacity:0;color:var(--note-strike);transform:scale(.55);}
   }
+  /* auto-completed cell: its digit pops in (staggered by --ad for a cascade) with a green glow */
+  .cell.just-auto .val{animation:autoPop .5s cubic-bezier(.2,.7,.3,1) var(--ad,0ms) both;}
+  .cell.just-auto{animation:autoGlow .55s ease var(--ad,0ms) both;}
+  @keyframes autoPop{0%{transform:scale(.2);opacity:0;}55%{transform:scale(1.2);opacity:1;}100%{transform:scale(1);opacity:1;}}
+  @keyframes autoGlow{0%{box-shadow:inset 0 0 0 3px var(--ok);background:rgba(63,158,107,.20);}100%{box-shadow:inset 0 0 0 0 rgba(63,158,107,0);background:transparent;}}
 
   /* pause / solved cover — hides the board behind a frosted, opaque panel */
   .cover{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
@@ -233,6 +238,7 @@
   @media (prefers-reduced-motion:reduce){
     .num:active,.mode:active,.btn:active,.icon-btn:active{transform:none;}
     .cell .notes span.flash{animation:none;}
+    .cell.just-auto,.cell.just-auto .val{animation:none;}
     *{scroll-behavior:auto;}
   }
 </style>
@@ -554,19 +560,34 @@
     if(mode==='digit'){
       snapshot();
       for(const i of typable){ cells[i].val=n; cells[i].grey.clear(); cells[i].blue.clear(); cells[i].strike.clear(); }
-      // auto-clean: drop n from the pencil notes of every cell these placements can see…
-      const cleared = new Set();
-      for(const i of typable){
-        for(const j of PEERS[i]){
+      // Cascade: each placed value clears that digit from the notes of every cell it sees, and
+      // within ITS 3×3 box any cell whittled down to a single option is auto-completed — which
+      // can in turn force more cells. The auto-fill is deliberately box-local; the note cleanup
+      // still spans the full row/column/box so the rest of the board stays consistent.
+      const removed = [];        // {cell,digit} peer notes cleared along the way (for the red flash)
+      const autoFilled = [];     // cells the cascade completed (for the pop animation)
+      const queue = [...typable];
+      let guard = 0;
+      while(queue.length && guard++ < 200){
+        const c = queue.shift(), v = cells[c].val;
+        for(const j of PEERS[c]){                          // full-peer note cleanup
           if(cells[j].val) continue;
-          let hit = false;
-          for(const L of NOTE_LAYERS){ if(cells[j][L].delete(n)) hit = true; }
-          if(hit) cleared.add(j);
+          for(const L of NOTE_LAYERS){ if(cells[j][L].delete(v)) removed.push({cell:j, digit:v}); }
+        }
+        for(const d of BOXES[boxOf(c)]){                   // single-option auto-fill, box only
+          if(cells[d].val) continue;
+          const opts = cellOptions(d);
+          if(opts.length!==1) continue;
+          const fv = opts[0];
+          if(PEERS[d].some(j => cells[j].val===fv)) continue;   // never auto-fill into a conflict
+          cells[d].val = fv; cells[d].grey.clear(); cells[d].blue.clear(); cells[d].strike.clear();
+          autoFilled.push(d); queue.push(d);               // its value may force more cells
         }
       }
-      highlightNum = n;                   // a placed number lights up all its matches
+      highlightNum = n;                   // the number you placed lights up across the board
       render();
-      flashCleared(cleared, n);          // …and briefly flash what was removed
+      flashRemovedNotes(removed);
+      animateAutoFills(autoFilled);
     }else{
       // Notes land only in empty cells, and never where a placed number already rules the
       // digit out. Toggle across the selection: if every target already has it, remove from
@@ -591,11 +612,14 @@
     checkSolved();
   }
 
-  // Briefly re-show the just-removed notes (red, fading out) so the player sees them go.
-  function flashCleared(cellIdxs, digit){
-    if(reduceMotion || !cellIdxs.size) return;
-    for(const j of cellIdxs){
-      if(cells[j].val) continue;
+  // A cell's candidate "options" = its grey notes that haven't been struck out.
+  function cellOptions(d){ const o=[]; for(const x of cells[d].grey) if(!cells[d].strike.has(x)) o.push(x); return o; }
+
+  // Briefly re-show just-removed notes (red, fading out) so the player sees them go.
+  function flashRemovedNotes(list){
+    if(reduceMotion || !list.length) return;
+    for(const {cell:j, digit} of list){
+      if(cells[j].val) continue;                  // cell was auto-filled later in the cascade
       const span = noteSpanEls[j][digit-1];
       span.textContent = digit; span.className = 'flash';
       const done = ()=>{
@@ -606,6 +630,18 @@
       };
       span.addEventListener('animationend', done);
     }
+  }
+
+  // Pop each auto-completed cell in, staggered by --ad, so a cascade reads in sequence.
+  function animateAutoFills(list){
+    if(reduceMotion || !list.length) return;
+    list.forEach((d,k)=>{
+      const el = cellEls[d];
+      el.style.setProperty('--ad', (k*100)+'ms');
+      el.classList.add('just-auto');
+      const done = ()=>{ el.removeEventListener('animationend', done); el.classList.remove('just-auto'); el.style.removeProperty('--ad'); };
+      el.addEventListener('animationend', done);
+    });
   }
 
   function eraseSelected(){
