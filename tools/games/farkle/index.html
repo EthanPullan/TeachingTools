@@ -103,8 +103,16 @@
   .die.sel svg{filter:drop-shadow(0 8px 10px rgba(0,0,0,.4));}
   .die.sel::after{content:"";position:absolute;inset:-7px;border-radius:16px;
     box-shadow:0 0 0 4px var(--accent);pointer-events:none;}
-  .die.roll{animation:tumble .6s cubic-bezier(.2,.8,.3,1.1) both;}
-  @keyframes tumble{0%{transform:scale(.2) rotate(-240deg);opacity:0;}65%{transform:scale(1.12) rotate(18deg);opacity:1;}100%{transform:rotate(var(--rot,0deg)) scale(1);opacity:1;}}
+  .die.roll{animation:tumble .72s both;}
+  @keyframes tumble{
+    0%{transform:translateY(-155%) rotate(-400deg) scale(.6);opacity:0;animation-timing-function:cubic-bezier(.45,.05,.95,.4);}
+    20%{opacity:1;}
+    52%{transform:translateY(9%) rotate(12deg) scale(1.1);animation-timing-function:cubic-bezier(.2,.85,.3,1);}
+    70%{transform:translateY(-6%) rotate(-6deg) scale(.96);}
+    86%{transform:translateY(3%) rotate(2deg) scale(1.01);}
+    100%{transform:translateY(0) rotate(var(--rot,0deg)) scale(1);opacity:1;}
+  }
+  .felt.rollable{cursor:pointer;}
   .tray-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     color:rgba(255,255,255,.62);font-size:clamp(15px,2.4vh,21px);font-weight:600;text-align:center;padding:30px;pointer-events:none;}
 
@@ -481,12 +489,13 @@
       add.textContent = (cur===i && turnPoints>0 && phase!=='over') ? ('+'+fmt(turnPoints)) : '';
     }
     // tray (active + selected dice) and kept strip
+    $('felt').classList.toggle('rollable', phase==='idle'||phase==='hotdice');
     const tray=$('tray'); tray.innerHTML='';
     const inPlay=dice.filter(d=>d.state==='active'||d.state==='selected');
     $('trayEmpty').style.display = inPlay.length ? 'none' : 'flex';
     $('trayEmpty').innerHTML = phase==='idle'
-      ? `${tag(cur)} — press <b>Roll</b> to throw the dice`
-      : (phase==='hotdice' ? `🔥 Hot dice! Press <b>Roll</b> for all six again, or <b>Bank</b>` : '');
+      ? `${tag(cur)} — press <b>Roll</b> or tap the table to throw the dice`
+      : (phase==='hotdice' ? `🔥 Hot dice! Tap the table or press <b>Roll</b> for all six again, or <b>Bank</b>` : '');
     inPlay.forEach((d,i)=>{
       const el=document.createElement('div');
       el.className='die pick'+(d.state==='selected'?' sel':'')+(d.fresh?' roll':'');
@@ -582,6 +591,7 @@
 
   /* events */
   $('rollBtn').addEventListener('click',roll);
+  $('felt').addEventListener('click',()=>{ if(phase==='idle'||phase==='hotdice') roll(); });
   $('setBtn').addEventListener('click',setAsideAndRoll);
   $('bankBtn').addEventListener('click',bank);
   $('newBtn').addEventListener('click',()=>{

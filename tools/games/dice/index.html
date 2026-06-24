@@ -74,17 +74,21 @@
     background-size:7px 7px;}
   .felt::after{content:"";position:absolute;inset:0;border-radius:16px;
     box-shadow:inset 0 0 0 2px rgba(255,255,255,.05);pointer-events:none;}
+  .felt{cursor:pointer;}
   .dice{position:absolute;inset:0;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;
-    gap:clamp(8px,1.4vw,18px);padding:clamp(20px,4vh,48px);overflow:auto;}
+    gap:clamp(8px,1.4vw,18px);padding:clamp(20px,4vh,48px);overflow:auto;cursor:pointer;}
   .die{cursor:pointer;transform:rotate(var(--rot,0deg));transition:transform .1s;
     width:clamp(58px,8.4vw,116px);height:clamp(58px,8.4vw,116px);flex:none;}
   .die:hover{transform:rotate(var(--rot,0deg)) scale(1.06);}
   .die svg{width:100%;height:100%;filter:drop-shadow(0 5px 7px rgba(0,0,0,.4));display:block;}
-  .die.roll{animation:tumble .62s cubic-bezier(.2,.8,.3,1.1) both;}
+  .die.roll{animation:tumble .72s both;}
   @keyframes tumble{
-    0%{transform:scale(.2) rotate(-240deg);opacity:0;}
-    65%{transform:scale(1.12) rotate(18deg);opacity:1;}
-    100%{transform:rotate(var(--rot,0deg)) scale(1);opacity:1;}
+    0%{transform:translateY(-155%) rotate(-400deg) scale(.6);opacity:0;animation-timing-function:cubic-bezier(.45,.05,.95,.4);}
+    20%{opacity:1;}
+    52%{transform:translateY(9%) rotate(12deg) scale(1.1);animation-timing-function:cubic-bezier(.2,.85,.3,1);}
+    70%{transform:translateY(-6%) rotate(-6deg) scale(.96);}
+    86%{transform:translateY(3%) rotate(2deg) scale(1.01);}
+    100%{transform:translateY(0) rotate(var(--rot,0deg)) scale(1);opacity:1;}
   }
   .tray-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     color:rgba(255,255,255,.6);font-size:clamp(15px,2.4vh,20px);font-weight:600;text-align:center;padding:30px;pointer-events:none;}
@@ -164,7 +168,7 @@
         <div class="felt">
           <div class="total"><span class="lab">Total</span><span class="num" id="totalNum">0</span></div>
           <div class="dice" id="dice"></div>
-          <div class="tray-empty" id="trayEmpty">Tap a die on the left, or build a roll on the right →</div>
+          <div class="tray-empty" id="trayEmpty">Tap the felt to roll — or pick a die on the left, or build a pool on the right →</div>
         </div>
       </div>
       <div class="breakdown" id="breakdown"></div>
@@ -333,6 +337,12 @@
     clack(Math.min(tray.length,8)); render();
   }
   function rndRot(){ return (Math.random()*24-12).toFixed(1)+'deg'; }
+  // Tap the felt to roll: re-roll what's there, else roll the pool, else a single d6.
+  function feltRoll(){
+    if(tray.length) return rerollAll();
+    if(TYPES.reduce((s,t)=>s+pool[t],0)>0) return rollPool();
+    rollOne(6);
+  }
 
   /* ---- render tray ---- */
   function render(){
@@ -345,7 +355,7 @@
       if(d.fresh) el.style.animationDelay=(i%12*0.04)+'s';
       el.innerHTML=dieSVG(d.type, d.value);
       el.title='d'+d.type+' — tap to re-roll';
-      el.addEventListener('click',()=>{ d.value=rnd(d.type); d.rot=rndRot(); d.fresh=true; clack(1); render(); });
+      el.addEventListener('click',(e)=>{ e.stopPropagation(); d.value=rnd(d.type); d.rot=rndRot(); d.fresh=true; clack(1); render(); });
       box.appendChild(el);
       d.fresh=false;
     });
@@ -401,6 +411,7 @@
   $('rollPoolBtn').addEventListener('click',rollPool);
   $('resetPoolBtn').addEventListener('click',resetPool);
   $('rerollBtn').addEventListener('click',rerollAll);
+  document.querySelector('.felt').addEventListener('click',feltRoll);
   $('clearBtn').addEventListener('click',()=>{ tray=[]; render(); });
   $('soundBtn').addEventListener('click',()=>{
     soundOn=!soundOn; ensureAudio();
