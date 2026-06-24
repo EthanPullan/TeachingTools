@@ -26,6 +26,7 @@
     --given:#16241f;        /* a clue printed by the puzzle (bold, immovable) */
     --user:#2f7d68;         /* a digit the player entered */
     --note-grey:#9aa4a3;    /* first pencil-note layer — light grey */
+    --note-grey-dim:#bdc5c3; /* dimmer grey for a struck (eliminated) note */
     --note-blue:#2f6f9f;    /* second pencil-note layer — blue */
     --sel:rgba(224,152,46,.22);   /* selected cell wash (amber) */
     --peer:rgba(31,61,53,.055);   /* row/col/box of the focused cell */
@@ -138,7 +139,7 @@
     font-family:var(--mono);font-weight:600;font-size:clamp(8px,1.7vmin,18px);}
   .cell .notes span.g{color:var(--note-grey);}
   .cell .notes span.b{color:var(--note-blue);}   /* blue layer wins the slot when a digit is in all three */
-  .cell .notes span.s{color:var(--note-grey);}   /* struck: a grey note crossed out in red */
+  .cell .notes span.s{color:var(--note-grey-dim);}   /* struck: a dimmed grey note crossed out in red */
   .cell .notes span.s::after{content:'';position:absolute;left:4%;right:4%;top:50%;
     border-top:2px solid var(--note-strike);transform:rotate(-18deg);transform-origin:center;}
   .cell .notes span.hl{background:var(--hl-note);border-radius:3px;}  /* little light-yellow highlight */
