@@ -145,7 +145,7 @@
     font-family:var(--mono);font-weight:600;font-size:clamp(8px,1.7vmin,18px);}
   .cell .notes span.g{color:var(--note-grey);opacity:var(--grey-op,1);}  /* opacity = the "grey" slider */
   .cell .notes span.b{color:var(--note-blue);font-weight:800;}   /* blue layer wins the slot when a digit is in all three */
-  .cell .notes span.s{color:var(--note-grey-dim);}   /* struck: a dimmed grey note crossed out in red */
+  .cell .notes span.s{color:var(--note-grey-dim);opacity:var(--grey-op,1);}   /* struck: dimmed grey + red slash; the grey slider fades it too */
   .cell .notes span.s::after{content:'';position:absolute;left:4%;right:4%;top:50%;
     border-top:2px solid var(--note-strike);transform:rotate(-18deg);transform-origin:center;}
   .board.hide-struck .cell .notes span.s{display:none;}   /* "red strikes" visibility toggle */
