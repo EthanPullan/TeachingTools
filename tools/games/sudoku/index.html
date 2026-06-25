@@ -576,8 +576,15 @@
   function selectOnly(i){ selection.clear(); selection.add(i); anchor=i; syncHighlight(); render(); }
   function addToSelection(i){ if(!selection.has(i)){ selection.add(i); anchor=i; syncHighlight(); render(); } }
   function clearSelection(){ selection.clear(); anchor=-1; syncHighlight(); render(); }
+  // remove one cell from a multi-selection, leaving the rest (the count rules re-apply)
+  function deselectCell(i){
+    if(!selection.has(i)) return;
+    selection.delete(i);
+    if(anchor===i){ const rest=[...selection]; anchor = rest.length ? rest[rest.length-1] : -1; }
+    syncHighlight(); render();
+  }
 
-  let dragging=false, dragMoved=false;
+  let dragging=false, dragMoved=false, downIdx=-1, downWasSelected=false;
   function cellFromPoint(x,y){
     const el = document.elementFromPoint(x,y);
     const cell = el && el.closest && el.closest('.cell');
@@ -585,12 +592,14 @@
   }
   boardEl.addEventListener('pointerdown', e=>{
     if(paused||solved) return;
-    const i = e.target.closest('.cell'); if(!i) return;
+    const cellEl = e.target.closest('.cell'); if(!cellEl) return;
     e.preventDefault();
-    const idx = +i.dataset.i;
+    const idx = +cellEl.dataset.i;
     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
-    if(additive){ addToSelection(idx); } else { selectOnly(idx); }
-    dragging = true; dragMoved = false;
+    downIdx = idx; downWasSelected = selection.has(idx); dragMoved = false; dragging = true;
+    // Pressing an already-selected ("coloured") cell doesn't change the selection yet: a plain
+    // tap will un-select just that cell on release (the rest stay), while a drag from it extends.
+    if(!downWasSelected){ if(additive){ addToSelection(idx); } else { selectOnly(idx); } }
     try{ boardEl.setPointerCapture(e.pointerId); }catch(_){}
   });
   boardEl.addEventListener('pointermove', e=>{
@@ -603,7 +612,12 @@
     dragMoved = true;
     addToSelection(idx);
   });
-  const endDrag = e=>{ dragging=false; try{ boardEl.releasePointerCapture(e.pointerId); }catch(_){} };
+  function endDrag(e){
+    // a tap (no drag) on an already-selected cell un-selects it, keeping the rest of the group
+    if(dragging && !dragMoved && downWasSelected) deselectCell(downIdx);
+    dragging=false;
+    try{ boardEl.releasePointerCapture(e.pointerId); }catch(_){}
+  }
   boardEl.addEventListener('pointerup', endDrag);
   boardEl.addEventListener('pointercancel', endDrag);
 
