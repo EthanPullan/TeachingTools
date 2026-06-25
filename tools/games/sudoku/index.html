@@ -557,7 +557,15 @@
     // number as a highlighter: light up every cell and note holding this digit.
     if(!typable.length){ setHighlight(highlightNum===n ? 0 : n); return; }
 
+    // In green/Digit mode the selection count chooses the action (mirrors the selection tint):
+    // a single cell places a number, exactly 2 writes a blue note, 3+ writes a grey note.
+    let act = mode;
     if(mode==='digit'){
+      if(selection.size===2) act='blue';
+      else if(selection.size>2) act='grey';
+    }
+
+    if(act==='digit'){
       snapshot();
       for(const i of typable){ cells[i].val=n; cells[i].grey.clear(); cells[i].blue.clear(); cells[i].strike.clear(); }
       // Cascade: each placed value clears that digit from the notes of every cell it sees, and
@@ -592,7 +600,7 @@
       // Notes land only in empty cells, and never where a placed number already rules the
       // digit out. Toggle across the selection: if every target already has it, remove from
       // all; otherwise add it to every cell where the digit is still possible.
-      const layer = mode==='grey' ? 'grey' : mode==='blue' ? 'blue' : 'strike';
+      const layer = act;   // 'grey' | 'blue' | 'strike'
       const possible = i => !PEERS[i].some(j => cells[j].val===n);
       const allHave = typable.every(i => cells[i][layer].has(n));
       if(allHave){
