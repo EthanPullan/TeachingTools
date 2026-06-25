@@ -33,6 +33,9 @@
     --hl-cell:rgba(255,206,69,.34);  /* cells holding the highlighted digit (light yellow) */
     --hl-note:#ffe7a0;               /* little light-yellow mark behind a matching note */
     --note-strike:#c43d35;           /* red slash for struck (eliminated) notes */
+    --tech:#7a4ea8;                  /* technique highlight (violet, distinct from selection) */
+    --tech-key:rgba(122,78,168,.22); /* the cells a technique centres on */
+    --tech-unit:rgba(122,78,168,.10);/* the row/col/box a technique lives in */
   }
   *{box-sizing:border-box;} html,body{height:100%;}
   body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
@@ -128,6 +131,9 @@
   /* in Digit mode the selection recolours by count: 2 cells → blue, 3+ → grey */
   .cell.sel.sel-blue{background:rgba(47,111,159,.18);box-shadow:inset 0 0 0 2.5px var(--note-blue);}
   .cell.sel.sel-grey{background:rgba(141,154,160,.26);box-shadow:inset 0 0 0 2.5px #7e8b87;}
+  /* technique highlight (violet): the unit it lives in, and the key cells it centres on */
+  .cell.tech-unit{background:var(--tech-unit);}
+  .cell.tech{background:var(--tech-key);box-shadow:inset 0 0 0 3px var(--tech);z-index:2;}
 
   /* the final digit */
   .cell .val{display:none;font-family:var(--mono);font-weight:600;line-height:1;
@@ -166,6 +172,39 @@
   @keyframes autoGlow{0%{box-shadow:inset 0 0 0 3px var(--ok);background:rgba(63,158,107,.20);}100%{box-shadow:inset 0 0 0 0 rgba(63,158,107,0);background:transparent;}}
 
   /* pause / solved cover — hides the board behind a frosted, opaque panel */
+  /* ── Techniques menu (popover under the toolbar button) ── */
+  .tech-wrap{position:relative;display:inline-flex;}
+  .tech-wrap .caret{font-size:11px;color:var(--muted);margin-left:1px;}
+  .tech-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:30;min-width:230px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+    padding:6px;display:flex;flex-direction:column;gap:3px;}
+  .tech-menu[hidden]{display:none;}
+  .tech-item{display:flex;flex-direction:column;gap:1px;text-align:left;border:none;background:none;
+    border-radius:8px;padding:8px 10px;cursor:pointer;}
+  .tech-item:hover{background:var(--panel-2);}
+  .tech-item .ti-name{font-weight:700;font-size:13.5px;color:var(--ink);display:flex;align-items:center;gap:7px;}
+  .tech-item .ti-num{font-family:var(--mono);font-size:11px;color:#fff;background:var(--tech);
+    border-radius:6px;min-width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center;}
+  .tech-item .ti-sum{font-size:11.5px;color:var(--muted);line-height:1.35;}
+
+  /* ── Technique result card (floats over the bottom of the board) ── */
+  .tech-panel{position:absolute;left:10px;right:10px;bottom:10px;z-index:5;
+    background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--tech);
+    border-radius:12px;box-shadow:0 10px 30px rgba(20,40,33,.22);padding:11px 13px;
+    animation:tin .18s ease both;}
+  .tech-panel[hidden]{display:none;}
+  .tech-panel.at-top{top:10px;bottom:auto;}   /* flip up so it never covers a low finding */
+  .tech-panel.empty{border-left-color:var(--muted);}
+  @keyframes tin{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  .tp-head{display:flex;align-items:center;gap:8px;margin-bottom:3px;}
+  .tp-title{font-weight:800;font-size:14px;color:var(--tech);letter-spacing:.01em;}
+  .tech-panel.empty .tp-title{color:var(--muted);}
+  .tp-close{margin-left:auto;border:none;background:none;cursor:pointer;color:var(--muted);
+    font-size:20px;line-height:1;padding:0 4px;border-radius:6px;}
+  .tp-close:hover{color:var(--ink);background:var(--panel-2);}
+  .tp-text{font-size:13px;color:var(--ink);line-height:1.5;}
+  .tp-text b{font-family:var(--mono);color:var(--tech);font-weight:700;}
+
   .cover{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
     border-radius:12px;z-index:6;text-align:center;padding:18px;}
   .cover.show{display:flex;}
@@ -277,6 +316,10 @@
     <select class="picker" id="picker" aria-label="Choose a specific puzzle"></select>
 
     <div class="spacer"></div>
+    <div class="tech-wrap">
+      <button class="btn" id="techBtn" aria-haspopup="true" aria-expanded="false"><span class="ic">🎓</span><span class="desk">Techniques</span><span class="caret">▾</span></button>
+      <div class="tech-menu" id="techMenu" role="menu" hidden></div>
+    </div>
     <button class="btn" id="restartBtn"><span class="ic">↺</span><span class="desk">Restart</span></button>
     <button class="btn" id="fsBtn" aria-pressed="false" title="Full screen (F)"><span class="ic">⛶</span><span class="desk fs-label">Full screen</span></button>
   </header>
@@ -297,6 +340,13 @@
     <div class="board-area">
       <div class="board" id="board" aria-label="Sudoku board"></div>
       <div class="cover" id="cover"></div>
+      <div class="tech-panel" id="techPanel" hidden>
+        <div class="tp-head">
+          <span class="tp-title" id="tpTitle"></span>
+          <button class="tp-close" id="tpClose" aria-label="Dismiss">×</button>
+        </div>
+        <div class="tp-text" id="tpText"></div>
+      </div>
     </div>
 
     <section class="pad" id="pad" aria-label="Number pad">
@@ -326,6 +376,11 @@
     </section>
   </main>
 </div>
+
+<!-- Solving techniques: one self-registering file each (see techniques/README.md).
+     Classic scripts on purpose so the folder still works opened straight off disk. -->
+<script src="techniques/naked-single.js"></script>
+<script src="techniques/hidden-pair.js"></script>
 
 <script>
 (function(){
@@ -430,6 +485,7 @@
   let solved = false;
   let paused = false;
   let highlightNum = 0;           // 1-9 → light up every match; 0 → off
+  let techResult = null;          // current technique finding (cells/unit to highlight), or null
 
   /* ---------- build the board DOM once ---------- */
   const cellEls = [], valEls = [], noteSpanEls = [];
@@ -467,6 +523,7 @@
       cells.push({ given:g, val: g ? +p.givens[i] : 0, grey:new Set(), blue:new Set(), strike:new Set() });
     }
     selection.clear(); anchor = -1; history = []; solved = false; paused = false; highlightNum = 0;
+    clearTech();
     setCover('none');
     resetTimer(); startTimer();
     syncPicker();
@@ -490,6 +547,7 @@
   }
   function undo(){
     if(!history.length) return;
+    clearTech();
     const snap = history.pop();
     snap.forEach((sn,i)=>{ cells[i].val=sn.v; cells[i].grey=new Set(sn.g); cells[i].blue=new Set(sn.b); cells[i].strike=new Set(sn.s); });
     if(solved){ solved=false; setCover('none'); startTimer(); }
@@ -521,6 +579,9 @@
     const hl = highlightNum;
     // while Digit mode is active, the selection wash signals the count: exactly 2 → blue, 3+ → grey
     const selTint = mode==='digit' ? (selection.size===2 ? 'blue' : selection.size>2 ? 'grey' : '') : '';
+    // technique highlight: the key cells, plus (faintly) the unit they live in
+    const techCells = techResult ? new Set(techResult.cells) : null;
+    const techUnit  = (techResult && techResult.unit) ? new Set(techResult.unit.cells) : null;
 
     let filled=0, conflictCount=0;
     for(let i=0;i<81;i++){
@@ -537,6 +598,8 @@
       el.classList.toggle('sel-grey', isSel && selTint==='grey');
       el.classList.toggle('peer', peerSet ? (peerSet.has(i) && !isSel) : false);
       el.classList.toggle('hl-cell', hl>0 && c.val===hl && !selection.has(i));
+      el.classList.toggle('tech', techCells ? techCells.has(i) : false);
+      el.classList.toggle('tech-unit', techUnit ? (techUnit.has(i) && !techCells.has(i)) : false);
 
       if(c.val){
         valEls[i].textContent = c.val;
@@ -637,6 +700,7 @@
 
   function pressNumber(n){
     if(paused || solved) return;
+    clearTech();                         // a fresh action supersedes any technique hint
     const typable = typableTargets();    // empty, editable cells in the selection
 
     // Nothing to type into (empty selection, or only givens / filled cells) → use the
@@ -740,6 +804,7 @@
 
   function eraseSelected(){
     if(paused || solved) return;
+    clearTech();
     const targets = editableTargets().filter(i => cells[i].val || cells[i].grey.size || cells[i].blue.size || cells[i].strike.size);
     if(!targets.length) return;
     snapshot();
@@ -751,6 +816,7 @@
   // Fill every empty cell's GREY notes with its valid candidates (leaves blue & struck notes alone).
   function autoNote(){
     if(paused || solved) return;
+    clearTech();
     snapshot();
     for(let i=0;i<81;i++){
       if(cells[i].val) continue;
@@ -763,6 +829,83 @@
     highlightNum = 0;
     render();
   }
+
+  /* ============================================================
+     Solving techniques.
+     Each technique's search lives in its own techniques/<id>.js file
+     (loaded before this script) and registers itself on the global
+     SudokuTechniques list. Here we just hand it the board and show
+     the first example it finds — see techniques/README.md.
+     ============================================================ */
+  const TECHNIQUES = (window.SudokuTechniques || []).slice().sort((a,b)=>(a.order||99)-(b.order||99));
+
+  // Build the read-only board model a technique searches: values + basic candidates + units.
+  function buildTechCtx(){
+    const values = cells.map(c=>c.val);
+    const candidates = [];
+    for(let i=0;i<81;i++){
+      if(values[i]){ candidates.push(new Set()); continue; }
+      const used = new Set();
+      for(const j of PEERS[i]) if(values[j]) used.add(values[j]);
+      const cand = new Set();
+      for(let n=1;n<=9;n++) if(!used.has(n)) cand.add(n);
+      candidates.push(cand);
+    }
+    const units = [];
+    for(let r=0;r<9;r++) units.push({type:'row', index:r, cells:ROWS[r],  name:'row '+(r+1)});
+    for(let c=0;c<9;c++) units.push({type:'col', index:c, cells:COLS[c],  name:'column '+(c+1)});
+    for(let b=0;b<9;b++) units.push({type:'box', index:b, cells:BOXES[b], name:'box '+(b+1)});
+    return { values, candidates, units, peers:PEERS, rowOf, colOf, boxOf,
+             cellName:i=>'R'+(rowOf(i)+1)+'C'+(colOf(i)+1) };
+  }
+
+  function runTechnique(tech){
+    closeTechMenu();
+    if(paused || solved) return;
+    let res = null;
+    try{ res = tech.find(buildTechCtx()); }catch(e){ res = null; }
+    techResult = res || null;
+    clearSelection();              // move the player's own selection out of the way
+    showTechPanel(tech, res);
+    render();                      // paint the violet highlight
+  }
+
+  function showTechPanel(tech, res){
+    const panel = $('techPanel');
+    panel.hidden = false;
+    panel.classList.toggle('empty', !res);
+    // flip the card to the top of the board when the finding sits in the bottom rows,
+    // so it never hides the very cells it's pointing at
+    const rows = (res ? res.cells : []).map(i => (i/9)|0);
+    panel.classList.toggle('at-top', rows.some(r=>r>=7) && !rows.some(r=>r<=1));
+    if(!res){
+      $('tpTitle').textContent = 'No ' + tech.name;
+      $('tpText').textContent  = 'There’s no ' + tech.name + ' in the current position. Fill in a few more cells (or try another technique) and look again.';
+    }else{
+      $('tpTitle').textContent = res.title || tech.name;
+      $('tpText').textContent  = res.explanation || '';
+    }
+  }
+  function clearTech(){ techResult = null; $('techPanel').hidden = true; }
+
+  /* ---------- techniques menu (popover) ---------- */
+  function buildTechMenu(){
+    const menu = $('techMenu'); menu.innerHTML = '';
+    if(!TECHNIQUES.length){ $('techBtn').disabled = true; $('techBtn').title = 'No techniques loaded'; return; }
+    TECHNIQUES.forEach((t,k)=>{
+      const b = document.createElement('button');
+      b.className = 'tech-item'; b.setAttribute('role','menuitem');
+      const name = document.createElement('span'); name.className = 'ti-name';
+      const num = document.createElement('span'); num.className = 'ti-num'; num.textContent = k+1;
+      name.appendChild(num); name.appendChild(document.createTextNode(t.name));
+      const sum = document.createElement('span'); sum.className = 'ti-sum'; sum.textContent = t.summary || '';
+      b.appendChild(name); b.appendChild(sum);
+      b.addEventListener('click', ()=>runTechnique(t));
+      menu.appendChild(b);
+    });
+  }
+  function openTechMenu(){ if(!TECHNIQUES.length) return; $('techMenu').hidden=false; $('techBtn').setAttribute('aria-expanded','true'); }
+  function closeTechMenu(){ $('techMenu').hidden=true; $('techBtn').setAttribute('aria-expanded','false'); }
 
   /* ---------- win check (board full and free of conflicts) ---------- */
   function checkSolved(){
@@ -901,6 +1044,12 @@
   $('autoNoteBtn').addEventListener('click', autoNote);
   $('pauseBtn').addEventListener('click', togglePause);
 
+  /* ---------- techniques menu wiring ---------- */
+  buildTechMenu();
+  $('techBtn').addEventListener('click', e=>{ e.stopPropagation(); $('techMenu').hidden ? openTechMenu() : closeTechMenu(); });
+  $('tpClose').addEventListener('click', ()=>{ clearTech(); render(); });
+  document.addEventListener('click', e=>{ if(!e.target.closest('.tech-wrap')) closeTechMenu(); });
+
   /* ---------- view options: hide red strikes · fade grey notes (pure CSS, no re-render) ---------- */
   $('struckBtn').addEventListener('click', ()=>{
     const showing = $('struckBtn').classList.toggle('on');
@@ -953,7 +1102,7 @@
     else if(e.key==='ArrowDown'){ e.preventDefault(); moveAnchor(1,0); }
     else if(e.key==='ArrowLeft'){ e.preventDefault(); moveAnchor(0,-1); }
     else if(e.key==='ArrowRight'){ e.preventDefault(); moveAnchor(0,1); }
-    else if(e.key==='Escape'){ clearSelection(); }
+    else if(e.key==='Escape'){ closeTechMenu(); if(techResult){ clearTech(); } clearSelection(); }
   });
 
   /* ---------- go ---------- */
