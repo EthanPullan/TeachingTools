@@ -83,6 +83,7 @@
   .puz .badge.moderate{color:var(--together);border-color:var(--together-soft);background:var(--together-soft);}
   .puz .badge.expert{color:#7a4ea8;border-color:#e6dcf3;background:#efe8f8;}
   .puz .badge.evil{color:#fff;border-color:var(--board);background:var(--board);}
+  .puz .badge.diabolic{color:#fff;border-color:var(--danger);background:var(--danger);}
   .puz .id{font-family:var(--mono);font-size:13px;color:var(--muted);font-weight:600;}
   .pill{font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--line);
     border-radius:20px;padding:3px 10px;color:var(--muted);}
@@ -142,11 +143,12 @@
   .cell.has-val .notes{display:none;}
   .cell .notes span{position:relative;display:flex;align-items:center;justify-content:center;line-height:1;
     font-family:var(--mono);font-weight:600;font-size:clamp(8px,1.7vmin,18px);}
-  .cell .notes span.g{color:var(--note-grey);}
+  .cell .notes span.g{color:var(--note-grey);opacity:var(--grey-op,1);}  /* opacity = the "grey" slider */
   .cell .notes span.b{color:var(--note-blue);font-weight:800;}   /* blue layer wins the slot when a digit is in all three */
   .cell .notes span.s{color:var(--note-grey-dim);}   /* struck: a dimmed grey note crossed out in red */
   .cell .notes span.s::after{content:'';position:absolute;left:4%;right:4%;top:50%;
     border-top:2px solid var(--note-strike);transform:rotate(-18deg);transform-origin:center;}
+  .board.hide-struck .cell .notes span.s{display:none;}   /* "red strikes" visibility toggle */
   .cell .notes span.hl{background:var(--hl-note);border-radius:3px;}  /* little light-yellow highlight */
   /* a note that auto-clean just removed — flashes red and fades so the player sees it go */
   .cell .notes span.flash{background:none;animation:noteflash .6s ease-out forwards;}
@@ -224,6 +226,16 @@
   .pad-actions .btn .ic{font-size:18px;}
   .pad-actions .wide{grid-column:1 / -1;}
 
+  /* view options: red-strike visibility + grey-note opacity */
+  .pad-opts{display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px solid var(--line);}
+  .opt-row{display:flex;align-items:center;gap:10px;}
+  .opt-lab{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+    width:84px;flex:none;}
+  .opt-toggle{border:1px solid var(--line);background:var(--panel-2);color:var(--muted);border-radius:20px;
+    padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;transition:background .12s,color .12s,border-color .12s;}
+  .opt-toggle.on{background:var(--board);border-color:var(--board);color:#fff;}
+  .opt-row input[type=range]{flex:1;accent-color:var(--note-grey);height:18px;}
+
   .hint{font-size:11.5px;color:var(--muted);line-height:1.45;text-align:center;}
 
   /* ── responsive: stack the pad under the board on narrow screens ── */
@@ -257,6 +269,7 @@
       <button data-diff="hard">Hard</button>
       <button data-diff="expert">Expert</button>
       <button data-diff="evil">Evil</button>
+      <button data-diff="diabolic">Diabolic</button>
     </div>
     <button class="btn primary" id="newBtn"><span class="ic">＋</span>New puzzle</button>
     <select class="picker" id="picker" aria-label="Choose a specific puzzle"></select>
@@ -296,6 +309,16 @@
         <button class="btn" id="eraseBtn"><span class="ic">⌫</span>Erase</button>
         <button class="btn" id="undoBtn"><span class="ic">↶</span>Undo</button>
         <button class="btn wide" id="autoNoteBtn"><span class="ic">✎</span>Auto-note open cells (grey)</button>
+      </div>
+      <div class="pad-opts">
+        <div class="opt-row">
+          <span class="opt-lab">Red strikes</span>
+          <button class="opt-toggle on" id="struckBtn" aria-pressed="true">Shown</button>
+        </div>
+        <div class="opt-row">
+          <span class="opt-lab">Grey notes</span>
+          <input type="range" id="greySlider" min="15" max="100" value="100" aria-label="Grey note opacity">
+        </div>
       </div>
       <p class="hint">Drag to select several cells, then tap a number to note them at once. With nothing selected, a number <b>highlights</b> every match. Modes: <b>Digit · Grey · Blue · Strike</b>.</p>
     </section>
@@ -362,6 +385,19 @@
     {id:'#416604', diff:'expert', givens:'146008005720006000000000007002085000010000040000930200800000000000300098900800734', solution:'146798325723546981589123467692485173315267849478931256834679512257314698961852734'},
     {id:'#328796', diff:'hard', givens:'900300006507090000000801200040000000806000403000000050001906000000070908200005001', solution:'928347516517692384634851297742538169856219473193764852381926745465173928279485631'},
     {id:'#45075', diff:'expert', givens:'004001800610000000000004020000108703030020050908605000090700000000000045003500600', solution:'354271896612859437789364521425198763136427958978635214591746382267983145843512679'},
+    // ── 12 diabolic puzzles (PDF, each verified; solver matches the printed solution) ──
+    {id:'#D1', diff:'diabolic', givens:'000001074000800000000000006009007000800500300045600001010405639000009400060000150', solution:'286931574497856213153742986629317845871594362345628791712485639538169427964273158'},
+    {id:'#D2', diff:'diabolic', givens:'070014090004020600000006000000000070050000400920060300001000000200090010403001706', solution:'672314598514928637839576142346189275158237469927465381781642953265793814493851726'},
+    {id:'#D3', diff:'diabolic', givens:'700000090005010070000900380607003200200890100013002008001000000500080000000075006', solution:'728534691395618472146927385687153249254896137913742568471269853569381724832475916'},
+    {id:'#D4', diff:'diabolic', givens:'000005700780060000400300009000008070060030000000072935005080406000000090000924000', solution:'639845712781269543452317869523498671967531284814672935195783426248156397376924158'},
+    {id:'#D5', diff:'diabolic', givens:'700000010000000000012070080060490700080700000000006000000020095106000020204019008', solution:'738245916945861237612973584361498752489752361527136849873624195196587423254319678'},
+    {id:'#D6', diff:'diabolic', givens:'000048051002050496000000000000002039301065020000000600500030000400001063200490000', solution:'739648251182753496654219378846172539371965824925384617517836942498521763263497185'},
+    {id:'#D7', diff:'diabolic', givens:'002001067900603200000708300000109000006400020108000093003004000080000900260000008', solution:'832941567971653284654728319527139846396487125148562793713894652485276931269315478'},
+    {id:'#D8', diff:'diabolic', givens:'000002000300600070000050001000813006500000000000060800603970510000005030020300000', solution:'819732465354681279267459381472813956586297143931564827643978512798125634125346798'},
+    {id:'#D9', diff:'diabolic', givens:'000030506040019020020054019090000000201070000057000000004090302010060000305700000', solution:'189237546546819723723654819498523671231476985657981234874195362912368457365742198'},
+    {id:'#D10', diff:'diabolic', givens:'000006500500100003410000009609805034000030096100000070000408000004000051000067000', solution:'982346517576189423413752689629875134745231896138694275357418962864923751291567348'},
+    {id:'#D11', diff:'diabolic', givens:'000084090300020647200050008050003906048000000003002480000009000007000000000035200', solution:'176384592385921647294657138752843916948516723613792485531279864427168359869435271'},
+    {id:'#D12', diff:'diabolic', givens:'040000000000083904002001830000600000500800402200005300090100020000040003000006500', solution:'348597261615283974972461835139624758567839412284715396493158627756942183821376549'},
   ];
 
   const $ = id => document.getElementById(id);
@@ -814,7 +850,7 @@
     const sel = $('picker');
     if(!sel.options.length){
       // group by difficulty (easy → hard) for an easy "library" browse
-      ['moderate','hard','expert','evil'].forEach(diff=>{
+      ['moderate','hard','expert','evil','diabolic'].forEach(diff=>{
         const og = document.createElement('optgroup');
         og.label = diff[0].toUpperCase()+diff.slice(1);
         PUZZLES.forEach((p,idx)=>{ if(p.diff===diff){
@@ -843,6 +879,17 @@
   $('undoBtn').addEventListener('click', undo);
   $('autoNoteBtn').addEventListener('click', autoNote);
   $('pauseBtn').addEventListener('click', togglePause);
+
+  /* ---------- view options: hide red strikes · fade grey notes (pure CSS, no re-render) ---------- */
+  $('struckBtn').addEventListener('click', ()=>{
+    const showing = $('struckBtn').classList.toggle('on');
+    boardEl.classList.toggle('hide-struck', !showing);
+    $('struckBtn').textContent = showing ? 'Shown' : 'Hidden';
+    $('struckBtn').setAttribute('aria-pressed', showing ? 'true' : 'false');
+  });
+  $('greySlider').addEventListener('input', e=>{
+    boardEl.style.setProperty('--grey-op', (e.target.value/100).toFixed(2));
+  });
 
   /* ---------- full screen ---------- */
   const fsBtn = $('fsBtn');
