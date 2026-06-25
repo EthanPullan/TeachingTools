@@ -144,11 +144,13 @@
   .cell .notes span{position:relative;display:flex;align-items:center;justify-content:center;line-height:1;
     font-family:var(--mono);font-weight:600;font-size:clamp(8px,1.7vmin,18px);}
   .cell .notes span.g{color:var(--note-grey);opacity:var(--grey-op,1);}  /* opacity = the "grey" slider */
-  .cell .notes span.b{color:var(--note-blue);font-weight:800;}   /* blue layer wins the slot when a digit is in all three */
-  .cell .notes span.s{color:var(--note-grey-dim);}   /* struck: a dimmed grey note crossed out in red */
-  .cell .notes span.s::after{content:'';position:absolute;left:4%;right:4%;top:50%;
+  .cell .notes span.b{color:var(--note-blue);font-weight:800;}   /* blue note (kept even when struck) */
+  .cell .notes span.dim{color:var(--note-grey-dim);opacity:var(--grey-op,1);}   /* struck-only base colour */
+  /* strike = an additive red slash over whatever colour the note is, so a blue note can be struck */
+  .cell .notes span.struck{opacity:var(--grey-op,1);}   /* the grey slider fades struck notes too */
+  .cell .notes span.struck::after{content:'';position:absolute;left:4%;right:4%;top:50%;
     border-top:2px solid var(--note-strike);transform:rotate(-18deg);transform-origin:center;}
-  .board.hide-struck .cell .notes span.s{display:none;}   /* "red strikes" visibility toggle */
+  .board.hide-struck .cell .notes span.struck{display:none;}   /* "red strikes" visibility toggle */
   .cell .notes span.hl{background:var(--hl-note);border-radius:3px;}  /* little light-yellow highlight */
   /* a note that auto-clean just removed — flashes red and fades so the player sees it go */
   .cell .notes span.flash{background:none;animation:noteflash .6s ease-out forwards;}
@@ -543,11 +545,16 @@
         const spans = noteSpanEls[i];
         for(let n=1;n<=9;n++){
           const s = spans[n-1];
-          // render priority when a digit sits in more than one layer: blue → struck → grey
-          let cls = c.blue.has(n) ? 'b' : c.strike.has(n) ? 's' : c.grey.has(n) ? 'g' : '';
-          // a struck note is an eliminated candidate — it never takes the match highlight
-          if(cls){ s.textContent = n; if(hl>0 && n===hl && cls!=='s') cls += ' hl'; s.className = cls; }
-          else { s.textContent=''; s.className=''; }
+          const inB = c.blue.has(n), inS = c.strike.has(n), inG = c.grey.has(n);
+          if(inB || inS || inG){
+            s.textContent = n;
+            // strike is an additive red slash on top of the colour, so even a blue note can be
+            // struck out. Colour: blue stays blue; otherwise grey (dimmed when struck).
+            let cls = inS ? (inB ? 'b' : 'dim') : (inB ? 'b' : 'g');
+            if(inS) cls += ' struck';
+            if(hl>0 && n===hl && !inS) cls += ' hl';   // struck (eliminated) notes never highlight
+            s.className = cls;
+          } else { s.textContent=''; s.className=''; }
         }
       }
     }
