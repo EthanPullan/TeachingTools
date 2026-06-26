@@ -66,11 +66,11 @@
   .mega{
     display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
     gap:clamp(6px,1.1vmin,12px);
-    width:min(92vw, 86vh);            /* fallback for browsers without container-query units */
-    width:min(96cqi, 96cqb);          /* fit the actual stage box in BOTH dimensions (never overflows) */
+    width:min(92vw, 78vh);            /* fallback for browsers without container-query units */
+    width:min(94cqi, 88cqb);          /* fit the stage box with margin to spare (incl. shadow) */
     aspect-ratio:1/1;
     background:var(--board);padding:clamp(6px,1.1vmin,12px);
-    border-radius:22px;box-shadow:0 10px 34px rgba(20,40,33,.28);}
+    border-radius:22px;box-shadow:0 7px 20px rgba(20,40,33,.24);}
 
   /* a mini board */
   .mini{position:relative;background:var(--panel);border-radius:12px;padding:clamp(4px,.7vmin,8px);
@@ -159,11 +159,12 @@
       <button data-mode="line" class="active">3 in a row</button>
       <button data-mode="most">5+ boards</button></div>
     <div class="seg" id="redirectSeg"><span class="lab">Won box</span>
-      <button data-redirect="free" class="active" title="If you're sent to a board that's already won, play in any open board">Anywhere</button>
-      <button data-redirect="forced" title="Always play in the board you're sent to, even if it's already won">Same box</button></div>
+      <button data-redirect="free" title="If you're sent to a board that's already won, play in any open board">Anywhere</button>
+      <button data-redirect="forced" class="active" title="Always play in the board you're sent to, even if it's already won">Same box</button></div>
     <div class="seg" id="timerSeg"><span class="lab">Turn timer</span>
       <button data-sec="0" class="active">Off</button>
       <button data-sec="5">5s</button>
+      <button data-sec="10">10s</button>
       <button data-sec="15">15s</button>
       <button data-sec="30">30s</button>
       <input type="number" id="timerCustom" class="seg-input" min="1" max="600" placeholder="…s"
@@ -502,7 +503,7 @@
   let active;        // forced mini-board index, or null = play anywhere
   let history;       // {b,c,prevActive} for undo
   let mode = 'line'; // 'line' = 3 big boxes in a row · 'most' = first to 5+ big boxes
-  let forced = false;// false = sent to a won box → play anywhere · true = must still play in it
+  let forced = true; // true = must still play in a won box (default) · false = play anywhere
   let result;        // null while playing, else {winner:'X'|'O'|'D', line:number[]|null}
 
   // Build DOM once: 9 minis, each with 9 cells + a claim overlay.
