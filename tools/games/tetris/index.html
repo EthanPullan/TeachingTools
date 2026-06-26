@@ -170,7 +170,7 @@
         <div class="preview"><span class="lab">Hold</span><div class="pgrid" id="hold"></div></div>
       </div>
       <div class="legend">
-        <b>←&nbsp;→</b> move&nbsp; <b>↑</b>/<b>X</b> rotate<br>
+        <b>←&nbsp;→</b> move&nbsp; <b>↑</b>/<b>W</b> rotate<br>
         <b>↓</b> soft drop&nbsp; <b>Space</b> hard drop<br>
         <b>C</b> hold&nbsp; <b>P</b> pause&nbsp; <b>F</b> full screen
       </div>
@@ -506,7 +506,7 @@
       case 'ArrowLeft':  e.preventDefault(); if(move(-1,0)) draw(); break;
       case 'ArrowRight': e.preventDefault(); if(move(1,0))  draw(); break;
       case 'ArrowDown':  e.preventDefault(); softDrop(); break;
-      case 'ArrowUp': case 'x': case 'X': e.preventDefault(); if(rotateCurrent(1)) draw(); break;
+      case 'ArrowUp': case 'w': case 'W': e.preventDefault(); if(rotateCurrent(1)) draw(); break;
       case 'z': case 'Z': case 'Control': e.preventDefault(); if(rotateCurrent(-1)) draw(); break;
       case ' ': e.preventDefault(); hardDrop(); break;
       case 'c': case 'C': case 'Shift': e.preventDefault(); holdPiece(); break;
