@@ -239,13 +239,23 @@
   function seedSlots(n){ var m=[1,2]; while(m.length<n){ var s=m.length*2+1, x=[]; for(var k=0;k<m.length;k++){ x.push(m[k]); x.push(s-m[k]); } m=x; } return m; }
   function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)), t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
 
+  function firstTwoPaired(slots){   // are entrants #1 and #2 in the same opening match?
+    for(var i=0;i<slots.length;i+=2){ var a=slots[i], b=slots[i+1];
+      if(a&&b&&((a.id===0&&b.id===1)||(a.id===1&&b.id===0))) return true; }
+    return false;
+  }
   function build(names){
     var N=names.length, B=nextPow2(N);
     var players=names.map(function(nm,i){ return {id:i, name:nm}; });
-    var order=shuffle(players.slice());                 // random seeding
-    var seedOf={}; order.forEach(function(p,i){ seedOf[i+1]=p; });
-    var seq=seedSlots(B);
-    var slots=seq.map(function(seed){ return seedOf[seed] || null; });  // null = bye
+    var seq=seedSlots(B), slots, order, seedOf;
+    // Random bracket each time. For 4+ players, keep the first two entered apart in
+    // round 1 (re-draw if they collide) so they aren't repeatedly matched first.
+    for(var tries=0; tries<200; tries++){
+      order=shuffle(players.slice());                   // random seeding
+      seedOf={}; order.forEach(function(p,i){ seedOf[i+1]=p; });
+      slots=seq.map(function(seed){ return seedOf[seed] || null; });  // null = bye
+      if(N<4 || !firstTwoPaired(slots)) break;
+    }
     var rounds=[], r0=[];
     for(var i=0;i<B;i+=2) r0.push({a:slots[i], b:slots[i+1], winner:null, round:0});
     rounds.push(r0);
