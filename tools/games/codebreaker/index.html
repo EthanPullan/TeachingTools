@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A big, tap-to-play code-breaking deduction game for the classroom smart board — crack the hidden colour code in ten guesses using the exact/colour clues. Works offline.">
+<meta name="theme-color" content="#1f3d35">
+<title>Codebreaker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --peg:clamp(26px,4.8vh,46px);
+    --fb:clamp(11px,1.9vh,18px);
+    --sw:clamp(42px,6.6vh,64px);
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;overflow:hidden;}
+  button{font-family:inherit;}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:6px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* ── toolbar ── */
+  .toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:11px 20px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex:none;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:11px 18px;
+    border-radius:10px;cursor:pointer;font-size:15px;font-weight:600;display:inline-flex;
+    align-items:center;gap:8px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:18px;line-height:1;}
+
+  /* segmented control */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:8px 12px;cursor:pointer;font-size:13px;font-weight:700;
+    color:var(--muted);font-family:var(--mono);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .seg .lab{display:flex;align-items:center;padding:0 10px;font-size:10.5px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);background:var(--panel-2);}
+
+  /* ── top: secret + status ── */
+  .topbar{display:flex;align-items:center;justify-content:center;gap:clamp(14px,3vw,40px);flex:none;
+    flex-wrap:wrap;padding:11px 20px;background:var(--room-bg);border-bottom:1px solid var(--line);}
+  .secret{display:flex;align-items:center;gap:12px;}
+  .secret .lab{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .pegrow{display:flex;gap:clamp(5px,1vw,10px);}
+  .status{font-size:clamp(15px,2.5vh,22px);font-weight:700;text-align:center;}
+  .status .sub{color:var(--muted);font-weight:600;}
+  .status.win{color:var(--ok);} .status.lose{color:var(--danger);}
+
+  /* ── pegs ── */
+  .peg{width:var(--peg);height:var(--peg);border-radius:50%;border:none;flex:none;
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:800;
+    font-size:calc(var(--peg)*.46);background:var(--panel-2);color:var(--ct,#fff);
+    box-shadow:inset 0 -3px 5px rgba(0,0,0,.18), inset 0 2px 3px rgba(255,255,255,.22);
+    -webkit-user-select:none;user-select:none;}
+  .peg.filled{background:var(--c);}
+  .peg.empty{background:var(--panel-2);color:transparent;box-shadow:inset 0 0 0 2px var(--line);}
+  .peg.hidden{background:var(--board);color:var(--accent);box-shadow:inset 0 0 0 2px var(--board-line);}
+  .peg.sm{width:calc(var(--peg)*.84);height:calc(var(--peg)*.84);font-size:calc(var(--peg)*.4);}
+  .peg.reveal{animation:flip .4s cubic-bezier(.2,.7,.3,1) both;}
+  @keyframes flip{from{transform:rotateY(90deg);opacity:.3;}to{transform:none;opacity:1;}}
+
+  /* ── board ── */
+  .board{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:clamp(2px,.5vh,6px);padding:clamp(8px,1.6vh,16px);}
+  .row{display:flex;align-items:center;gap:clamp(8px,1.8vw,20px);
+    padding:clamp(3px,.7vh,7px) clamp(10px,1.6vw,16px);border-radius:12px;
+    border:2px solid transparent;}
+  .row.done{background:var(--panel);box-shadow:var(--shadow-sm);}
+  .row.active{background:var(--accent-soft);border-color:var(--accent);}
+  .row.future{opacity:.45;}
+  .rownum{font-family:var(--mono);font-weight:700;color:var(--muted);width:1.7em;text-align:right;
+    font-size:clamp(12px,1.8vh,15px);flex:none;}
+  .pegs{display:flex;gap:clamp(6px,1.3vw,14px);}
+  .pegs .peg.slot{cursor:default;}
+  .row.active .pegs .peg.filled{cursor:pointer;}
+  .row.active .pegs .peg.next{box-shadow:inset 0 0 0 2px var(--accent), 0 0 0 3px var(--accent-soft);}
+  .feedback{display:grid;grid-auto-flow:column;grid-template-rows:repeat(2,1fr);
+    gap:clamp(3px,.6vh,5px);margin-left:clamp(6px,1.2vw,14px);align-content:center;}
+  .fb{width:var(--fb);height:var(--fb);border-radius:50%;background:var(--panel-2);
+    box-shadow:inset 0 0 0 1px var(--line);}
+  .fb.exact{background:var(--ink);box-shadow:none;}
+  .fb.color{background:#fff;box-shadow:inset 0 0 0 2px var(--muted);}
+  .fbcount{font-family:var(--mono);font-size:clamp(10px,1.5vh,13px);font-weight:700;color:var(--muted);
+    margin-left:7px;white-space:nowrap;align-self:center;}
+
+  /* ── palette ── */
+  .palette{flex:none;display:flex;align-items:center;justify-content:center;gap:clamp(8px,1.4vw,16px);
+    flex-wrap:wrap;padding:clamp(10px,1.8vh,18px) 18px;background:var(--panel);border-top:1px solid var(--line);}
+  .swatches{display:flex;gap:clamp(7px,1.2vw,13px);flex-wrap:wrap;justify-content:center;}
+  .swatch{width:var(--sw);height:var(--sw);border-radius:50%;border:none;cursor:pointer;position:relative;
+    background:var(--c);color:var(--ct);font-family:var(--mono);font-weight:800;font-size:calc(var(--sw)*.4);
+    box-shadow:inset 0 -4px 7px rgba(0,0,0,.22), inset 0 2px 4px rgba(255,255,255,.3), var(--shadow-sm);
+    transition:transform .06s;-webkit-user-select:none;user-select:none;}
+  .swatch:hover{transform:translateY(-2px);} .swatch:active{transform:translateY(1px);}
+  .swatch[disabled]{opacity:.4;cursor:not-allowed;transform:none;}
+  .pal-act{border:1px solid var(--line);background:var(--panel);color:var(--ink);height:var(--sw);
+    border-radius:13px;cursor:pointer;font-size:clamp(15px,2.2vh,19px);font-weight:700;padding:0 clamp(14px,1.8vw,22px);
+    display:inline-flex;align-items:center;gap:8px;}
+  .pal-act:hover{background:var(--panel-2);} .pal-act[disabled]{opacity:.4;cursor:not-allowed;}
+  .pal-act.check{background:var(--board);border-color:var(--board);color:#fff;}
+  .pal-act.check:hover:not([disabled]){background:var(--board-2);}
+
+  @media (prefers-reduced-motion:reduce){
+    .peg.reveal{animation:none;} .btn:active,.swatch:active{transform:none;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Codebreaker <small>crack the colour code</small></div>
+    <div class="spacer"></div>
+    <div class="seg" id="pegsSeg"><span class="lab">Pegs</span>
+      <button data-n="3">3</button><button data-n="4" class="active">4</button><button data-n="5">5</button></div>
+    <div class="seg" id="colorsSeg"><span class="lab">Colours</span>
+      <button data-k="6" class="active">6</button><button data-k="8">8</button></div>
+    <div class="seg" id="repeatSeg"><span class="lab">Repeats</span>
+      <button data-rep="1" class="active">On</button><button data-rep="0">Off</button></div>
+    <button class="btn" id="fsBtn" aria-pressed="false" title="Toggle full screen"><span class="ic">⛶</span><span class="fs-label">Full screen</span></button>
+    <button class="btn" id="soundBtn" aria-pressed="false"><span class="ic">🔈</span>Sound</button>
+    <button class="btn" id="revealBtn"><span class="ic">🔓</span>Reveal</button>
+    <button class="btn primary" id="newBtn"><span class="ic">＋</span>New game</button>
+  </header>
+
+  <div class="topbar">
+    <div class="secret"><span class="lab">Secret code</span><div class="pegrow" id="secret"></div></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <main class="board" id="board" aria-label="Guess history"></main>
+
+  <div class="palette">
+    <div class="swatches" id="swatches"></div>
+    <button class="pal-act" id="backBtn" title="Remove last (Backspace)">⌫ Undo</button>
+    <button class="pal-act check" id="checkBtn">✓ Check</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const MAXG = 10;                       // guesses allowed
+  // colour palette, 1-indexed (index 0 unused)
+  const PALETTE = [null,'#d64545','#e08a2e','#e8c33b','#3f9e6b','#2fa8a0','#2f6f9f','#8b5cc4','#d45d9c'];
+  const TEXT = PALETTE.map(h=> h ? textOn(h) : '#fff');
+  function textOn(hex){
+    const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+    return (0.299*r + 0.587*g + 0.114*b) > 150 ? '#16241f' : '#fff';
+  }
+
+  const $ = id=>document.getElementById(id);
+  const secretEl=$('secret'), statusEl=$('status'), boardEl=$('board'),
+        swatchesEl=$('swatches'), backBtn=$('backBtn'), checkBtn=$('checkBtn');
+
+  // settings + state
+  let N=4, K=6, repeats=true;
+  let code, guesses, current, status, justRevealed;
+
+  /* ----- core ----- */
+  function genCode(){
+    const c=[];
+    if(repeats){
+      for(let i=0;i<N;i++) c.push(1 + Math.floor(Math.random()*K));
+    }else{
+      const pool=[]; for(let i=1;i<=K;i++) pool.push(i);
+      for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=pool[i];pool[i]=pool[j];pool[j]=t; }
+      for(let i=0;i<N;i++) c.push(pool[i]);
+    }
+    return c;
+  }
+  // exact = right colour & place; color = right colour, wrong place (duplicate-correct)
+  function score(guess, code){
+    let exact=0; const cc={}, gc={};
+    for(let i=0;i<code.length;i++){
+      if(guess[i]===code[i]) exact++;
+      else { cc[code[i]]=(cc[code[i]]||0)+1; gc[guess[i]]=(gc[guess[i]]||0)+1; }
+    }
+    let color=0;
+    for(const k in gc) color += Math.min(gc[k], cc[k]||0);
+    return {exact, color};
+  }
+
+  function newGame(){
+    code = genCode();
+    guesses = []; current = []; status='playing'; justRevealed=false;
+    render();
+  }
+
+  function place(c){
+    if(status!=='playing' || current.length>=N) return;
+    current.push(c); sfx('place'); render();
+  }
+  function removeLast(){
+    if(status!=='playing' || !current.length) return;
+    current.pop(); render();
+  }
+  function clearSlot(i){
+    if(status!=='playing' || i>=current.length) return;
+    current.splice(i,1); render();
+  }
+  function check(){
+    if(status!=='playing' || current.length!==N) return;
+    const s = score(current, code);
+    guesses.push({pegs:current.slice(), exact:s.exact, color:s.color});
+    current = [];
+    if(s.exact===N){ status='won'; sfx('win'); }
+    else if(guesses.length>=MAXG){ status='lost'; sfx('lose'); }
+    else sfx('check');
+    render();
+  }
+  function reveal(){
+    if(status!=='playing') return;
+    if(!window.confirm('Reveal the secret code? This ends the round.')) return;
+    status='revealed'; justRevealed=true; render();
+  }
+
+  /* ----- render ----- */
+  function pegHTML(color, cls){
+    if(!color) return '<div class="peg empty '+(cls||'')+'"></div>';
+    return '<div class="peg filled '+(cls||'')+'" style="--c:'+PALETTE[color]+';--ct:'+TEXT[color]+'">'+color+'</div>';
+  }
+  function render(){
+    const over = status!=='playing';
+    // secret
+    secretEl.innerHTML='';
+    for(let i=0;i<N;i++){
+      const d=document.createElement('div');
+      if(over){ d.className='peg sm filled'+(justRevealed?' reveal':''); d.style.setProperty('--c',PALETTE[code[i]]); d.style.setProperty('--ct',TEXT[code[i]]); d.textContent=code[i]; }
+      else { d.className='peg sm hidden'; d.textContent='?'; }
+      secretEl.appendChild(d);
+    }
+    justRevealed=false;
+
+    // status
+    statusEl.className='status';
+    if(status==='won'){ statusEl.classList.add('win'); statusEl.innerHTML='🎉 Cracked it in '+guesses.length+(guesses.length===1?' guess!':' guesses!'); }
+    else if(status==='lost'){ statusEl.classList.add('lose'); statusEl.innerHTML='💥 Out of guesses <span class="sub">— the code is revealed</span>'; }
+    else if(status==='revealed'){ statusEl.classList.add('lose'); statusEl.innerHTML='Revealed <span class="sub">— press New game</span>'; }
+    else statusEl.innerHTML='Guess <b>'+(guesses.length+1)+'</b> <span class="sub">of '+MAXG+'</span>';
+
+    // board rows
+    const activeIdx = guesses.length;
+    let html='';
+    for(let r=0;r<MAXG;r++){
+      if(r<guesses.length){
+        const g=guesses[r];
+        let pegs=''; for(let i=0;i<N;i++) pegs+=pegHTML(g.pegs[i]);
+        let fb=''; for(let i=0;i<N;i++){ fb+= i<g.exact ? '<div class="fb exact"></div>' : (i<g.exact+g.color ? '<div class="fb color"></div>' : '<div class="fb"></div>'); }
+        const lbl='<span class="fbcount">'+g.exact+'·'+g.color+'</span>';
+        html+='<div class="row done"><span class="rownum">'+(r+1)+'</span><div class="pegs">'+pegs+'</div><div class="feedback">'+fb+'</div>'+lbl+'</div>';
+      } else if(r===activeIdx && !over){
+        let pegs='';
+        for(let i=0;i<N;i++){
+          if(i<current.length) pegs+=pegHTML(current[i],'slot" data-slot="'+i+'"');
+          else pegs+='<div class="peg empty slot'+(i===current.length?' next':'')+'"></div>';
+        }
+        html+='<div class="row active"><span class="rownum">'+(r+1)+'</span><div class="pegs">'+pegs+'</div><div class="feedback"></div></div>';
+      } else {
+        let pegs=''; for(let i=0;i<N;i++) pegs+='<div class="peg empty slot"></div>';
+        html+='<div class="row future"><span class="rownum">'+(r+1)+'</span><div class="pegs">'+pegs+'</div><div class="feedback"></div></div>';
+      }
+    }
+    boardEl.innerHTML=html;
+
+    // controls
+    Array.prototype.forEach.call(swatchesEl.children, b=>{ b.disabled = over; });
+    backBtn.disabled = over || current.length===0;
+    checkBtn.disabled = over || current.length!==N;
+    $('revealBtn').disabled = over;
+  }
+
+  // delegate clicks on filled active-row pegs → clear that slot
+  boardEl.addEventListener('click', e=>{
+    const p=e.target.closest('.peg.filled.slot[data-slot]');
+    if(p) clearSlot(+p.getAttribute('data-slot'));
+  });
+
+  /* ----- palette ----- */
+  function buildSwatches(){
+    swatchesEl.innerHTML='';
+    for(let c=1;c<=K;c++){
+      const b=document.createElement('button');
+      b.className='swatch'; b.style.setProperty('--c',PALETTE[c]); b.style.setProperty('--ct',TEXT[c]);
+      b.textContent=c; b.title='Colour '+c; b.setAttribute('aria-label','Colour '+c);
+      b.addEventListener('click', ()=>{ place(c); b.blur(); });
+      swatchesEl.appendChild(b);
+    }
+  }
+
+  /* ----- settings ----- */
+  function wireSeg(id, fn){
+    document.querySelectorAll('#'+id+' button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll('#'+id+' button').forEach(x=>x.classList.toggle('active', x===btn));
+        fn(btn); btn.blur();
+      });
+    });
+  }
+  wireSeg('pegsSeg',   btn=>{ N=+btn.dataset.n; newGame(); });
+  wireSeg('colorsSeg', btn=>{ K=+btn.dataset.k; buildSwatches(); newGame(); });
+  wireSeg('repeatSeg', btn=>{ repeats=btn.dataset.rep==='1'; newGame(); });
+
+  /* ----- full screen ----- */
+  const fsBtn=$('fsBtn');
+  function fsOn(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function toggleFs(){
+    if(fsOn()){ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }
+    else{ const el=document.documentElement; (el.requestFullscreen||el.webkitRequestFullscreen).call(el); }
+  }
+  function syncFs(){ const on=fsOn(); fsBtn.setAttribute('aria-pressed',on?'true':'false'); fsBtn.querySelector('.fs-label').textContent=on?'Exit full screen':'Full screen'; }
+  fsBtn.addEventListener('click', ()=>{ toggleFs(); fsBtn.blur(); });
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('webkitfullscreenchange', syncFs);
+
+  /* ----- sound (off by default) ----- */
+  let audioCtx=null, soundOn=false;
+  function ensureAudio(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ audioCtx=null; } } if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume(); }
+  function tone(f,d,type,g,delay){ if(!soundOn||!audioCtx) return; const t=audioCtx.currentTime+(delay||0); const o=audioCtx.createOscillator(),gain=audioCtx.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(f,t); gain.gain.setValueAtTime(0.0001,t); gain.gain.exponentialRampToValueAtTime(g||0.12,t+0.012); gain.gain.exponentialRampToValueAtTime(0.0001,t+d); o.connect(gain); gain.connect(audioCtx.destination); o.start(t); o.stop(t+d+0.02); }
+  function sfx(name){
+    if(!soundOn) return;
+    if(name==='place') tone(440,0.05,'sine',0.09);
+    else if(name==='check') tone(330,0.07,'triangle',0.1);
+    else if(name==='win'){ [523,659,784,1047].forEach((f,i)=>tone(f,0.16,'triangle',0.14,i*0.09)); }
+    else if(name==='lose'){ tone(330,0.18,'sawtooth',0.12); tone(196,0.3,'sawtooth',0.12,0.16); }
+  }
+  $('soundBtn').addEventListener('click', ()=>{
+    soundOn=!soundOn; ensureAudio();
+    const b=$('soundBtn'); b.setAttribute('aria-pressed',soundOn); b.classList.toggle('primary',soundOn);
+    b.querySelector('.ic').textContent = soundOn?'🔊':'🔈'; b.blur();
+  });
+
+  /* ----- wiring ----- */
+  $('newBtn').addEventListener('click', ()=>{ newGame(); $('newBtn').blur(); });
+  $('revealBtn').addEventListener('click', ()=>{ reveal(); $('revealBtn').blur(); });
+  backBtn.addEventListener('click', ()=>{ removeLast(); backBtn.blur(); });
+  checkBtn.addEventListener('click', ()=>{ check(); checkBtn.blur(); });
+
+  document.addEventListener('keydown', e=>{
+    if(/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    const k=e.key;
+    if(k==='f'||k==='F'){ toggleFs(); return; }
+    if(k>='1' && k<='9'){ const c=+k; if(c<=K) place(c); }
+    else if(k==='Backspace'){ e.preventDefault(); removeLast(); }
+    else if(k==='Enter'){ e.preventDefault(); check(); }
+    else if(k==='n'||k==='N'){ newGame(); }
+  });
+
+  // boot
+  buildSwatches();
+  newGame();
+})();
+</script>
+</body>
+</html>
