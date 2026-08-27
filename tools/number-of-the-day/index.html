@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A daily number starter for the board. Pick a number of the day and instantly generate a grid of arithmetic, properties, rounding, percentage and fraction questions about it — choose exactly which question types appear.">
+<meta name="theme-color" content="#1f3d35">
+<title>Number of the Day</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);z-index:10;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;
+    gap:7px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.small{padding:6px 11px;font-size:12.5px;border-radius:8px;}
+  .btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep);}
+  .btn .ic{font-size:14px;line-height:1;}
+
+  /* ---------- Layout ---------- */
+  .main{flex:1;display:flex;min-height:0;}
+  .panel{width:344px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;}
+  .panel-scroll{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:20px;}
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--app-bg);}
+  .stage-scroll{flex:1;overflow-y:auto;padding:18px 20px;}
+
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 9px;}
+  .pblock-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;}
+  .pblock-head .section-title{margin:0;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;}
+
+  .quicklinks{display:flex;gap:2px;}
+  .link{border:none;background:none;cursor:pointer;color:var(--muted);font-size:11.5px;font-weight:700;
+    letter-spacing:.03em;padding:3px 7px;border-radius:6px;}
+  .link:hover{color:var(--board);background:var(--panel-2);}
+
+  /* number range */
+  .range-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .range-row label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.06em;color:var(--muted);flex:1;min-width:74px;}
+  .range-row input{border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:var(--panel-2);
+    font-family:var(--mono);width:100%;}
+  .presets{display:flex;flex-wrap:wrap;gap:6px;}
+  .chip{border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:20px;
+    padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;transition:background .12s,border-color .12s;}
+  .chip:hover{background:#fff;border-color:var(--accent);}
+  .chip.active{background:var(--board);border-color:var(--board);color:#fff;}
+
+  /* slider */
+  .slider-row .lab{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;}
+  .slider-row .lab b{font-family:var(--mono);font-weight:600;color:var(--board);}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+
+  /* type checklist */
+  .catgroup{margin-bottom:4px;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff;}
+  .cathead{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel-2);
+    border-bottom:1px solid var(--line);cursor:pointer;user-select:none;}
+  .cathead b{flex:1;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink);}
+  .cathead .cnt{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+  .cathead .caret{color:var(--muted);font-size:11px;transition:transform .12s;}
+  .catgroup.collapsed .caret{transform:rotate(-90deg);}
+  .catgroup.collapsed .catbody{display:none;}
+  .catbody{padding:6px 10px 8px;display:flex;flex-direction:column;}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;
+    padding:5px 2px;user-select:none;}
+  .check input{width:15px;height:15px;accent-color:var(--board);flex:none;}
+  .check span{flex:1;}
+
+  /* stage: hero */
+  .hero{background:var(--board);color:#fff;border-radius:var(--radius);padding:22px 26px;
+    display:flex;align-items:center;gap:22px;flex-wrap:wrap;box-shadow:var(--shadow);margin-bottom:18px;}
+  .hero-main{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;}
+  .hero-label{font-size:11.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(255,255,255,.72);align-self:flex-start;margin-top:6px;}
+  .hero-num{font-family:var(--mono);font-weight:800;font-size:clamp(40px,6.4vw,68px);
+    letter-spacing:-.01em;line-height:1;}
+  .hero-badges{margin-left:auto;display:flex;gap:7px;flex-wrap:wrap;}
+  .badge{font-family:var(--mono);font-size:11px;font-weight:600;background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:20px;padding:4px 11px;
+    white-space:nowrap;}
+
+  .empty{border:1px dashed var(--line);border-radius:10px;padding:20px;color:var(--muted);
+    font-size:12.5px;line-height:1.55;background:var(--panel-2);text-align:center;}
+
+  /* question grid */
+  .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
+  .qcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow-sm);padding:14px;display:flex;flex-direction:column;gap:10px;min-height:112px;}
+  .qcard-top{display:flex;align-items:center;gap:6px;}
+  .qtag{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);flex:1;}
+  .qreroll{border:none;background:none;cursor:pointer;color:var(--muted);font-size:15px;line-height:1;
+    padding:3px 5px;border-radius:6px;flex:none;transition:background .12s,color .12s,transform .3s;}
+  .qreroll:hover{background:var(--accent-soft);color:var(--accent-deep);}
+  .qreroll:active{transform:rotate(140deg);}
+  .qprompt{font-size:15px;font-weight:700;color:var(--ink);line-height:1.32;}
+  .qanswer-wrap{margin-top:auto;}
+  .qanswer{display:inline-block;font-family:var(--mono);font-weight:700;font-size:18px;line-height:1.35;
+    color:var(--board);border-radius:5px;transition:background .15s,color .15s;padding:2px 6px 2px 2px;
+    min-width:30px;}
+  body.answers-hidden .qanswer{color:transparent;background:var(--panel-2);
+    box-shadow:inset 0 0 0 1px var(--line);user-select:none;}
+
+  @keyframes pop{from{opacity:0;transform:translateY(5px) scale(.97);}to{opacity:1;transform:none;}}
+  .pop{animation:pop .22s cubic-bezier(.2,.7,.3,1) both;}
+
+  /* status bar */
+  .statusbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:0 16px;height:42px;
+    border-top:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--muted);flex:none;}
+  .statusbar .stat b{font-family:var(--mono);font-weight:600;color:var(--ink);}
+  .statusbar .dotline{width:1px;height:18px;background:var(--line);}
+  .statusbar .stamp{margin-left:auto;font-family:var(--mono);font-size:11.5px;}
+
+  #printHeader{display:none;}
+
+  @media (max-width:880px){
+    .main{flex-direction:column;}
+    .panel{width:100%;max-height:44vh;border-right:none;border-bottom:1px solid var(--line);}
+    .stage{min-height:56vh;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .pop{animation:none;} .btn:active{transform:none;} .qreroll:active{transform:none;} *{scroll-behavior:auto;}
+  }
+
+  @media print{
+    @page{margin:12mm;}
+    body{background:#fff;}
+    .toolbar,.panel,.statusbar{display:none !important;}
+    .app,.main,.stage,.stage-scroll{display:block;height:auto;overflow:visible;}
+    #printHeader{display:block;margin-bottom:14px;}
+    #printHeader h1{margin:0 0 2px;font-size:20px;}
+    #printHeader .stamp{font-family:var(--mono);font-size:11px;color:var(--muted);}
+    .hero{box-shadow:none;}
+    .qcard{box-shadow:none;break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Number of the Day <small>daily number starter</small></div>
+    <div class="spacer"></div>
+    <button class="btn small" id="btnShuffle" title="Keep the number, swap the question cards"><span class="ic">⤮</span>Shuffle questions</button>
+    <button class="btn small" id="btnAnswers"><span class="ic">👁</span><span id="answersLabel">Show answers</span></button>
+    <button class="btn small" id="btnPrint"><span class="ic">🖶</span>Print</button>
+    <button class="btn primary" id="btnNew"><span class="ic">✦</span>New number</button>
+  </header>
+
+  <div class="main">
+    <aside class="panel">
+      <div class="panel-scroll">
+        <section class="pblock">
+          <h3 class="section-title">Number of the day</h3>
+          <div class="range-row">
+            <label>Min <input type="number" id="inMin" value="1"></label>
+            <label>Max <input type="number" id="inMax" value="100"></label>
+            <label>Multiple of <input type="number" id="inMult" value="1" min="1"></label>
+          </div>
+          <div class="presets" id="presetRow">
+            <button class="chip" type="button" data-min="1" data-max="20">Easy 1–20</button>
+            <button class="chip" type="button" data-min="1" data-max="100">Medium 1–100</button>
+            <button class="chip" type="button" data-min="1" data-max="1000">Hard 1–1000</button>
+            <button class="chip" type="button" data-min="-50" data-max="50">Negatives ±50</button>
+          </div>
+        </section>
+
+        <section class="pblock">
+          <h3 class="section-title">How many questions</h3>
+          <div class="slider-row">
+            <div class="lab"><span>Question cards on the board</span><b id="countVal">16</b></div>
+            <input type="range" id="inCount" min="4" max="36" step="1" value="16">
+          </div>
+        </section>
+
+        <section class="pblock">
+          <div class="pblock-head">
+            <h3 class="section-title">Question types</h3>
+            <div class="quicklinks">
+              <button class="link" type="button" id="selAll">All</button>
+              <button class="link" type="button" id="selNone">None</button>
+              <button class="link" type="button" id="selRec">Recommended</button>
+            </div>
+          </div>
+          <p class="hint" style="margin:0 0 10px;">Only the types you tick can appear on the board. Cards are dealt at random from your selection — click a category to collapse it.</p>
+          <div id="typeGroups"></div>
+        </section>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="stage-scroll">
+        <div id="printHeader">
+          <h1>Number of the Day — <span id="printNum"></span></h1>
+          <div class="stamp" id="printStamp"></div>
+        </div>
+
+        <div class="hero">
+          <div class="hero-main">
+            <span class="hero-label">Today's number is</span>
+            <span class="hero-num" id="heroNum">—</span>
+          </div>
+          <div class="hero-badges" id="heroBadges"></div>
+        </div>
+
+        <div class="qgrid" id="qgrid"></div>
+      </div>
+
+      <div class="statusbar">
+        <span class="stat"><b id="statCount">0</b> questions</span>
+        <span class="dotline"></span>
+        <span class="stat"><b id="statTypes">0</b> types selected</span>
+        <span class="dotline"></span>
+        <span class="stat">Click <b>Show answers</b> to reveal</span>
+        <span class="stamp" id="stamp"></span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var LS_KEY = "teachingtools:numberOfTheDay";
+
+  /* ---------------- math helpers ---------------- */
+  function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+  function gcd(a,b){ a=Math.abs(a); b=Math.abs(b); while(b){ var t=b; b=a%b; a=t; } return a||1; }
+  function fmt(x){
+    x = Math.round(x*1e6)/1e6;
+    if(Object.is(x,-0)) x = 0;
+    return x.toLocaleString('en-US');
+  }
+  function trimNum(x){ return parseFloat(x.toFixed(4)).toString(); }
+  function fmtFrac(num,den){
+    if(den===0) return "—";
+    if(num % den === 0) return fmt(num/den);
+    var g = gcd(num,den), n2=num/g, d2=den/g;
+    if(d2<0){ n2=-n2; d2=-d2; }
+    var dec = num/den;
+    return fmt(n2) + "⁄" + fmt(d2) + " (" + trimNum(dec) + ")";
+  }
+  function digitsOf(n){ return Math.abs(Math.round(n)).toString().split('').map(Number); }
+  function isPrime(n){
+    n = Math.round(n);
+    if(n < 2) return false;
+    if(n % 2 === 0) return n === 2;
+    for(var i=3;i*i<=n;i+=2){ if(n % i === 0) return false; }
+    return true;
+  }
+  function nextPrime(n){
+    var v = Math.floor(n)+1, tries=0;
+    while(tries < 200000){ if(isPrime(v)) return v; v++; tries++; }
+    return null;
+  }
+  function factorsOf(n){
+    n = Math.round(n);
+    var res = [];
+    for(var i=1;i*i<=n;i++){ if(n % i === 0){ res.push(i); if(i !== n/i) res.push(n/i); } }
+    return res.sort(function(a,b){ return a-b; });
+  }
+  function primeFactorise(n){
+    n = Math.round(n);
+    var x = n, res = [];
+    for(var p=2;p*p<=x;p++){ while(x % p === 0){ res.push(p); x/=p; } }
+    if(x > 1) res.push(x);
+    return res.length ? res : null;
+  }
+  var SUP = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','-':'⁻'};
+  function sup(n){ return String(n).split('').map(function(c){ return SUP[c] || c; }).join(''); }
+  function toStandardForm(n){
+    var sign = n < 0 ? '-' : '';
+    var abs = Math.abs(n);
+    var exp = Math.floor(Math.log10(abs));
+    var mant = abs / Math.pow(10, exp);
+    mant = Math.round(mant*1000)/1000;
+    if(mant >= 10){ mant/=10; exp+=1; }
+    if(mant < 1){ mant*=10; exp-=1; }
+    return sign + trimNum(mant) + " × 10" + sup(exp);
+  }
+
+  /* ---------------- question types ---------------- */
+  var CATEGORIES = [
+    {id:'arith', label:'Arithmetic'},
+    {id:'quick', label:'Quick facts'},
+    {id:'pow',   label:'Powers & roots'},
+    {id:'props', label:'Number properties'},
+    {id:'round', label:'Rounding'},
+    {id:'share', label:'Sharing'},
+    {id:'pct',   label:'Percentages & fractions'}
+  ];
+  var RECOMMENDED = ['add','sub','mul','div','double','halve','square','factors','multiples',
+    'nextprime','sumdigits','round10','share','pct','frac','stdform'];
+
+  var TYPES = [
+    {id:'add',cat:'arith',label:'Add a number', gen:function(n){ var k=randInt(1,20); return {q:'Add '+k, a:fmt(n+k)}; }},
+    {id:'sub',cat:'arith',label:'Subtract a number', gen:function(n){ var k=randInt(1,20); return {q:'Subtract '+k, a:fmt(n-k)}; }},
+    {id:'mul',cat:'arith',label:'Multiply by a number', gen:function(n){ var k=randInt(2,9); return {q:'Multiply by '+k, a:fmt(n*k)}; }},
+    {id:'div',cat:'arith',label:'Divide by a number', gen:function(n){ var opts=[2,3,4,5,6,8,10]; var k=opts[randInt(0,opts.length-1)]; return {q:'Divide by '+k, a:fmtFrac(n,k)}; }},
+    {id:'mul10',cat:'arith',label:'Multiply by 10 / 100 / 1000', gen:function(n){ var p=[10,100,1000][randInt(0,2)]; return {q:'Multiply by '+p, a:fmt(n*p)}; }},
+    {id:'div10',cat:'arith',label:'Divide by 10 / 100 / 1000', gen:function(n){ var p=[10,100,1000][randInt(0,2)]; return {q:'Divide by '+p, a:fmtFrac(n,p)}; }},
+
+    {id:'double',cat:'quick',label:'Double it', gen:function(n){ return {q:'Double it', a:fmt(n*2)}; }},
+    {id:'halve',cat:'quick',label:'Halve it', gen:function(n){ return {q:'Halve it', a:fmtFrac(n,2)}; }},
+    {id:'treble',cat:'quick',label:'Treble it (×3)', gen:function(n){ return {q:'Treble it', a:fmt(n*3)}; }},
+    {id:'quarter',cat:'quick',label:'Quarter it (÷4)', gen:function(n){ return {q:'Quarter it', a:fmtFrac(n,4)}; }},
+
+    {id:'square',cat:'pow',label:'Square it', gen:function(n){ return {q:'Square it', a:fmt(n*n)}; }},
+    {id:'cube',cat:'pow',label:'Cube it', gen:function(n){ return {q:'Cube it', a:fmt(n*n*n)}; }},
+    {id:'sqrt',cat:'pow',label:'Square root', gen:function(n){
+        if(n < 0) return null;
+        var r = Math.sqrt(n);
+        if(Number.isInteger(r)) return {q:'Square root is', a:fmt(r)};
+        var lo=Math.floor(r), hi=Math.ceil(r);
+        return {q:'Square root is between', a:fmt(lo)+' and '+fmt(hi)};
+      }},
+    {id:'recip',cat:'pow',label:'Its reciprocal', gen:function(n){ if(n===0) return null; return {q:'Its reciprocal is', a:'1⁄'+fmt(n)}; }},
+
+    {id:'factors',cat:'props',label:'List its factors', gen:function(n){
+        if(n <= 0 || n > 200000) return null;
+        return {q:'Its factors are', a:factorsOf(n).map(fmt).join(', ')};
+      }},
+    {id:'multiples',cat:'props',label:'First 4 multiples', gen:function(n){
+        return {q:'The first 4 multiples are', a:[1,2,3,4].map(function(k){ return fmt(n*k); }).join(', ')};
+      }},
+    {id:'primefac',cat:'props',label:'Prime factorisation', gen:function(n){
+        if(n < 2 || n > 2000000) return null;
+        var f = primeFactorise(n);
+        return f ? {q:'Prime factorisation is', a:f.map(fmt).join(' × ')} : null;
+      }},
+    {id:'nextprime',cat:'props',label:'Next prime number', gen:function(n){
+        var p = nextPrime(n); return p==null ? null : {q:'Next prime number is', a:fmt(p)};
+      }},
+    {id:'nextsquare',cat:'props',label:'Next square number', gen:function(n){
+        if(n < 0) return null;
+        var r = Math.floor(Math.sqrt(n))+1;
+        if((r-1)*(r-1) === n) { /* n itself is square, still want the next one after it */ }
+        while(r*r <= n) r++;
+        return {q:'Next square number is', a:fmt(r*r)};
+      }},
+    {id:'nextodd',cat:'props',label:'Next odd number', gen:function(n){
+        var v = (Math.abs(n % 2) === 1) ? n+2 : n+1;
+        return {q:'Next odd number is', a:fmt(v)};
+      }},
+    {id:'nexteven',cat:'props',label:'Next even number', gen:function(n){
+        var v = (n % 2 === 0) ? n+2 : n+1;
+        return {q:'Next even number is', a:fmt(v)};
+      }},
+    {id:'sumdigits',cat:'props',label:'Sum of digits', gen:function(n){
+        return {q:'Sum of digits', a:fmt(digitsOf(n).reduce(function(a,b){ return a+b; },0))};
+      }},
+    {id:'proddigits',cat:'props',label:'Product of digits', gen:function(n){
+        return {q:'Product of digits', a:fmt(digitsOf(n).reduce(function(a,b){ return a*b; },1))};
+      }},
+    {id:'sumint',cat:'props',label:'Sum of integers 1 to N', gen:function(n){
+        if(n < 1 || n > 1000000) return null;
+        return {q:'Sum of integers 1 to '+fmt(n), a:fmt(n*(n+1)/2)};
+      }},
+    {id:'stdform',cat:'props',label:'Standard form', gen:function(n){
+        if(n === 0) return null;
+        return {q:'In standard form', a:toStandardForm(n)};
+      }},
+    {id:'isprime',cat:'props',label:'Is it a prime number?', gen:function(n){
+        if(n < 0) return null;
+        return {q:'Is it a prime number?', a:isPrime(n) ? 'Yes' : 'No'};
+      }},
+    {id:'issquare',cat:'props',label:'Is it a square number?', gen:function(n){
+        if(n < 0) return null;
+        return {q:'Is it a square number?', a:Number.isInteger(Math.sqrt(n)) ? 'Yes' : 'No'};
+      }},
+
+    {id:'round5',cat:'round',label:'Round to nearest 5', gen:function(n){ return {q:'Round to the nearest 5', a:fmt(Math.round(n/5)*5)}; }},
+    {id:'round10',cat:'round',label:'Round to nearest 10', gen:function(n){ return {q:'Round to the nearest 10', a:fmt(Math.round(n/10)*10)}; }},
+    {id:'round100',cat:'round',label:'Round to nearest 100', gen:function(n){ return {q:'Round to the nearest 100', a:fmt(Math.round(n/100)*100)}; }},
+
+    {id:'share',cat:'share',label:'Share into equal parts', gen:function(n){
+        var opts=[2,3,4,5,6,8,10]; var k=opts[randInt(0,opts.length-1)];
+        return {q:'Share into '+k+' equal parts', a:fmtFrac(n,k)};
+      }},
+
+    {id:'pct',cat:'pct',label:'Find a percentage', gen:function(n){
+        var opts=[5,10,15,20,25,30,40,50,60,70,75,80,90]; var p=opts[randInt(0,opts.length-1)];
+        return {q:'Find '+p+'%', a:fmtFrac(n*p,100)};
+      }},
+    {id:'frac',cat:'pct',label:'Find a fraction of it', gen:function(n){
+        var opts=[2,3,4,5,6,8,10]; var b=opts[randInt(0,opts.length-1)]; var a=randInt(1,b-1);
+        return {q:'Find '+a+'⁄'+b+' of it', a:fmtFrac(n*a,b)};
+      }}
+  ];
+  var TYPE_BY_ID = {};
+  TYPES.forEach(function(t){ TYPE_BY_ID[t.id] = t; });
+
+  /* ---------------- state ---------------- */
+  var state = {
+    min: 1, max: 100, mult: 1,
+    count: 16,
+    selected: RECOMMENDED.slice(),
+    showAnswers: false,
+    n: null,
+    cards: []   // [{typeId, q, a}]
+  };
+
+  function load(){
+    try{
+      var raw = localStorage.getItem(LS_KEY);
+      if(!raw) return;
+      var d = JSON.parse(raw);
+      if(!d || typeof d !== 'object') return;
+      ['min','max','mult','count','showAnswers','n'].forEach(function(k){ if(d[k] !== undefined) state[k] = d[k]; });
+      if(Array.isArray(d.selected)) state.selected = d.selected.filter(function(id){ return TYPE_BY_ID[id]; });
+      if(Array.isArray(d.cards)) state.cards = d.cards;
+    }catch(e){}
+  }
+  function save(){
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){}
+  }
+
+  /* ---------------- number generation ---------------- */
+  function randomNumber(min,max,mult){
+    if(min > max){ var t=min; min=max; max=t; }
+    mult = Math.max(1, Math.floor(Math.abs(mult)) || 1);
+    var lo = Math.ceil(min/mult), hi = Math.floor(max/mult);
+    if(hi < lo) return Math.round((min+max)/2/mult)*mult;
+    return (lo + Math.floor(Math.random()*(hi-lo+1))) * mult;
+  }
+
+  /* ---------------- card pool / shuffling ---------------- */
+  function shuffle(arr){
+    arr = arr.slice();
+    for(var i=arr.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=arr[i]; arr[i]=arr[j]; arr[j]=t; }
+    return arr;
+  }
+  function eligibleTypeIds(n, selected){
+    return selected.filter(function(id){
+      var t = TYPE_BY_ID[id];
+      if(!t) return false;
+      try{ return !!t.gen(n); }catch(e){ return false; }
+    });
+  }
+  function buildCards(n, selected, count){
+    var pool = eligibleTypeIds(n, selected);
+    if(pool.length === 0) return [];
+    var seq = [], bag = shuffle(pool);
+    while(seq.length < count){
+      if(bag.length === 0) bag = shuffle(pool);
+      seq.push(bag.pop());
+    }
+    return seq.map(function(id){ return cardFor(id, n); });
+  }
+  function cardFor(id, n){
+    var t = TYPE_BY_ID[id];
+    var out = t.gen(n);
+    if(!out) return null;
+    return {typeId:id, q:out.q, a:out.a};
+  }
+  function rerollCard(idx){
+    var pool = eligibleTypeIds(state.n, state.selected);
+    if(pool.length === 0) return;
+    var current = state.cards.map(function(c,i){ return i===idx ? null : c.typeId; });
+    var fresh = pool.filter(function(id){ return current.indexOf(id) === -1; });
+    var choices = fresh.length ? fresh : pool;
+    var id = choices[randInt(0,choices.length-1)];
+    var card = cardFor(id, state.n);
+    if(card) state.cards[idx] = card;
+    save();
+    renderCards();
+    renderStatus();
+  }
+
+  /* ---------------- rendering ---------------- */
+  var $ = function(id){ return document.getElementById(id); };
+
+  function catLabel(bit){
+    switch(bit){
+      case 'arith': return 'Arithmetic';
+      case 'quick': return 'Quick facts';
+      case 'pow': return 'Powers & roots';
+      case 'props': return 'Number properties';
+      case 'round': return 'Rounding';
+      case 'share': return 'Sharing';
+      case 'pct': return 'Percentages & fractions';
+    }
+    return bit;
+  }
+
+  function renderTypeGroups(){
+    var host = $('typeGroups');
+    host.innerHTML = '';
+    CATEGORIES.forEach(function(cat){
+      var members = TYPES.filter(function(t){ return t.cat === cat.id; });
+      var selCount = members.filter(function(t){ return state.selected.indexOf(t.id) !== -1; }).length;
+
+      var group = document.createElement('div');
+      group.className = 'catgroup';
+
+      var head = document.createElement('div');
+      head.className = 'cathead';
+      head.innerHTML = '<span class="caret">▾</span><b>'+cat.label+'</b><span class="cnt">'+selCount+'/'+members.length+'</span>';
+      head.addEventListener('click', function(){ group.classList.toggle('collapsed'); });
+      group.appendChild(head);
+
+      var body = document.createElement('div');
+      body.className = 'catbody';
+      members.forEach(function(t){
+        var row = document.createElement('label');
+        row.className = 'check';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = state.selected.indexOf(t.id) !== -1;
+        cb.addEventListener('change', function(){
+          var i = state.selected.indexOf(t.id);
+          if(cb.checked && i === -1) state.selected.push(t.id);
+          if(!cb.checked && i !== -1) state.selected.splice(i,1);
+          save();
+          renderTypeGroups();
+          regenerateCards();
+        });
+        var span = document.createElement('span');
+        span.textContent = t.label;
+        row.appendChild(cb);
+        row.appendChild(span);
+        body.appendChild(row);
+      });
+      group.appendChild(body);
+      host.appendChild(group);
+    });
+  }
+
+  function renderHero(){
+    $('heroNum').textContent = state.n === null ? '—' : fmt(state.n);
+    $('printNum').textContent = state.n === null ? '' : fmt(state.n);
+    var badges = $('heroBadges');
+    badges.innerHTML = '';
+    if(state.n !== null){
+      var n = state.n;
+      var facts = [];
+      facts.push(n % 2 === 0 ? 'Even' : 'Odd');
+      facts.push(n < 0 ? 'Negative' : (n === 0 ? 'Zero' : 'Positive'));
+      if(n >= 0 && n <= 5000000) facts.push(isPrime(n) ? 'Prime' : 'Composite');
+      facts.push(Math.abs(n).toString().length + '-digit');
+      facts.forEach(function(f){
+        var b = document.createElement('span');
+        b.className = 'badge';
+        b.textContent = f;
+        badges.appendChild(b);
+      });
+    }
+  }
+
+  function renderCards(){
+    var host = $('qgrid');
+    host.innerHTML = '';
+    if(state.n === null || state.cards.length === 0){
+      var empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.style.gridColumn = '1 / -1';
+      empty.textContent = state.n === null
+        ? 'Click "New number" to get started.'
+        : 'No selected question type applies to this number — tick a few more types, or try a different range.';
+      host.appendChild(empty);
+      return;
+    }
+    state.cards.forEach(function(card, idx){
+      var t = TYPE_BY_ID[card.typeId];
+      var el = document.createElement('div');
+      el.className = 'qcard pop';
+      el.style.setProperty('--d', (idx*14)+'ms');
+
+      var top = document.createElement('div');
+      top.className = 'qcard-top';
+      var tag = document.createElement('span');
+      tag.className = 'qtag';
+      tag.textContent = catLabel(t ? t.cat : '');
+      var reroll = document.createElement('button');
+      reroll.className = 'qreroll';
+      reroll.type = 'button';
+      reroll.title = 'Swap for a different question';
+      reroll.setAttribute('aria-label','Swap for a different question');
+      reroll.textContent = '↻';
+      reroll.addEventListener('click', function(){ rerollCard(idx); });
+      top.appendChild(tag);
+      top.appendChild(reroll);
+
+      var prompt = document.createElement('div');
+      prompt.className = 'qprompt';
+      prompt.textContent = card.q;
+
+      var ansWrap = document.createElement('div');
+      ansWrap.className = 'qanswer-wrap';
+      var ans = document.createElement('span');
+      ans.className = 'qanswer';
+      ans.textContent = card.a;
+      ansWrap.appendChild(ans);
+
+      el.appendChild(top);
+      el.appendChild(prompt);
+      el.appendChild(ansWrap);
+      host.appendChild(el);
+    });
+  }
+
+  function renderStatus(){
+    $('statCount').textContent = state.cards.length;
+    $('statTypes').textContent = state.selected.length;
+    var d = new Date();
+    var stampText = d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+    $('stamp').textContent = stampText;
+    $('printStamp').textContent = stampText;
+  }
+
+  function renderPresets(){
+    var buttons = document.querySelectorAll('#presetRow .chip');
+    buttons.forEach(function(b){
+      var min = parseInt(b.getAttribute('data-min'),10), max = parseInt(b.getAttribute('data-max'),10);
+      b.classList.toggle('active', state.min === min && state.max === max);
+    });
+  }
+
+  function renderAll(){
+    $('inMin').value = state.min;
+    $('inMax').value = state.max;
+    $('inMult').value = state.mult;
+    $('inCount').value = state.count;
+    $('countVal').textContent = state.count;
+    document.body.classList.toggle('answers-hidden', !state.showAnswers);
+    $('answersLabel').textContent = state.showAnswers ? 'Hide answers' : 'Show answers';
+    $('btnAnswers').classList.toggle('on', state.showAnswers);
+    renderPresets();
+    renderTypeGroups();
+    renderHero();
+    renderCards();
+    renderStatus();
+  }
+
+  /* ---------------- actions ---------------- */
+  function regenerateCards(){
+    if(state.n === null) return;
+    state.cards = buildCards(state.n, state.selected, state.count);
+    save();
+    renderCards();
+    renderStatus();
+  }
+  function newNumber(){
+    state.n = randomNumber(state.min, state.max, state.mult);
+    state.cards = buildCards(state.n, state.selected, state.count);
+    save();
+    renderHero();
+    renderCards();
+    renderStatus();
+  }
+
+  /* ---------------- wire up ---------------- */
+  function bind(){
+    $('inMin').addEventListener('change', function(){
+      var v = parseInt(this.value,10); state.min = isNaN(v) ? 1 : v; save(); renderPresets();
+    });
+    $('inMax').addEventListener('change', function(){
+      var v = parseInt(this.value,10); state.max = isNaN(v) ? 100 : v; save(); renderPresets();
+    });
+    $('inMult').addEventListener('change', function(){
+      var v = parseInt(this.value,10); state.mult = (isNaN(v) || v < 1) ? 1 : v; save();
+    });
+    $('inCount').addEventListener('input', function(){
+      state.count = parseInt(this.value,10); $('countVal').textContent = state.count; save();
+    });
+    $('inCount').addEventListener('change', regenerateCards);
+
+    document.querySelectorAll('#presetRow .chip').forEach(function(b){
+      b.addEventListener('click', function(){
+        state.min = parseInt(b.getAttribute('data-min'),10);
+        state.max = parseInt(b.getAttribute('data-max'),10);
+        $('inMin').value = state.min; $('inMax').value = state.max;
+        save(); renderPresets();
+      });
+    });
+
+    $('selAll').addEventListener('click', function(){
+      state.selected = TYPES.map(function(t){ return t.id; });
+      save(); renderTypeGroups(); regenerateCards();
+    });
+    $('selNone').addEventListener('click', function(){
+      state.selected = [];
+      save(); renderTypeGroups(); regenerateCards();
+    });
+    $('selRec').addEventListener('click', function(){
+      state.selected = RECOMMENDED.slice();
+      save(); renderTypeGroups(); regenerateCards();
+    });
+
+    $('btnNew').addEventListener('click', newNumber);
+    $('btnShuffle').addEventListener('click', regenerateCards);
+    $('btnAnswers').addEventListener('click', function(){
+      state.showAnswers = !state.showAnswers;
+      document.body.classList.toggle('answers-hidden', !state.showAnswers);
+      $('answersLabel').textContent = state.showAnswers ? 'Hide answers' : 'Show answers';
+      $('btnAnswers').classList.toggle('on', state.showAnswers);
+      save();
+    });
+    $('btnPrint').addEventListener('click', function(){ window.print(); });
+  }
+
+  load();
+  bind();
+  renderAll();
+  if(state.n === null){ newNumber(); }
+})();
+</script>
+</body>
+</html>
