@@ -57,6 +57,7 @@
     display:flex;flex-direction:column;min-height:0;}
   .panel-scroll{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:20px;}
   .stage{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--app-bg);}
+  body.panel-hidden .panel{display:none;}
   .stage-scroll{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;}
   .qgrid-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0;}
 
@@ -191,6 +192,7 @@
     <div class="spacer"></div>
     <button class="btn small" id="btnShuffle" title="Keep the number, swap the question cards"><span class="ic">⤮</span>Shuffle questions</button>
     <button class="btn small" id="btnAnswers"><span class="ic">👁</span><span id="answersLabel">Show answers</span></button>
+    <button class="btn small" id="btnFullscreen" title="Hide the side panel for presenting (F)"><span class="ic">⛶</span><span id="fsLabel">Fullscreen</span></button>
     <button class="btn small" id="btnPrint"><span class="ic">🖶</span>Print</button>
     <button class="btn primary" id="btnNew"><span class="ic">✦</span>New number</button>
   </header>
@@ -829,6 +831,36 @@
       renderCards();
     });
     $('btnPrint').addEventListener('click', function(){ window.print(); });
+
+    var focusOn = false;
+    function setFocusMode(on){
+      focusOn = on;
+      document.body.classList.toggle('panel-hidden', on);
+      $('btnFullscreen').classList.toggle('on', on);
+      $('fsLabel').textContent = on ? 'Exit fullscreen' : 'Fullscreen';
+    }
+    function toggleFocusMode(){
+      setFocusMode(!focusOn);
+      try{
+        if(focusOn){
+          var el = document.documentElement;
+          (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+        } else if(document.fullscreenElement){
+          (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+        }
+      }catch(e){}
+    }
+    document.addEventListener('fullscreenchange', function(){
+      if(!document.fullscreenElement && focusOn) setFocusMode(false);
+    });
+    $('btnFullscreen').addEventListener('click', toggleFocusMode);
+    document.addEventListener('keydown', function(e){
+      if((e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey){
+        var tag = document.activeElement && document.activeElement.tagName;
+        if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        toggleFocusMode();
+      }
+    });
   }
 
   load();
