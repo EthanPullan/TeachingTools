@@ -536,6 +536,23 @@ function sanitize(s){ return (s||'').trim().replace(/[^a-z0-9\-_ ]/gi,'').replac
 
 /* ---------------- Classes (shared room, separate rosters) ---------------- */
 function blankClass(name){ return { name:name||'', students:[], pairs:{apart:[],together:[]}, assignment:{}, history:[] }; }
+// Default startup roster: pick up the class lists saved on the home page (and
+// contributed by other tools), keeping each class's name. Falls back to two
+// blank classes when nothing has been saved yet.
+function loadClassesFromRoster(){
+  try{
+    const d=JSON.parse(localStorage.getItem('teachingtools:rosters')||'null');
+    if(d && Array.isArray(d.classes)){
+      const classes=d.classes.map(c=>{
+        const bc=blankClass((c && c.name!=null) ? String(c.name).trim() : '');
+        bc.students=(c && Array.isArray(c.students)) ? c.students.map(s=>String(s).trim()).filter(Boolean) : [];
+        return bc;
+      }).filter(c=>c.students.length);
+      if(classes.length) return classes;
+    }
+  }catch(e){ /* unreadable — fall back to defaults */ }
+  return null;
+}
 // The app edits state.{className,students,pairs,assignment,history} as a live view;
 // these move that view in and out of the per-class store.
 function commitActiveClass(){
@@ -1389,7 +1406,8 @@ window.addEventListener('keydown',e=>{
 
 /* ---------------- Init ---------------- */
 $('addClassTop').addEventListener('click',addClass);
-state.classes=[ blankClass('Class 1'), blankClass('Class 2') ];   // two classes, one shared room
+// Start from the class lists saved on the home page, if any; otherwise two blank classes.
+state.classes=loadClassesFromRoster() || [ blankClass('Class 1'), blankClass('Class 2') ];
 state.activeClass=0; loadActiveClass();
 $('className').value=state.className;
 addGrid(5,6,true);       // a tidy 5×6 room (30 desks), shared by every class
