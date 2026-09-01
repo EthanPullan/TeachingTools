@@ -438,7 +438,11 @@
             <button class="btn small primary" id="impSnapBtn">Load backup…</button>
             <button class="btn small primary" id="expSnapBtn">Save backup</button>
           </div>
-          <p class="hint">Nothing is saved automatically — back up to keep your work.</p>
+          <p class="hint">Your plan autosaves in this browser, so it's here next time you open this page.
+             Export a backup file too if you want a copy you can move to another device.</p>
+          <div class="field-row">
+            <button class="btn small danger" id="resetPlanBtn">Reset saved plan</button>
+          </div>
         </section>
 
       </div>
@@ -492,6 +496,7 @@ const DEFAULTS = {
   deskW:92, deskH:62, snap:true, neighborDist:130,
   rotationStrength:0.7, roomW:900, roomH:600, grid:23
 };
+const AUTOSAVE_KEY = 'teachingtools:seating-chart-autosave';
 
 const state = {
   // The room (desks, features, settings) is SHARED across classes; each class
@@ -611,6 +616,7 @@ function renderClassBar(){
     b.addEventListener('click',()=>switchClass(i));
     bar.appendChild(b);
   });
+  scheduleAutosave();
 }
 
 /* ---------------- Toast ---------------- */
@@ -663,6 +669,7 @@ function renderStudents(){
     ul.appendChild(li);
   }
   publishRosters();
+  scheduleAutosave();
 }
 
 /* Share rosters with other Teaching Tools (Class Lists on the home page, the
@@ -731,6 +738,7 @@ function addPair(){
 function renderPairs(){
   fillPairList('apartList','apartEmpty','apart');
   fillPairList('togetherList','togetherEmpty','together');
+  scheduleAutosave();
 }
 function fillPairList(listId, emptyId, type){
   const ul=$(listId); ul.innerHTML='';
@@ -871,6 +879,7 @@ function renderRoom(){
   animateNext=false;
   drawLinks();
   updateSelUI();
+  scheduleAutosave();
 }
 
 function drawLinks(){
@@ -944,6 +953,7 @@ function attachDragHandlers(el, item, kind){
           renderRoom(); renderStudents(); renderStatus();
         }
       } else if(kind==='desk'){ renderStatus(); }
+      else { scheduleAutosave(); }                 // feature moved
     };
     el.addEventListener('pointermove',move);
     el.addEventListener('pointerup',up);
@@ -988,6 +998,7 @@ function rotateSelected(){
   syncItemNode(sel.kind,item);
   if(sel.kind==='desk' && showLinks) scheduleLinks();
   updateSelUI();
+  scheduleAutosave();
 }
 function removeSelected(){
   if(!sel) return;
@@ -1146,6 +1157,7 @@ function renderStatus(){
   add(conf? `<b>${conf}</b> conflict${conf>1?'s':''}` : `no conflicts`, conf?'warn':'');
   if(lastStamp){ const st=document.createElement('span'); st.className='stamp';
     st.textContent='last generated '+lastStamp.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); sb.appendChild(st); }
+  scheduleAutosave();
 }
 
 function renderHistory(){
@@ -1168,6 +1180,7 @@ function renderHistory(){
   $('freqBox').innerHTML = top.length
     ? 'Most-repeated seatmates: ' + top.map(([k,c])=>{ const [a,b]=k.split(SEP); return `<code>${escapeHtml(a)} & ${escapeHtml(b)}</code> ×${c}`; }).join(', ')
     : '';
+  scheduleAutosave();
 }
 
 /* ---------------- Import / Export ---------------- */
@@ -1227,15 +1240,16 @@ function importLayout(text){
   toast(`Loaded layout — ${state.desks.length} desks${state.features.length?`, ${state.features.length} features`:''}.`,'ok');
 }
 
-function exportSnapshot(){
+function snapshotData(){
   commitActiveClass();
-  const data={type:'seating-chart',version:2,activeClass:state.activeClass,classes:state.classes,
+  return {type:'seating-chart',version:2,activeClass:state.activeClass,classes:state.classes,
     settings:state.settings,desks:state.desks,features:state.features};
+}
+function exportSnapshot(){
+  const data=snapshotData();
   download(JSON.stringify(data,null,2), sanitize(state.className)+'-'+todayStr()+'.json','application/json');
 }
-function importSnapshot(text){
-  const d=JSON.parse(text);
-  if(d.type!=='seating-chart') throw new Error('not a seating-chart backup');
+function applySnapshot(d){
   state.settings=Object.assign({...DEFAULTS}, d.settings||{});
   state.desks=mapDesks(d.desks);
   state.features=mapFeatures(d.features);
@@ -1250,6 +1264,28 @@ function importSnapshot(text){
     state.activeClass=0;
   }
   loadActiveClass();
+}
+// Autosave — keeps the whole plan (room, classes, seating, history) in this
+// browser so it's still here on restart. Local to this device/browser only.
+let _autosaveT=0;
+function scheduleAutosave(){ clearTimeout(_autosaveT); _autosaveT=setTimeout(saveAutosave, 300); }
+function saveAutosave(){
+  try{ localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(snapshotData())); }catch(e){ /* storage unavailable / full — ignore */ }
+}
+function loadAutosave(){
+  try{
+    const raw=localStorage.getItem(AUTOSAVE_KEY);
+    if(!raw) return false;
+    const d=JSON.parse(raw);
+    if(!d || d.type!=='seating-chart') return false;
+    applySnapshot(d);
+    return true;
+  }catch(e){ return false; }
+}
+function importSnapshot(text){
+  const d=JSON.parse(text);
+  if(d.type!=='seating-chart') throw new Error('not a seating-chart backup');
+  applySnapshot(d);
   conflictDeskIds.clear(); sel=null; lastStamp=null;
   $('className').value=state.className;
   syncControls(); renderClassBar(); renderAll();
@@ -1326,9 +1362,9 @@ $('clearDesksBtn').addEventListener('click',()=>{
   if(sel && sel.kind==='desk') sel=null;
   renderRoom(); renderStatus(); renderStudents();
 });
-$('neighborDist').addEventListener('input',e=>{ state.settings.neighborDist=+e.target.value; $('ndVal').textContent=e.target.value; scheduleLinks(); });
+$('neighborDist').addEventListener('input',e=>{ state.settings.neighborDist=+e.target.value; $('ndVal').textContent=e.target.value; scheduleLinks(); scheduleAutosave(); });
 $('showLinks').addEventListener('change',e=>{ showLinks=e.target.checked; drawLinks(); });
-$('snap').addEventListener('change',e=>{ state.settings.snap=e.target.checked; });
+$('snap').addEventListener('change',e=>{ state.settings.snap=e.target.checked; scheduleAutosave(); });
 
 // desk shape (default for new desks) + selection actions
 $('shapeSeg').addEventListener('click',e=>{
@@ -1356,7 +1392,7 @@ $('roomWIn').addEventListener('change',setRoomSize);
 $('roomHIn').addEventListener('change',setRoomSize);
 
 // history
-$('rotationStrength').addEventListener('input',e=>{ state.settings.rotationStrength=(+e.target.value)/100; $('rsVal').textContent=e.target.value+'%'; });
+$('rotationStrength').addEventListener('input',e=>{ state.settings.rotationStrength=(+e.target.value)/100; $('rsVal').textContent=e.target.value+'%'; scheduleAutosave(); });
 $('clearHistBtn').addEventListener('click',()=>{
   if(!state.history.length) return;
   if(!confirm('Clear all saved charts? Seatmate rotation starts fresh.')) return;
@@ -1372,6 +1408,18 @@ $('impLayoutBtn').addEventListener('click',()=>pickFile(importLayout));
 $('expLayoutBtn').addEventListener('click',exportLayout);
 $('impSnapBtn').addEventListener('click',()=>pickFile(importSnapshot));
 $('expSnapBtn').addEventListener('click',exportSnapshot);
+$('resetPlanBtn').addEventListener('click',()=>{
+  if(!confirm('Reset the saved plan? This clears everything autosaved in this browser — export a backup first if you want to keep it.')) return;
+  try{ localStorage.removeItem(AUTOSAVE_KEY); }catch(e){ /* storage unavailable — ignore */ }
+  state.classes=loadClassesFromRoster() || [ blankClass('Class 1'), blankClass('Class 2') ];
+  state.activeClass=0; loadActiveClass();
+  state.features=[]; state.settings={ ...DEFAULTS };
+  conflictDeskIds.clear(); sel=null; lastStamp=null;
+  addGrid(5,6,true);        // replaces desks with a tidy 5×6 room
+  $('className').value=state.className;
+  syncControls(); renderClassBar(); renderAll();
+  toast('Saved plan reset.','ok');
+});
 
 // canvas: double-click to add a desk, click empty floor to deselect
 $('room').addEventListener('dblclick',e=>{
@@ -1401,16 +1449,21 @@ window.addEventListener('keydown',e=>{
   item.y=clamp(item.y+dy,0,state.settings.roomH-s.h);
   syncItemNode(sel.kind,item);
   if(sel.kind==='desk' && showLinks) scheduleLinks();
+  scheduleAutosave();
   e.preventDefault();
 });
 
 /* ---------------- Init ---------------- */
 $('addClassTop').addEventListener('click',addClass);
-// Start from the class lists saved on the home page, if any; otherwise two blank classes.
-state.classes=loadClassesFromRoster() || [ blankClass('Class 1'), blankClass('Class 2') ];
-state.activeClass=0; loadActiveClass();
+// Resume the last autosaved plan (room, classes, seating, history) if this
+// browser has one. Otherwise start from the class lists saved on the home
+// page, if any; otherwise two blank classes in a tidy 5×6 room.
+if(!loadAutosave()){
+  state.classes=loadClassesFromRoster() || [ blankClass('Class 1'), blankClass('Class 2') ];
+  state.activeClass=0; loadActiveClass();
+  addGrid(5,6,true);       // a tidy 5×6 room (30 desks), shared by every class
+}
 $('className').value=state.className;
-addGrid(5,6,true);       // a tidy 5×6 room (30 desks), shared by every class
 syncControls();
 renderClassBar();
 renderAll();
