@@ -50,6 +50,11 @@
   .btn.small{padding:6px 11px;font-size:12.5px;border-radius:8px;}
   .btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep);}
   .btn .ic{font-size:14px;line-height:1;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none;}
+  .icon-btn{border:1px solid var(--line);background:var(--panel);width:32px;height:32px;border-radius:8px;
+    cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex:none;}
+  .icon-btn:hover{background:var(--panel-2);}
+  .icon-btn.off{opacity:.4;}
 
   /* ---------- Layout ---------- */
   .main{flex:1;display:flex;min-height:0;}
@@ -104,6 +109,28 @@
   .check input{width:15px;height:15px;accent-color:var(--board);flex:none;}
   .check span{flex:1;}
 
+  /* stage: timer */
+  .timerbar{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 18px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;box-shadow:var(--shadow-sm);
+    margin-bottom:14px;transition:background .2s,border-color .2s;}
+  .timer-time{font-family:var(--mono);font-weight:800;font-size:clamp(28px,3.4vw,42px);color:var(--board);
+    line-height:1;min-width:100px;text-align:center;transition:color .2s;}
+  .timerbar.running .timer-time{color:var(--accent-deep);}
+  .timerbar.low .timer-time{color:var(--danger);}
+  .timerbar.done{border-color:var(--danger);background:var(--danger-soft);}
+  .timerbar.done .timer-time{color:var(--danger);animation:timerPulse 1s ease-in-out infinite;}
+  @keyframes timerPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.08);}}
+  .timer-body{display:flex;align-items:center;gap:14px;flex-wrap:wrap;flex:1;}
+  .timer-presets{display:flex;gap:6px;flex-wrap:wrap;}
+  .timer-presets button{border:1px solid var(--line);background:var(--panel-2);color:var(--ink);
+    border-radius:8px;padding:6px 10px;font-size:12.5px;font-weight:600;cursor:pointer;
+    transition:background .12s,border-color .12s;}
+  .timer-presets button:hover{background:#fff;border-color:var(--accent);}
+  .timer-custom{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted);}
+  .timer-custom input{width:46px;border:1px solid var(--line);border-radius:7px;padding:6px;
+    background:var(--panel-2);font-family:var(--mono);text-align:center;}
+  .timer-actions{display:flex;align-items:center;gap:8px;margin-left:auto;}
+
   /* stage: hero */
   .hero{background:var(--board);color:#fff;border-radius:var(--radius);padding:16px 22px;
     display:flex;align-items:center;gap:22px;flex-wrap:wrap;box-shadow:var(--shadow);margin-bottom:14px;}
@@ -135,7 +162,9 @@
   .qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;align-items:stretch;}
   .qcard{container-type:inline-size;position:relative;background:var(--panel);border:1px solid var(--line);
     border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:18px 20px;display:flex;
-    flex-direction:column;justify-content:center;gap:8px;min-height:128px;}
+    flex-direction:column;justify-content:center;gap:8px;min-height:128px;cursor:pointer;
+    transition:border-color .15s;}
+  .qcard.revealed{border-color:var(--board-line);}
   .qreroll{position:absolute;top:8px;right:8px;border:none;background:none;cursor:pointer;color:var(--muted);
     font-size:15px;line-height:1;padding:4px 6px;border-radius:6px;opacity:.5;
     transition:background .12s,color .12s,opacity .12s,transform .3s;}
@@ -169,12 +198,13 @@
   }
   @media (prefers-reduced-motion:reduce){
     .pop{animation:none;} .btn:active{transform:none;} .qreroll:active{transform:none;} *{scroll-behavior:auto;}
+    .timerbar.done .timer-time{animation:none;}
   }
 
   @media print{
     @page{margin:12mm;}
     body{background:#fff;}
-    .toolbar,.panel,.statusbar,.qreroll{display:none !important;}
+    .toolbar,.panel,.statusbar,.qreroll,.timerbar{display:none !important;}
     .app,.main,.stage,.stage-scroll,.qgrid-wrap{display:block;height:auto;overflow:visible;background:#fff;}
     #printHeader{display:block;margin-bottom:14px;}
     #printHeader h1{margin:0 0 2px;font-size:20px;}
@@ -191,7 +221,8 @@
     <div class="brand"><span class="mark"></span>Number of the Day <small>daily number starter</small></div>
     <div class="spacer"></div>
     <button class="btn small" id="btnShuffle" title="Keep the number, swap the question cards"><span class="ic">⤮</span>Shuffle questions</button>
-    <button class="btn small" id="btnAnswers"><span class="ic">👁</span><span id="answersLabel">Show answers</span></button>
+    <button class="btn small" id="btnRevealNext" title="Reveal the next hidden answer (Space)"><span class="ic">▸</span>Reveal next</button>
+    <button class="btn small" id="btnRevealAll"><span class="ic">👁</span><span id="revealAllLabel">Show all answers</span></button>
     <button class="btn small" id="btnFullscreen" title="Hide the side panel for presenting (F)"><span class="ic">⛶</span><span id="fsLabel">Fullscreen</span></button>
     <button class="btn small" id="btnPrint"><span class="ic">🖶</span>Print</button>
     <button class="btn primary" id="btnNew"><span class="ic">✦</span>New number</button>
@@ -240,6 +271,30 @@
 
     <section class="stage">
       <div class="stage-scroll">
+        <div class="timerbar" id="timerBar">
+          <div class="timer-time" id="timerTime">05:00</div>
+          <div class="timer-body">
+            <div class="timer-presets" id="timerPresets">
+              <button type="button" data-sec="30">30s</button>
+              <button type="button" data-sec="60">1m</button>
+              <button type="button" data-sec="120">2m</button>
+              <button type="button" data-sec="180">3m</button>
+              <button type="button" data-sec="300">5m</button>
+              <button type="button" data-sec="600">10m</button>
+            </div>
+            <div class="timer-custom">
+              <input type="number" id="timerMinIn" min="0" max="180" value="5" aria-label="Minutes"><span>m</span>
+              <input type="number" id="timerSecIn" min="0" max="59" value="0" aria-label="Seconds"><span>s</span>
+              <button class="btn small" type="button" id="timerSet">Set</button>
+            </div>
+            <div class="timer-actions">
+              <button class="btn small primary" type="button" id="timerStartPause">Start</button>
+              <button class="btn small" type="button" id="timerReset">Reset</button>
+              <button class="icon-btn" type="button" id="timerSound" title="Toggle timer sound">🔔</button>
+            </div>
+          </div>
+        </div>
+
         <div id="printHeader">
           <h1>Number of the Day — <span id="printNum"></span></h1>
           <div class="stamp" id="printStamp"></div>
@@ -263,7 +318,7 @@
         <span class="dotline"></span>
         <span class="stat"><b id="statTypes">0</b> types selected</span>
         <span class="dotline"></span>
-        <span class="stat">Click <b>Show answers</b> to reveal</span>
+        <span class="stat"><b id="statRevealed">0 of 0</b> answers revealed</span>
         <span class="stamp" id="stamp"></span>
       </div>
     </section>
@@ -549,10 +604,16 @@
     min: 1, max: 100, mult: 1,
     count: 16,
     selected: RECOMMENDED.slice(),
-    showAnswers: false,
     n: null,
-    cards: []   // [{typeId, q, a}]
+    cards: [],      // [{typeId, q, a}]
+    revealed: [],   // parallel array of booleans, one per card
+    timerDurationSec: 300,
+    timerSound: true
   };
+
+  function resetRevealed(){
+    state.revealed = state.cards.map(function(){ return false; });
+  }
 
   function load(){
     try{
@@ -560,9 +621,11 @@
       if(!raw) return;
       var d = JSON.parse(raw);
       if(!d || typeof d !== 'object') return;
-      ['min','max','mult','count','showAnswers','n'].forEach(function(k){ if(d[k] !== undefined) state[k] = d[k]; });
+      ['min','max','mult','count','n','timerDurationSec','timerSound'].forEach(function(k){ if(d[k] !== undefined) state[k] = d[k]; });
       if(Array.isArray(d.selected)) state.selected = d.selected.filter(function(id){ return TYPE_BY_ID[id]; });
       if(Array.isArray(d.cards)) state.cards = d.cards;
+      if(Array.isArray(d.revealed) && d.revealed.length === state.cards.length) state.revealed = d.revealed;
+      else resetRevealed();
     }catch(e){}
   }
   function save(){
@@ -615,10 +678,124 @@
     var choices = fresh.length ? fresh : pool;
     var id = choices[randInt(0,choices.length-1)];
     var card = cardFor(id, state.n);
-    if(card) state.cards[idx] = card;
+    if(card){ state.cards[idx] = card; state.revealed[idx] = false; }
+    save();
+    replaceCardNode(idx);
+    renderStatus();
+  }
+  function toggleReveal(idx){
+    state.revealed[idx] = !state.revealed[idx];
+    save();
+    replaceCardNode(idx);
+    renderStatus();
+  }
+  function revealNext(){
+    if(state.n === null || state.cards.length === 0) return;
+    var idx = state.revealed.indexOf(false);
+    if(idx === -1) return;
+    state.revealed[idx] = true;
+    save();
+    replaceCardNode(idx);
+    renderStatus();
+  }
+  function revealAllToggle(){
+    if(state.revealed.length === 0) return;
+    var anyHidden = state.revealed.indexOf(false) !== -1;
+    state.revealed = state.revealed.map(function(){ return anyHidden; });
     save();
     renderCards();
     renderStatus();
+  }
+
+  /* ---------------- timer ---------------- */
+  var timer = { totalSec: 300, remainingMs: 300000, running: false, endAt: null, intervalId: null, soundOn: true };
+  var actx = null;
+  function ensureAudio(){
+    if(!actx){ try{ actx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ return; } }
+    if(actx.state === 'suspended') actx.resume();
+  }
+  function chime(){
+    if(!actx) return;
+    var t = actx.currentTime, notes = [523.25,659.25,783.99,1046.50];
+    notes.forEach(function(f,i){
+      var o = actx.createOscillator(), g = actx.createGain(), t0 = t + i*0.16;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.3, t0+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0008, t0+0.65);
+      o.connect(g); g.connect(actx.destination); o.start(t0); o.stop(t0+0.7);
+    });
+  }
+  function formatTime(ms){
+    var s = Math.max(0, Math.ceil(ms/1000));
+    var m = Math.floor(s/60); s = s % 60;
+    return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+  }
+  function renderTimer(){
+    $('timerTime').textContent = formatTime(timer.remainingMs);
+    $('timerStartPause').textContent = timer.running ? 'Pause' :
+      (timer.remainingMs > 0 && timer.remainingMs < timer.totalSec*1000 ? 'Resume' : 'Start');
+    $('timerBar').classList.toggle('running', timer.running);
+    $('timerBar').classList.toggle('low', timer.running && timer.remainingMs > 0 && timer.remainingMs <= 10000);
+  }
+  function syncTimerInputs(){
+    $('timerMinIn').value = Math.floor(timer.totalSec/60);
+    $('timerSecIn').value = timer.totalSec % 60;
+  }
+  function syncTimerSoundBtn(){
+    $('timerSound').textContent = timer.soundOn ? '🔔' : '🔕';
+    $('timerSound').classList.toggle('off', !timer.soundOn);
+  }
+  function timerTick(){
+    if(!timer.running) return;
+    var remaining = timer.endAt - Date.now();
+    if(remaining <= 0){
+      timer.running = false;
+      timer.remainingMs = 0;
+      if(timer.intervalId){ clearInterval(timer.intervalId); timer.intervalId = null; }
+      renderTimer();
+      $('timerBar').classList.add('done');
+      if(timer.soundOn) chime();
+      return;
+    }
+    timer.remainingMs = remaining;
+    renderTimer();
+  }
+  function timerStart(){
+    ensureAudio();
+    if(timer.remainingMs <= 0) timer.remainingMs = timer.totalSec*1000;
+    timer.endAt = Date.now() + timer.remainingMs;
+    timer.running = true;
+    $('timerBar').classList.remove('done');
+    if(timer.intervalId) clearInterval(timer.intervalId);
+    timer.intervalId = setInterval(timerTick, 250);
+    renderTimer();
+  }
+  function timerPause(){
+    if(!timer.running) return;
+    timer.remainingMs = Math.max(0, timer.endAt - Date.now());
+    timer.running = false;
+    if(timer.intervalId){ clearInterval(timer.intervalId); timer.intervalId = null; }
+    renderTimer();
+  }
+  function timerReset(){
+    timer.running = false;
+    if(timer.intervalId){ clearInterval(timer.intervalId); timer.intervalId = null; }
+    timer.remainingMs = timer.totalSec*1000;
+    $('timerBar').classList.remove('done');
+    renderTimer();
+  }
+  function timerSetDuration(sec){
+    sec = Math.max(1, Math.min(36000, Math.round(sec)));
+    timer.totalSec = sec;
+    timer.remainingMs = sec*1000;
+    timer.running = false;
+    if(timer.intervalId){ clearInterval(timer.intervalId); timer.intervalId = null; }
+    $('timerBar').classList.remove('done');
+    state.timerDurationSec = sec;
+    save();
+    syncTimerInputs();
+    renderTimer();
   }
 
   /* ---------------- rendering ---------------- */
@@ -690,6 +867,45 @@
     }
   }
 
+  function buildCardNode(idx){
+    var card = state.cards[idx];
+    var revealed = !!state.revealed[idx];
+    var tier = Math.max(sizeTier(card.q.length), revealed ? sizeTier(card.a.length) : 0);
+    var el = document.createElement('div');
+    el.className = 'qcard pop' + (tier === 1 ? ' long' : tier === 2 ? ' xlong' : '') + (revealed ? ' revealed' : '');
+    el.style.setProperty('--d', (idx*14)+'ms');
+    el.title = revealed ? 'Click to hide the answer' : 'Click to reveal the answer';
+
+    var reroll = document.createElement('button');
+    reroll.className = 'qreroll';
+    reroll.type = 'button';
+    reroll.title = 'Swap for a different question';
+    reroll.setAttribute('aria-label','Swap for a different question');
+    reroll.textContent = '↻';
+    reroll.addEventListener('click', function(e){ e.stopPropagation(); rerollCard(idx); });
+    el.appendChild(reroll);
+
+    var prompt = document.createElement('div');
+    prompt.className = 'qprompt';
+    prompt.textContent = card.q;
+    el.appendChild(prompt);
+
+    if(revealed){
+      var ans = document.createElement('div');
+      ans.className = 'qanswer';
+      ans.textContent = card.a;
+      el.appendChild(ans);
+    }
+
+    el.addEventListener('click', function(){ toggleReveal(idx); });
+    return el;
+  }
+  function replaceCardNode(idx){
+    var host = $('qgrid');
+    var old = host.children[idx];
+    var fresh = buildCardNode(idx);
+    if(old) host.replaceChild(fresh, old); else host.appendChild(fresh);
+  }
   function renderCards(){
     var host = $('qgrid');
     host.innerHTML = '';
@@ -703,40 +919,18 @@
       host.appendChild(empty);
       return;
     }
-    state.cards.forEach(function(card, idx){
-      var el = document.createElement('div');
-      var tier = Math.max(sizeTier(card.q.length), state.showAnswers ? sizeTier(card.a.length) : 0);
-      el.className = 'qcard pop' + (tier === 1 ? ' long' : tier === 2 ? ' xlong' : '');
-      el.style.setProperty('--d', (idx*14)+'ms');
-
-      var reroll = document.createElement('button');
-      reroll.className = 'qreroll';
-      reroll.type = 'button';
-      reroll.title = 'Swap for a different question';
-      reroll.setAttribute('aria-label','Swap for a different question');
-      reroll.textContent = '↻';
-      reroll.addEventListener('click', function(){ rerollCard(idx); });
-      el.appendChild(reroll);
-
-      var prompt = document.createElement('div');
-      prompt.className = 'qprompt';
-      prompt.textContent = card.q;
-      el.appendChild(prompt);
-
-      if(state.showAnswers){
-        var ans = document.createElement('div');
-        ans.className = 'qanswer';
-        ans.textContent = card.a;
-        el.appendChild(ans);
-      }
-
-      host.appendChild(el);
-    });
+    state.cards.forEach(function(card, idx){ host.appendChild(buildCardNode(idx)); });
   }
 
   function renderStatus(){
     $('statCount').textContent = state.cards.length;
     $('statTypes').textContent = state.selected.length;
+    var hiddenCount = state.revealed.filter(function(r){ return !r; }).length;
+    var revealedCount = state.revealed.length - hiddenCount;
+    $('statRevealed').textContent = revealedCount + ' of ' + state.revealed.length;
+    $('btnRevealNext').disabled = hiddenCount === 0;
+    $('revealAllLabel').textContent = hiddenCount > 0 ? 'Show all answers' : 'Hide all answers';
+    $('btnRevealAll').classList.toggle('on', state.revealed.length > 0 && hiddenCount === 0);
     var d = new Date();
     var stampText = d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
     $('stamp').textContent = stampText;
@@ -757,8 +951,6 @@
     $('inMult').value = state.mult;
     $('inCount').value = state.count;
     $('countVal').textContent = state.count;
-    $('answersLabel').textContent = state.showAnswers ? 'Hide answers' : 'Show answers';
-    $('btnAnswers').classList.toggle('on', state.showAnswers);
     renderPresets();
     renderTypeGroups();
     renderHero();
@@ -770,6 +962,7 @@
   function regenerateCards(){
     if(state.n === null) return;
     state.cards = buildCards(state.n, state.selected, state.count);
+    resetRevealed();
     save();
     renderCards();
     renderStatus();
@@ -777,6 +970,7 @@
   function newNumber(){
     state.n = randomNumber(state.min, state.max, state.mult);
     state.cards = buildCards(state.n, state.selected, state.count);
+    resetRevealed();
     save();
     renderHero();
     renderCards();
@@ -823,13 +1017,8 @@
 
     $('btnNew').addEventListener('click', newNumber);
     $('btnShuffle').addEventListener('click', regenerateCards);
-    $('btnAnswers').addEventListener('click', function(){
-      state.showAnswers = !state.showAnswers;
-      $('answersLabel').textContent = state.showAnswers ? 'Hide answers' : 'Show answers';
-      $('btnAnswers').classList.toggle('on', state.showAnswers);
-      save();
-      renderCards();
-    });
+    $('btnRevealNext').addEventListener('click', revealNext);
+    $('btnRevealAll').addEventListener('click', revealAllToggle);
     $('btnPrint').addEventListener('click', function(){ window.print(); });
 
     var focusOn = false;
@@ -855,17 +1044,51 @@
     });
     $('btnFullscreen').addEventListener('click', toggleFocusMode);
     document.addEventListener('keydown', function(e){
-      if((e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey){
-        var tag = document.activeElement && document.activeElement.tagName;
-        if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if(e.metaKey || e.ctrlKey || e.altKey) return;
+      var tag = document.activeElement && document.activeElement.tagName;
+      var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if((e.key === 'f' || e.key === 'F') && !typing){
         toggleFocusMode();
+      } else if(e.key === ' ' && !typing && tag !== 'BUTTON'){
+        e.preventDefault();
+        revealNext();
       }
+    });
+
+    /* ---------------- timer ---------------- */
+    document.querySelectorAll('#timerPresets button').forEach(function(b){
+      b.addEventListener('click', function(){
+        var sec = parseInt(b.getAttribute('data-sec'), 10);
+        timerSetDuration(sec);
+        timerStart();
+      });
+    });
+    $('timerSet').addEventListener('click', function(){
+      var m = Math.max(0, parseInt($('timerMinIn').value, 10) || 0);
+      var s = Math.max(0, Math.min(59, parseInt($('timerSecIn').value, 10) || 0));
+      timerSetDuration(m*60 + s);
+    });
+    $('timerStartPause').addEventListener('click', function(){
+      if(timer.running) timerPause(); else timerStart();
+    });
+    $('timerReset').addEventListener('click', timerReset);
+    $('timerSound').addEventListener('click', function(){
+      timer.soundOn = !timer.soundOn;
+      state.timerSound = timer.soundOn;
+      save();
+      syncTimerSoundBtn();
     });
   }
 
   load();
+  timer.totalSec = (state.timerDurationSec && state.timerDurationSec > 0) ? state.timerDurationSec : 300;
+  timer.remainingMs = timer.totalSec*1000;
+  timer.soundOn = state.timerSound !== false;
   bind();
   renderAll();
+  syncTimerInputs();
+  syncTimerSoundBtn();
+  renderTimer();
   if(state.n === null){ newNumber(); }
 })();
 </script>
