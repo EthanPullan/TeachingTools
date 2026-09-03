@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A morning-board for the classroom — today's weather with an 'outdoor day?' call, plus NASA's Astronomy Picture of the Day. Online-enhanced, but opens and looks right offline from its last saved copy.">
+<meta name="description" content="A morning-board for the classroom — today's weather with an 'outdoor day?' call, NASA's Astronomy Picture of the Day, and a looping daily slideshow. Online-enhanced, but opens and looks right offline from its last saved copy.">
 <meta name="theme-color" content="#1f3d35">
 <title>Daily Update</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%231f3d35'/%3E%3Ccircle cx='8' cy='8' r='3.2' fill='%23e0982e'/%3E%3C/svg%3E">
@@ -212,6 +212,8 @@
         <span class="ic">🌤️</span><span class="lbl">Weather</span></button>
       <button id="tabApod" role="tab" aria-selected="false" aria-controls="apodView">
         <span class="ic">🔭</span><span class="lbl">Space Picture</span></button>
+      <button id="tabSlides" role="tab" aria-selected="false" aria-controls="slidesView">
+        <span class="ic">📽️</span><span class="lbl">Slideshow</span></button>
     </div>
 
     <div class="spacer"></div>
@@ -236,6 +238,14 @@
     <section class="view" id="apodView" role="tabpanel" aria-label="Astronomy Picture of the Day">
       <div class="wrap" id="apodBody"></div>
     </section>
+    <!-- Slideshow -->
+    <section class="view" id="slidesView" role="tabpanel" aria-label="Slideshow">
+      <div class="wrap">
+        <div class="apod-frame">
+          <iframe id="slidesFrame" data-src="https://docs.google.com/presentation/d/e/2PACX-1vTrB8o1w1ZObuc6lYiKz-g2s85_QwG9OtDbJMrxCMx5ZHAZw3LZMbpDJrbCPPDBHx3EfMEfzh4926xw/embed?start=true&amp;loop=true&amp;delayms=10000&amp;slide=id.g3f8a67341c6_0_0" title="Daily slideshow" allowfullscreen loading="lazy"></iframe>
+        </div>
+      </div>
+    </section>
   </div>
 
   <div class="statusbar">
@@ -259,13 +269,16 @@
 /* =====================================================================
    Daily Update — single-file, online-enhanced, offline-graceful.
 
-   A morning bell-ringer board that holds two daily things in one tool:
+   A morning bell-ringer board that holds three daily things in one tool:
      • WEATHER  — today's conditions for a place you choose, an
        "is it an outdoor day?" call for recess/PE, a 7-day strip and the
        next few hours. Data: Open-Meteo (keyless, CORS, HTTPS).
      • SPACE PICTURE — NASA's Astronomy Picture of the Day: the image (or
        video) plus its written explanation. Data: api.nasa.gov APOD with
        the shared DEMO_KEY (fine at classroom volume).
+     • SLIDESHOW — a published Google Slides deck, auto-advancing on a
+       loop, embedded live from Google. Needs a connection to load (there's
+       no offline copy for this panel — it's just an iframe).
 
    OFFLINE BEHAVIOUR — the whole suite's promise is "opens by double-click,
    works offline". A live page can't fully keep that, so instead:
@@ -310,7 +323,7 @@ const state = {
   loc:   LS.get(KEY.loc) || DEFAULT_LOC,
   wx:    null,   // {data, fetchedAt, loc}
   apod:  null,   // {data, fetchedAt}
-  fetched: { weather:false, apod:false },   // has a live fetch been attempted this session
+  fetched: { weather:false, apod:false, slides:false },   // has a live fetch/load been attempted this session
   cached:  { weather:false, apod:false },   // is the currently-shown panel from cache (stale)
 };
 
@@ -383,24 +396,33 @@ const WMO = {
 function wmo(code, isDay){ const e = WMO[code] || ['—','🌡️','🌡️']; return { label:e[0], icon: isDay ? e[1] : (e[2]||e[1]) }; }
 
 /* ================= tab switching ================= */
+const TABS = { weather:'tabWeather', apod:'tabApod', slides:'tabSlides' };
 function setTab(tab){
   state.tab = tab;
   LS.set(KEY.tab, tab);
-  const isWx = tab==='weather';
-  $('tabWeather').classList.toggle('active', isWx);
-  $('tabApod').classList.toggle('active', !isWx);
-  $('tabWeather').setAttribute('aria-selected', isWx);
-  $('tabApod').setAttribute('aria-selected', !isWx);
-  $('weatherView').classList.toggle('active', isWx);
-  $('apodView').classList.toggle('active', !isWx);
+  for(const t in TABS){
+    const active = t===tab;
+    $(TABS[t]).classList.toggle('active', active);
+    $(TABS[t]).setAttribute('aria-selected', active);
+    $(t+'View').classList.toggle('active', active);
+  }
   // location + units controls only make sense for weather
+  const isWx = tab==='weather';
   $('locBtn').classList.toggle('hideTab', !isWx);
   $('unitSeg').classList.toggle('hideTab', !isWx);
   closeLocPop();
   updateStatus();
-  // lazy-fetch the panel the first time it's viewed
+  // lazy-fetch/load the panel the first time it's viewed
   if(tab==='weather' && !state.fetched.weather) fetchWeather();
   if(tab==='apod' && !state.fetched.apod) fetchApod();
+  if(tab==='slides' && !state.fetched.slides) loadSlides();
+}
+
+/* ================= SLIDESHOW ================= */
+function loadSlides(){
+  state.fetched.slides = true;
+  const frame = $('slidesFrame');
+  frame.src = frame.dataset.src;
 }
 
 /* ================= WEATHER ================= */
@@ -697,9 +719,15 @@ function updateStatus(){
   net.classList.toggle('off', !online);
   net.querySelector('.t').textContent = online ? 'Online' : 'Offline';
 
+  const src = $('srcStat');
+  if(state.tab==='slides'){
+    $('stampStat').textContent = 'Google Slides';
+    src.textContent = online ? 'Live' : 'Needs a connection';
+    src.className = 'src' + (online ? ' live' : '');
+    return;
+  }
   const rec = state.tab==='weather' ? state.wx : state.apod;
   const isCached = state.tab==='weather' ? state.cached.weather : state.cached.apod;
-  const src = $('srcStat');
   if(!rec){ $('stampStat').textContent = online ? 'Loading…' : 'No saved copy yet'; src.textContent=''; src.className='src'; return; }
   $('stampStat').innerHTML = 'Updated <b>' + fmtStamp(rec.fetchedAt) + '</b>';
   if(isCached){ src.textContent='Showing saved copy'; src.className='src cached'; }
@@ -776,7 +804,12 @@ $('tabApod').addEventListener('click', ()=> setTab('apod'));
 $('unitC').addEventListener('click', ()=> setUnits('metric'));
 $('unitF').addEventListener('click', ()=> setUnits('imperial'));
 $('fsBtn').addEventListener('click', toggleFullscreen);
-$('refreshBtn').addEventListener('click', ()=>{ state.tab==='weather' ? fetchWeather() : fetchApod(); });
+$('refreshBtn').addEventListener('click', ()=>{
+  if(state.tab==='weather') fetchWeather();
+  else if(state.tab==='apod') fetchApod();
+  else { const f=$('slidesFrame'); f.src = f.src; }   // reload the embedded deck
+});
+$('tabSlides').addEventListener('click', ()=> setTab('slides'));
 $('locBtn').addEventListener('click', (e)=>{ e.stopPropagation();
   if($('locPop').style.display==='block') closeLocPop(); else openLocPop(); });
 $('locSearch').addEventListener('input', e=>{
