@@ -158,11 +158,13 @@
   /* question grid — cards are sized to fill all available space, and the
      prompt/answer text scales off each card's own width (container query
      units) so it always renders as large as the card allows, however many
-     cards or however wide the window. */
-  .qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;align-items:stretch;}
+     cards or however wide the window. Text is allowed — expected — to wrap
+     onto two lines rather than being capped to guarantee one line; that's
+     what lets short prompts like "Double it" get genuinely huge. */
+  .qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;align-items:stretch;}
   .qcard{container-type:inline-size;position:relative;background:var(--panel);border:1px solid var(--line);
-    border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:18px 20px;display:flex;
-    flex-direction:column;justify-content:center;gap:8px;min-height:128px;cursor:pointer;
+    border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:20px 22px;display:flex;
+    flex-direction:column;justify-content:center;gap:10px;min-height:150px;cursor:pointer;
     transition:border-color .15s;}
   .qcard.revealed{border-color:var(--board-line);}
   .qreroll{position:absolute;top:8px;right:8px;border:none;background:none;cursor:pointer;color:var(--muted);
@@ -170,14 +172,14 @@
     transition:background .12s,color .12s,opacity .12s,transform .3s;}
   .qreroll:hover{background:var(--accent-soft);color:var(--accent-deep);opacity:1;}
   .qreroll:active{transform:rotate(140deg);}
-  .qprompt{font-size:clamp(18px,13cqw,56px);font-weight:800;color:var(--ink);line-height:1.16;
+  .qprompt{font-size:clamp(19px,17cqw,76px);font-weight:800;color:var(--ink);line-height:1.14;
     overflow-wrap:break-word;}
-  .qanswer{font-family:var(--mono);font-weight:800;font-size:clamp(22px,15cqw,64px);line-height:1.12;
+  .qanswer{font-family:var(--mono);font-weight:800;font-size:clamp(23px,19cqw,86px);line-height:1.1;
     color:var(--board);overflow-wrap:break-word;}
-  .qcard.long .qprompt{font-size:clamp(15px,7cqw,30px);}
-  .qcard.long .qanswer{font-size:clamp(16px,7.5cqw,32px);}
-  .qcard.xlong .qprompt{font-size:clamp(12px,5cqw,19px);}
-  .qcard.xlong .qanswer{font-size:clamp(13px,5.4cqw,20px);}
+  .qcard.long .qprompt{font-size:clamp(16px,10cqw,40px);}
+  .qcard.long .qanswer{font-size:clamp(17px,11cqw,44px);}
+  .qcard.xlong .qprompt{font-size:clamp(13px,6.5cqw,24px);}
+  .qcard.xlong .qanswer{font-size:clamp(14px,7cqw,26px);}
 
   @keyframes pop{from{opacity:0;transform:translateY(5px) scale(.97);}to{opacity:1;transform:none;}}
   .pop{animation:pop .22s cubic-bezier(.2,.7,.3,1) both;}
@@ -801,7 +803,7 @@
   /* ---------------- rendering ---------------- */
   var $ = function(id){ return document.getElementById(id); };
 
-  function sizeTier(len){ if(len > 55) return 2; if(len > 22) return 1; return 0; }
+  function sizeTier(len){ if(len > 60) return 2; if(len > 30) return 1; return 0; }
 
   function renderTypeGroups(){
     var host = $('typeGroups');
