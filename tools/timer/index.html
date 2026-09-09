@@ -438,21 +438,22 @@ function renderLaps(){
    the timer's chime()/bg.burst()/flash() as the bell when a period ends. */
 const SCHEDULES = {
   regular: [
-    { name:'Block 1', start:'08:05', end:'08:56' },
-    { name:'Block 2', start:'08:58', end:'09:45' },
-    { name:'Block 3', start:'09:53', end:'10:40' },
-    { name:'Block 4', start:'10:42', end:'11:29' },
-    { name:'Block 5', start:'11:31', end:'12:18' },
-    { name:'Block 6', start:'12:18', end:'13:07' },
-    { name:'Block 7', start:'13:09', end:'13:56' },
-    { name:'Block 8', start:'13:58', end:'14:45' }
+    { name:'Period 1',         start:'08:05', end:'08:56' },
+    { name:'Period 2',         start:'08:58', end:'09:45' },
+    { name:'Nutrition Break',  start:'09:45', end:'09:53' },
+    { name:'Period 3',         start:'09:53', end:'10:40' },
+    { name:'Period 4',         start:'10:42', end:'11:29' },
+    { name:'Period 5',         start:'11:31', end:'12:18' },
+    { name:'Lunch (Period 6)', start:'12:18', end:'13:07' },
+    { name:'Period 7',         start:'13:09', end:'13:56' },
+    { name:'Period 8',         start:'13:58', end:'14:45' }
   ],
   friday: [
-    { name:'Block 1',  start:'08:05', end:'08:56' },
-    { name:'Block 2',  start:'08:58', end:'09:48' },
-    { name:'Odyssey',  start:'09:56', end:'10:26' },
-    { name:'Block 3',  start:'10:28', end:'11:19' },
-    { name:'Block 4',  start:'11:21', end:'12:10' }
+    { name:'Period 1',         start:'08:05', end:'08:56' },
+    { name:'Period 2',         start:'08:58', end:'09:48' },
+    { name:'Nutrition Break',  start:'09:56', end:'10:26' },
+    { name:'Period 3',         start:'10:28', end:'11:19' },
+    { name:'Period 4',         start:'11:21', end:'12:10' }
   ]
 };
 let periodPrevKind = null, periodSkipChime = true;
