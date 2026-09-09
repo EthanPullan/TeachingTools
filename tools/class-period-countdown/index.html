@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A big, projector-friendly countdown to the end of the current class period, running against your school's bell schedule.">
+<meta name="theme-color" content="#1f3d35">
+<title>Class Period Countdown</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2;
+    --board:#1f3d35; --board-2:#173029;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;overflow:hidden;}
+  button{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);z-index:10;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .spacer{flex:1;}
+  .day-pill{font-family:var(--mono);font-size:11px;background:var(--panel-2);
+    border:1px solid var(--line);border-radius:20px;padding:3px 10px;color:var(--muted);white-space:nowrap;}
+  .clock{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;}
+  .icon-btn{border:1px solid var(--line);background:var(--panel);width:34px;height:34px;border-radius:9px;
+    cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;color:var(--ink);}
+  .icon-btn:hover{background:var(--panel-2);}
+
+  /* ---------- Stage ---------- */
+  .stage{position:relative;flex:1;min-height:0;overflow:hidden;background:#0b1622;
+    display:flex;align-items:center;justify-content:center;}
+  .overlay{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:16px;padding:24px;text-align:center;max-width:92vw;}
+
+  .eyebrow{color:var(--accent);font-size:clamp(14px,2.4vw,20px);font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.5);}
+
+  .bigline.mono{font-family:var(--mono);font-weight:800;font-variant-numeric:tabular-nums;
+    letter-spacing:.01em;color:#fff;line-height:1;text-shadow:0 2px 22px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.5);
+    font-size:clamp(56px,16vw,280px);}
+  .bigline.phrase{font-weight:800;color:#fff;line-height:1.15;text-shadow:0 2px 22px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.5);
+    font-size:clamp(28px,6vw,64px);max-width:20ch;}
+  .bigline.urgent{color:var(--danger);animation:pulse 1s ease infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.05);}}
+
+  .sub{color:rgba(255,255,255,.85);font-size:clamp(13px,2vw,17px);font-weight:600;letter-spacing:.02em;
+    text-shadow:0 1px 6px rgba(0,0,0,.5);}
+  .next{color:rgba(255,255,255,.6);font-size:clamp(12px,1.6vw,14px);font-weight:500;
+    text-shadow:0 1px 6px rgba(0,0,0,.5);}
+
+  .bar{width:min(560px,82%);height:9px;border-radius:20px;background:rgba(255,255,255,.18);overflow:hidden;}
+  .bar[hidden]{display:none;}
+  .bar-fill{height:100%;border-radius:20px;background:linear-gradient(90deg,var(--accent),#ffd27a);
+    transition:width 1s linear;}
+
+  @media (max-width:720px){
+    .toolbar{gap:8px;padding:8px 12px;}
+    .day-pill{display:none;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .bigline.urgent{animation:none;}
+    .bar-fill{transition:none;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Class Period Countdown</div>
+    <div class="spacer"></div>
+    <span class="day-pill" id="dayPill">—</span>
+    <span class="clock" id="clock">—</span>
+    <button class="icon-btn" id="fsBtn" title="Fullscreen (F)" aria-label="Toggle fullscreen">⛶</button>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="overlay">
+      <div class="eyebrow" id="eyebrow">—</div>
+      <div class="bigline mono" id="bigline">—</div>
+      <div class="bar" id="bar" hidden><div class="bar-fill" id="barFill"></div></div>
+      <div class="sub" id="sub"></div>
+      <div class="next" id="next"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+  // Bell schedule. Monday–Thursday share the regular schedule; Friday is shorter.
+  // Times are 24-hour "HH:MM" for today's date, so no AM/PM ambiguity.
+  var SCHEDULES = {
+    regular: [
+      { name:'Period 1',            start:'08:05', end:'08:52' },
+      { name:'Period 2',            start:'08:54', end:'09:41' },
+      { name:'Nutrition Break',     start:'09:41', end:'09:51' },
+      { name:'Period 3',            start:'09:51', end:'10:38' },
+      { name:'Period 4',            start:'10:40', end:'11:27' },
+      { name:'Period 5',            start:'11:29', end:'12:17' },
+      { name:'Lunch (Period 6)',    start:'12:19', end:'13:07' },
+      { name:'Period 7',            start:'13:09', end:'13:56' },
+      { name:'Period 8',            start:'13:58', end:'14:45' }
+    ],
+    friday: [
+      { name:'Period 1',            start:'08:05', end:'09:03' },
+      { name:'Period 2',            start:'09:05', end:'10:02' },
+      { name:'Nutrition Break',     start:'10:02', end:'10:12' },
+      { name:'Period 3',            start:'10:12', end:'11:10' },
+      { name:'Period 4',            start:'11:12', end:'12:10' }
+    ]
+  };
+
+  var $ = function(id){ return document.getElementById(id); };
+  var els = {
+    eyebrow: $('eyebrow'), bigline: $('bigline'), sub: $('sub'), next: $('next'),
+    bar: $('bar'), barFill: $('barFill'), dayPill: $('dayPill'), clock: $('clock')
+  };
+
+  function scheduleFor(date){
+    var day = date.getDay(); // 0 Sun … 6 Sat
+    if(day >= 1 && day <= 4) return { label:'Regular schedule', periods:SCHEDULES.regular };
+    if(day === 5) return { label:'Friday schedule', periods:SCHEDULES.friday };
+    return null; // weekend
+  }
+
+  function atTime(date, hhmm){
+    var parts = hhmm.split(':');
+    var d = new Date(date);
+    d.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+    return d;
+  }
+
+  function formatClock(date){
+    return date.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+  }
+
+  function formatCountdown(ms){
+    var totalSec = Math.max(0, Math.ceil(ms / 1000));
+    var h = Math.floor(totalSec / 3600);
+    var m = Math.floor((totalSec % 3600) / 60);
+    var s = totalSec % 60;
+    var ss = String(s).padStart(2, '0');
+    if(h > 0) return h + ':' + String(m).padStart(2,'0') + ':' + ss;
+    return String(m).padStart(2,'0') + ':' + ss;
+  }
+
+  function render(){
+    var now = new Date();
+    els.clock.textContent = formatClock(now);
+
+    var sched = scheduleFor(now);
+    if(!sched){
+      els.dayPill.textContent = 'Weekend';
+      show({ eyebrow:'No School Today', phrase:'Enjoy the weekend!', sub:'', next:'' });
+      return;
+    }
+    els.dayPill.textContent = sched.label;
+
+    var periods = sched.periods.map(function(p){
+      return { name:p.name, start:atTime(now, p.start), end:atTime(now, p.end) };
+    });
+
+    var first = periods[0], last = periods[periods.length - 1];
+
+    if(now < first.start){
+      show({
+        eyebrow:'Before School',
+        countdown: first.start - now,
+        sub: 'Period 1 starts at ' + formatClock(first.start),
+        next:''
+      });
+      return;
+    }
+
+    if(now >= last.end){
+      show({ eyebrow:"School's Out", phrase:'See you next class!', sub:last.name + ' ended at ' + formatClock(last.end), next:'' });
+      return;
+    }
+
+    for(var i = 0; i < periods.length; i++){
+      var p = periods[i];
+      if(now >= p.start && now < p.end){
+        var nextP = periods[i + 1];
+        var nextText = nextP ? ('Next: ' + nextP.name + ' at ' + formatClock(nextP.start)) : 'Last period of the day';
+        show({
+          eyebrow: p.name,
+          countdown: p.end - now,
+          sub: 'Ends at ' + formatClock(p.end),
+          next: nextText,
+          progress: (now - p.start) / (p.end - p.start)
+        });
+        return;
+      }
+      var afterThis = now >= p.end;
+      var beforeNext = periods[i + 1] && now < periods[i + 1].start;
+      if(afterThis && beforeNext){
+        var upcoming = periods[i + 1];
+        show({
+          eyebrow:'Passing Period',
+          phrase: p.name + ' ended',
+          sub: 'Up next: ' + upcoming.name + ' at ' + formatClock(upcoming.start),
+          next:''
+        });
+        return;
+      }
+    }
+  }
+
+  function show(state){
+    els.eyebrow.textContent = state.eyebrow;
+    els.sub.textContent = state.sub || '';
+    els.next.textContent = state.next || '';
+
+    if(state.countdown != null){
+      var ms = state.countdown;
+      els.bigline.className = 'bigline mono' + (ms <= 60000 ? ' urgent' : '');
+      els.bigline.textContent = formatCountdown(ms);
+    }else{
+      els.bigline.className = 'bigline phrase';
+      els.bigline.textContent = state.phrase || '';
+    }
+
+    if(state.progress != null){
+      els.bar.hidden = false;
+      els.barFill.style.width = (Math.min(1, Math.max(0, state.progress)) * 100) + '%';
+    }else{
+      els.bar.hidden = true;
+    }
+  }
+
+  render();
+  setInterval(render, 1000);
+
+  // Fullscreen
+  $('fsBtn').addEventListener('click', toggleFullscreen);
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'f' || e.key === 'F') toggleFullscreen();
+  });
+  function toggleFullscreen(){
+    if(!document.fullscreenElement){ document.documentElement.requestFullscreen().catch(function(){}); }
+    else{ document.exitFullscreen(); }
+  }
+})();
+</script>
+</body>
+</html>
