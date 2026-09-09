@@ -131,6 +131,13 @@
     background:var(--panel-2);font-family:var(--mono);text-align:center;}
   .timer-actions{display:flex;align-items:center;gap:8px;margin-left:auto;}
 
+  /* Full-screen flash when the timer finishes — visible even if the timer
+     bar itself has scrolled out of view or the panel is covering it.
+     Click anywhere, or press any key, to dismiss it. */
+  .timer-flash{position:fixed;inset:0;background:var(--danger);opacity:0;pointer-events:none;z-index:9999;}
+  .timer-flash.active{animation:timerFlash 1s ease-in-out infinite;}
+  @keyframes timerFlash{0%,100%{opacity:0;}50%{opacity:.4;}}
+
   /* stage: hero */
   .hero{background:var(--board);color:#fff;border-radius:var(--radius);padding:16px 22px;
     display:flex;align-items:center;gap:22px;flex-wrap:wrap;box-shadow:var(--shadow);margin-bottom:14px;}
@@ -201,12 +208,13 @@
   @media (prefers-reduced-motion:reduce){
     .pop{animation:none;} .btn:active{transform:none;} .qreroll:active{transform:none;} *{scroll-behavior:auto;}
     .timerbar.done .timer-time{animation:none;}
+    .timer-flash.active{animation:none;opacity:.22;}
   }
 
   @media print{
     @page{margin:12mm;}
     body{background:#fff;}
-    .toolbar,.panel,.statusbar,.qreroll,.timerbar{display:none !important;}
+    .toolbar,.panel,.statusbar,.qreroll,.timerbar,.timer-flash{display:none !important;}
     .app,.main,.stage,.stage-scroll,.qgrid-wrap{display:block;height:auto;overflow:visible;background:#fff;}
     #printHeader{display:block;margin-bottom:14px;}
     #printHeader h1{margin:0 0 2px;font-size:20px;}
@@ -218,6 +226,7 @@
 </style>
 </head>
 <body>
+<div class="timer-flash" id="timerFlash" aria-hidden="true"></div>
 <div class="app">
   <header class="toolbar">
     <div class="brand"><span class="mark"></span>Number of the Day <small>daily number starter</small></div>
@@ -748,6 +757,10 @@
     $('timerSound').textContent = timer.soundOn ? '🔔' : '🔕';
     $('timerSound').classList.toggle('off', !timer.soundOn);
   }
+  function setTimerDone(on){
+    $('timerBar').classList.toggle('done', on);
+    $('timerFlash').classList.toggle('active', on);
+  }
   function timerTick(){
     if(!timer.running) return;
     var remaining = timer.endAt - Date.now();
@@ -756,7 +769,7 @@
       timer.remainingMs = 0;
       if(timer.intervalId){ clearInterval(timer.intervalId); timer.intervalId = null; }
       renderTimer();
-      $('timerBar').classList.add('done');
+      setTimerDone(true);
       if(timer.soundOn) chime();
       return;
     }
@@ -768,7 +781,7 @@
     if(timer.remainingMs <= 0) timer.remainingMs = timer.totalSec*1000;
     timer.endAt = Date.now() + timer.remainingMs;
     timer.running = true;
-    $('timerBar').classList.remove('done');
+    setTimerDone(false);
     if(timer.intervalId) clearInterval(timer.intervalId);
     timer.intervalId = setInterval(timerTick, 250);
     renderTimer();
@@ -784,7 +797,7 @@
     timer.running = false;
     if(timer.intervalId){ clearInterval(timer.intervalId); timer.intervalId = null; }
     timer.remainingMs = timer.totalSec*1000;
-    $('timerBar').classList.remove('done');
+    setTimerDone(false);
     renderTimer();
   }
   function timerSetDuration(sec){
@@ -793,7 +806,7 @@
     timer.remainingMs = sec*1000;
     timer.running = false;
     if(timer.intervalId){ clearInterval(timer.intervalId); timer.intervalId = null; }
-    $('timerBar').classList.remove('done');
+    setTimerDone(false);
     state.timerDurationSec = sec;
     save();
     syncTimerInputs();
@@ -1046,6 +1059,7 @@
     });
     $('btnFullscreen').addEventListener('click', toggleFocusMode);
     document.addEventListener('keydown', function(e){
+      if($('timerBar').classList.contains('done')) setTimerDone(false);
       if(e.metaKey || e.ctrlKey || e.altKey) return;
       var tag = document.activeElement && document.activeElement.tagName;
       var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
@@ -1055,6 +1069,9 @@
         e.preventDefault();
         revealNext();
       }
+    });
+    document.addEventListener('click', function(){
+      if($('timerBar').classList.contains('done')) setTimerDone(false);
     });
 
     /* ---------------- timer ---------------- */
