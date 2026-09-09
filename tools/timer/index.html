@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A big, friendly classroom countdown timer and stopwatch — with calm or vibrant animated backgrounds, a finish chime, and one-tap fullscreen for projecting.">
+<meta name="description" content="A big, friendly classroom countdown timer, stopwatch, and live class-period countdown against your bell schedule — with calm or vibrant animated backgrounds, a finish chime, and one-tap fullscreen for projecting.">
 <meta name="theme-color" content="#1f3d35">
 <title>Class Timer</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
@@ -66,12 +66,24 @@
     text-shadow:0 2px 22px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.5);
     font-size:clamp(56px,16vw,300px);}
   .time.done{color:#fff;animation:pulse 1s ease infinite;}
+  .time.phrase{font-family:var(--sans);font-size:clamp(28px,6vw,64px);letter-spacing:normal;max-width:20ch;line-height:1.15;}
+  .time.urgent{color:var(--danger);animation:pulse 1s ease infinite;}
   @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.05);}}
   .sub{color:rgba(255,255,255,.85);font-size:14px;font-weight:600;letter-spacing:.03em;
     text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.5);}
+  .eyebrow{color:var(--accent);font-size:clamp(14px,2.4vw,20px);font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;text-shadow:0 1px 6px rgba(0,0,0,.5);}
+  .next{color:rgba(255,255,255,.6);font-size:clamp(12px,1.6vw,14px);font-weight:500;
+    text-shadow:0 1px 6px rgba(0,0,0,.5);}
 
   .bar{width:min(560px,82%);height:9px;border-radius:20px;background:rgba(255,255,255,.18);overflow:hidden;}
-  .bar-fill{height:100%;width:100%;border-radius:20px;background:linear-gradient(90deg,var(--accent),#ffd27a);}
+  .bar[hidden]{display:none;}
+  .bar-fill{height:100%;width:100%;border-radius:20px;background:linear-gradient(90deg,var(--accent),#ffd27a);
+    transition:width 1s linear;}
+
+  .day-pill{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:20px;padding:3px 10px;color:var(--muted);white-space:nowrap;}
+  .clock{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;}
 
   /* Pie countdown — a "time disc" overlay for the timer. When off, .pie-wrap is
      display:contents so #display flows exactly as before (keeps DVD bounce intact). */
@@ -161,9 +173,12 @@
     <div class="seg" id="modeToggle">
       <button data-mode="timer" class="active">Timer</button>
       <button data-mode="stopwatch">Stopwatch</button>
+      <button data-mode="period">Period</button>
     </div>
     <button class="icon-btn" id="pieBtn" title="Pie countdown (P)" aria-label="Toggle pie countdown">◔</button>
     <div class="spacer"></div>
+    <span class="day-pill" id="dayPill" hidden>—</span>
+    <span class="clock" id="clock" hidden>—</span>
     <div class="bg-group">
       <div class="seg" id="bgPicker">
         <button data-scene="plain">Plain</button>
@@ -242,6 +257,15 @@
         </div>
         <div class="laps" id="laps" hidden></div>
       </section>
+
+      <!-- PERIOD -->
+      <section class="view" id="periodView" hidden>
+        <div class="eyebrow" id="periodEyebrow">—</div>
+        <div class="time" id="periodDisplay">—</div>
+        <div class="bar" id="periodBar" hidden><div class="bar-fill" id="periodBarFill"></div></div>
+        <div class="sub" id="periodSub"></div>
+        <div class="next" id="periodNext"></div>
+      </section>
     </div>
 
     <div class="flash" id="flash"></div>
@@ -263,7 +287,7 @@ const rand = (a,b)=>a+Math.random()*(b-a);
 const now = ()=>performance.now();
 const pad = n=>String(n).padStart(2,'0');
 
-let mode = 'timer';                 // 'timer' | 'stopwatch'
+let mode = 'timer';                 // 'timer' | 'stopwatch' | 'period'
 let soundOn = true;
 let pieOn = false;                  // visual pie countdown overlay (timer only)
 
@@ -406,6 +430,106 @@ function renderLaps(){
   }
   setSwSub(sw.running?'Running':(sw.elapsed>0?'Paused':'Ready'));
 }
+
+/* ---------------- Period (bell schedule) ----------------
+   Automatic, wall-clock-driven — no start/pause. Monday–Thursday share the
+   regular schedule; Friday is shorter. Times are 24-hour "HH:MM" for today's
+   date, so there's no AM/PM ambiguity. Reuses fmtTimer() for the digits and
+   the timer's chime()/bg.burst()/flash() as the bell when a period ends. */
+const SCHEDULES = {
+  regular: [
+    { name:'Period 1',         start:'08:05', end:'08:52' },
+    { name:'Period 2',         start:'08:54', end:'09:41' },
+    { name:'Nutrition Break',  start:'09:41', end:'09:51' },
+    { name:'Period 3',         start:'09:51', end:'10:38' },
+    { name:'Period 4',         start:'10:40', end:'11:27' },
+    { name:'Period 5',         start:'11:29', end:'12:17' },
+    { name:'Lunch (Period 6)', start:'12:19', end:'13:07' },
+    { name:'Period 7',         start:'13:09', end:'13:56' },
+    { name:'Period 8',         start:'13:58', end:'14:45' }
+  ],
+  friday: [
+    { name:'Period 1',         start:'08:05', end:'09:03' },
+    { name:'Period 2',         start:'09:05', end:'10:02' },
+    { name:'Nutrition Break',  start:'10:02', end:'10:12' },
+    { name:'Period 3',         start:'10:12', end:'11:10' },
+    { name:'Period 4',         start:'11:12', end:'12:10' }
+  ]
+};
+let periodPrevKind = null, periodSkipChime = true;
+
+function scheduleForDay(date){
+  const day = date.getDay(); // 0 Sun … 6 Sat
+  if(day>=1 && day<=4) return { label:'Regular schedule', periods:SCHEDULES.regular };
+  if(day===5) return { label:'Friday schedule', periods:SCHEDULES.friday };
+  return null; // weekend
+}
+function atTime(date,hhmm){
+  const [h,m] = hhmm.split(':').map(Number);
+  const d = new Date(date); d.setHours(h,m,0,0); return d;
+}
+function formatClock(date){ return date.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}); }
+
+function computePeriodState(nowD){
+  const sched = scheduleForDay(nowD);
+  if(!sched) return { kind:'weekend', dayLabel:'Weekend', eyebrow:'No School Today', phrase:'Enjoy the weekend!', sub:'' };
+
+  const periods = sched.periods.map(p=>({ name:p.name, start:atTime(nowD,p.start), end:atTime(nowD,p.end) }));
+  const first = periods[0], last = periods[periods.length-1];
+
+  if(nowD < first.start){
+    return { kind:'beforeSchool', dayLabel:sched.label, eyebrow:'Before School',
+      countdown:first.start-nowD, sub:'Period 1 starts at '+formatClock(first.start) };
+  }
+  if(nowD >= last.end){
+    return { kind:'afterSchool', dayLabel:sched.label, eyebrow:"School's Out",
+      phrase:'See you next class!', sub:last.name+' ended at '+formatClock(last.end) };
+  }
+  for(let i=0;i<periods.length;i++){
+    const p = periods[i];
+    if(nowD>=p.start && nowD<p.end){
+      const nextP = periods[i+1];
+      return { kind:'inPeriod', dayLabel:sched.label, eyebrow:p.name, countdown:p.end-nowD,
+        sub:'Ends at '+formatClock(p.end),
+        next: nextP ? ('Next: '+nextP.name+' at '+formatClock(nextP.start)) : 'Last period of the day',
+        progress:(nowD-p.start)/(p.end-p.start) };
+    }
+    const nextP = periods[i+1];
+    if(nowD>=p.end && nextP && nowD<nextP.start){
+      return { kind:'passing', dayLabel:sched.label, eyebrow:'Passing Period',
+        phrase:p.name+' ended', sub:'Up next: '+nextP.name+' at '+formatClock(nextP.start) };
+    }
+  }
+  return { kind:'afterSchool', dayLabel:sched.label, eyebrow:"School's Out", phrase:'See you next class!', sub:'' };
+}
+function renderPeriod(){
+  const nowD = new Date();
+  const state = computePeriodState(nowD);
+
+  $('clock').textContent = formatClock(nowD);
+  $('dayPill').textContent = state.dayLabel;
+  $('periodEyebrow').textContent = state.eyebrow;
+  $('periodSub').textContent = state.sub || '';
+  $('periodNext').textContent = state.next || '';
+
+  const disp = $('periodDisplay');
+  if(state.countdown != null){
+    disp.className = 'time' + (state.countdown<=60000 ? ' urgent' : '');
+    disp.textContent = fmtTimer(state.countdown);
+  }else{
+    disp.className = 'time phrase';
+    disp.textContent = state.phrase || '';
+  }
+
+  const bar = $('periodBar');
+  if(state.progress != null){ bar.hidden=false; $('periodBarFill').style.width=(clamp(state.progress,0,1)*100)+'%'; }
+  else bar.hidden = true;
+
+  if(!periodSkipChime && periodPrevKind==='inPeriod' && state.kind!=='inPeriod'){ chime(); bg.burst(); flash(); }
+  periodSkipChime = false;
+  periodPrevKind = state.kind;
+}
+function enterPeriodMode(){ periodSkipChime = true; renderPeriod(); }
 
 /* ---------------- Audio (Web Audio chime) ---------------- */
 let actx=null;
@@ -694,7 +818,7 @@ void main(){
 const dvd = (function(){
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let on=false, el=null, x=0, y=0, vx=0, vy=0, hue=rand(0,360);
-  const activeEl = ()=> mode==='timer' ? $('display') : $('swDisplay');
+  const activeEl = ()=> mode==='timer' ? $('display') : mode==='stopwatch' ? $('swDisplay') : $('periodDisplay');
   const place = ()=>{ el.style.left=x+'px'; el.style.top=y+'px'; };
   const colour = ()=>{ el.style.color='hsl('+Math.round(hue)+',90%,66%)'; };
   function enter(){
@@ -708,7 +832,7 @@ const dvd = (function(){
   }
   function exit(){
     on=false; $('stage').classList.remove('dvd');
-    ['display','swDisplay'].forEach(id=>{ const n=$(id); n.style.left=''; n.style.top=''; n.style.color=''; n.classList.remove('corner'); });
+    ['display','swDisplay','periodDisplay'].forEach(id=>{ const n=$(id); n.style.left=''; n.style.top=''; n.style.color=''; n.classList.remove('corner'); });
     el=null;
   }
   function celebrate(cx,cy){
@@ -743,7 +867,7 @@ function loop(t){
   if(bg.scene==='pipes' && pipes3d.ok) pipes3d.frame(t,dt);   // WebGL pipes
   else bg.draw(t,dt);                                          // 2D scenes
   if(bg.scene==='dvd') dvd.tick(dt);
-  if(mode==='timer') tickTimer(); else tickSW();
+  if(mode==='timer') tickTimer(); else if(mode==='stopwatch') tickSW();
   raf=requestAnimationFrame(loop);
 }
 function startLoop(){ if(!raf){ lastT=now(); raf=requestAnimationFrame(loop); } }
@@ -756,8 +880,12 @@ function setMode(m){
   mode=m;
   $('timerView').hidden = m!=='timer';
   $('swView').hidden = m!=='stopwatch';
+  $('periodView').hidden = m!=='period';
   $('modeToggle').querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
   $('pieBtn').hidden = m!=='timer';
+  $('dayPill').hidden = m!=='period';
+  $('clock').hidden = m!=='period';
+  if(m==='period') enterPeriodMode();
 }
 $('modeToggle').addEventListener('click',e=>{ const b=e.target.closest('button[data-mode]'); if(b) setMode(b.dataset.mode); });
 const SCRIM_SCENES = new Set(['pipes','bubbles','confetti']);   // scenes busy enough to dim behind the timer
@@ -827,8 +955,8 @@ document.addEventListener('fullscreenchange',()=>setTimeout(()=>{ bg.resize(); p
 window.addEventListener('keydown',e=>{
   const tag=(document.activeElement&&document.activeElement.tagName)||'';
   if(/INPUT|TEXTAREA|SELECT/.test(tag)) return;
-  if(e.key===' '||e.code==='Space'){ e.preventDefault(); mode==='timer'?timerToggle():swToggle(); }
-  else if(e.key==='r'||e.key==='R'){ mode==='timer'?timerReset():swReset(); }
+  if(e.key===' '||e.code==='Space'){ e.preventDefault(); if(mode==='timer') timerToggle(); else if(mode==='stopwatch') swToggle(); }
+  else if(e.key==='r'||e.key==='R'){ if(mode==='timer') timerReset(); else if(mode==='stopwatch') swReset(); }
   else if(e.key==='f'||e.key==='F'){ toggleFullscreen(); }
   else if((e.key==='l'||e.key==='L')&&mode==='stopwatch'){ swLap(); }
   else if((e.key==='p'||e.key==='P')&&mode==='timer'){ setPie(!pieOn); }
@@ -849,6 +977,7 @@ bg.resize();
 setMode('timer');
 timerSetDuration(300000);   // default 5:00
 renderSW(true);
+setInterval(()=>{ if(mode==='period') renderPeriod(); }, 1000);
 startLoop();
 </script>
 </body>
