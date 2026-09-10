@@ -564,10 +564,12 @@ const bg = (function(){
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W=0,H=0, scene='aurora';
   let blobs=[], bubbles=[], confetti=[], burstParts=[];
-  let coasterRaw=[], coasterPts=[], coasterCum=[0], coasterTotalLen=1, coasterDirty=true;
-  let coasterMx=60, coasterMyTop=60, coasterMyBottom=60;
-  let coasterScaledW=-1, coasterScaledH=-1, coasterScaledMx=-1, coasterScaledMyTop=-1, coasterScaledMyBottom=-1;
+  let coasterPts=[{x:0,y:0}], coasterCum=[0], coasterFrontierX=0, coasterUnitsSinceLoop=0;
+  let coasterMyTop=60, coasterMyBottom=60, coasterCamX=0, coasterAnchorPx=0;
   let speedLines=[], coasterSpeed=1;
+  const COASTER_AMP=0.95;          // world-y half-range the track is scaled to fill (hills top out at H=0.9)
+  const COASTER_LOOKAHEAD=8;       // keep the track's forward x-reach at least this many world-x-units ahead
+  const COASTER_KEEP_BEHIND=6;     // drop track once its x has fallen this far behind the camera — bounds memory only
 
   function resize(){
     const dpr=Math.min(2, window.devicePixelRatio||1);
@@ -590,48 +592,60 @@ const bg = (function(){
     vy:rand(45,95), vx:rand(-25,25), rot:rand(0,6.28), vr:rand(-3,3), a:rand(0.7,1) }; }
   function initConfetti(){ const n=reduced?44:120; confetti=[]; for(let i=0;i<n;i++) confetti.push(newConfetti(rand(-H,H))); }
 
-  /* Coaster track: a "turtle" walk of smooth hill units (each a self-contained
-     bump that starts/ends at zero slope, so units join seamlessly) with an
-     occasional full vertical loop spliced in at one of those zero-slope
-     joints — a loop's entry/exit tangent is exactly horizontal, so it drops
-     into the walk with no kink. Built in unrelated "path units", then scaled
-     to fit the stage each time it's sampled or drawn. */
-  function buildCoasterPath(){
-    const pts=[{x:0,y:0}]; let x=0,y=0;
-    const numUnits=6+Math.floor(rand(0,5)), maxLoops=1+Math.floor(rand(0,2));
-    let loops=0;
-    for(let i=0;i<numUnits;i++){
-      const L=rand(0.5,0.9), H=rand(0.35,0.9)*(Math.random()<0.5?1:-1), steps=16;
-      for(let s=1;s<=steps;s++){ const f=s/steps; pts.push({ x:x+f*L, y:y-H*(1-Math.cos(2*Math.PI*f))/2 }); }
-      x+=L;
-      if(loops<maxLoops && i<numUnits-1 && Math.random()<0.45){
-        const r=rand(0.22,0.34), cx=x, cy=y-r, steps2=32;
-        for(let s=1;s<=steps2;s++){ const a=s/steps2*2*Math.PI; pts.push({ x:cx+r*Math.sin(a), y:cy+r*Math.cos(a) }); }
-        loops++;
+  /* Coaster track: an endless "turtle" walk of smooth hill units (each a
+     self-contained bump that starts/ends at zero slope, so units join
+     seamlessly with no kink) with occasional full vertical loops spliced in
+     at those zero-slope joints. New units are appended onto the exact end
+     point of the last one — there's no "whole path" that gets rebuilt or
+     restarted, the track simply keeps growing forever just ahead of the
+     cart, and old track well behind it is dropped to bound memory. Stored
+     in fixed world units; coasterToScreen() maps to pixels using a stable
+     scale plus a scrolling camera, so the visible screen is always fully
+     covered edge to edge regardless of how the track loops or wobbles. */
+  function resetCoasterTrack(){
+    coasterPts=[{x:0,y:0}]; coasterCum=[0]; coasterFrontierX=0; coasterUnitsSinceLoop=0;
+  }
+  function growCoasterTrack(targetX){                  // grow until the walk's forward x-position reaches targetX
+    while(coasterFrontierX < targetX){
+      const L=rand(0.5,0.9), amp=rand(0.35,0.9)*(Math.random()<0.5?1:-1), steps=16;
+      for(let s=1;s<=steps;s++){
+        const f=s/steps, x=coasterFrontierX+f*L, y=-amp*(1-Math.cos(2*Math.PI*f))/2;
+        const prev=coasterPts[coasterPts.length-1];
+        coasterPts.push({x,y}); coasterCum.push(coasterCum[coasterCum.length-1]+Math.hypot(x-prev.x,y-prev.y));
+      }
+      coasterFrontierX+=L; coasterUnitsSinceLoop++;
+      if(coasterUnitsSinceLoop>=3 && Math.random()<0.45){          // cooldown keeps loops from clustering
+        const r=rand(0.22,0.34), cx=coasterFrontierX, cy=-r, steps2=32;
+        for(let s=1;s<=steps2;s++){
+          const a=s/steps2*2*Math.PI, x=cx+r*Math.sin(a), y=cy+r*Math.cos(a);
+          const prev=coasterPts[coasterPts.length-1];
+          coasterPts.push({x,y}); coasterCum.push(coasterCum[coasterCum.length-1]+Math.hypot(x-prev.x,y-prev.y));
+        }
+        coasterUnitsSinceLoop=0;
       }
     }
-    coasterRaw=pts; coasterDirty=true;
   }
-  function setCoasterMargins(mx,myTop,myBottom){ coasterMx=mx; coasterMyTop=myTop; coasterMyBottom=myBottom; }
+  function pruneCoasterTrack(cutoffX){                 // drop points whose x has fallen behind cutoffX
+    let i=0;
+    while(i<coasterPts.length-2 && coasterPts[i+1].x<cutoffX) i++;
+    if(i>0){ coasterPts.splice(0,i); coasterCum.splice(0,i); }
+  }
+  function setCoasterMargins(myTop,myBottom){ coasterMyTop=myTop; coasterMyBottom=myBottom; }
+  function setCoasterCamera(camX,anchorPx){ coasterCamX=camX; coasterAnchorPx=anchorPx; }
   function setCoasterSpeed(v){ coasterSpeed=v; }
-  function rescaleCoaster(){                          // fit the raw path into the current stage bounds
-    if(!coasterDirty && coasterScaledW===W && coasterScaledH===H && coasterScaledMx===coasterMx
-       && coasterScaledMyTop===coasterMyTop && coasterScaledMyBottom===coasterMyBottom) return;
-    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-    for(const p of coasterRaw){ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; }
-    const spanX=Math.max(1e-4,maxX-minX), spanY=Math.max(1e-4,maxY-minY);
-    const uw=Math.max(10,W-coasterMx*2), uh=Math.max(10,H-coasterMyTop-coasterMyBottom);
-    const sx=uw/spanX, sy=uh/spanY;
-    coasterPts=coasterRaw.map(p=>({ x:coasterMx+(p.x-minX)*sx, y:coasterMyTop+(p.y-minY)*sy }));
-    coasterCum=[0];
-    for(let i=1;i<coasterPts.length;i++){ const a=coasterPts[i-1],b=coasterPts[i]; coasterCum.push(coasterCum[i-1]+Math.hypot(b.x-a.x,b.y-a.y)); }
-    coasterTotalLen=coasterCum[coasterCum.length-1]||1;
-    coasterScaledW=W; coasterScaledH=H; coasterScaledMx=coasterMx;
-    coasterScaledMyTop=coasterMyTop; coasterScaledMyBottom=coasterMyBottom; coasterDirty=false;
+  function coasterScale(){ return Math.max(10,H-coasterMyTop-coasterMyBottom)/(2*COASTER_AMP); }
+  function coasterToScreen(p){                        // world point -> screen pixels (camera + fixed scale)
+    const scale=coasterScale();
+    return { x:coasterAnchorPx+(p.x-coasterCamX)*scale, y:coasterMyTop+(p.y+COASTER_AMP)*scale };
   }
-  function coasterSample(t){                          // position + local tangent at arc-length fraction t (0..1)
-    rescaleCoaster();
-    const target=clamp(t,0,1)*coasterTotalLen;
+  function coasterSampleAtDist(d){                     // position + local tangent (world units) at arc-length d
+    // d (arc-length travelled) is always >= the cart's actual world-x, so using it as the
+    // grow target is a safe, generous bound — loops add arc-length without x-progress, so
+    // growing only to worldX+lookahead (rather than d+lookahead) can fall short of the
+    // screen's actual x-extent when a loop is nearby
+    growCoasterTrack(d+COASTER_LOOKAHEAD);
+    pruneCoasterTrack(coasterCamX-COASTER_KEEP_BEHIND); // coarse memory bound; camera is set just after this each frame
+    const target=Math.max(coasterCum[0],d);
     let lo=0,hi=coasterCum.length-1;
     while(lo<hi){ const mid=(lo+hi)>>1; if(coasterCum[mid]<target) lo=mid+1; else hi=mid; }
     const i=Math.max(1,lo), segLen=coasterCum[i]-coasterCum[i-1]||1e-6;
@@ -654,19 +668,20 @@ const bg = (function(){
   }
   function drawCoaster(dts){
     drawSpeedLines(dts);
-    rescaleCoaster();
     ctx.lineJoin='round'; ctx.lineCap='round';
     ctx.strokeStyle='rgba(224,152,46,.7)'; ctx.lineWidth=4;
-    ctx.beginPath(); coasterPts.forEach((p,i)=> i? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.stroke();
+    ctx.beginPath();
+    coasterPts.forEach((p,i)=>{ const s=coasterToScreen(p); i? ctx.lineTo(s.x,s.y) : ctx.moveTo(s.x,s.y); });
+    ctx.stroke();
     ctx.strokeStyle='rgba(255,255,255,.24)'; ctx.lineWidth=2.5;      // perpendicular tie marks, like rail sleepers
     for(let i=4;i<coasterPts.length-4;i+=6){
-      const p=coasterPts[i], pp=coasterPts[i-2], pn=coasterPts[i+2];
+      const p=coasterToScreen(coasterPts[i]), pp=coasterToScreen(coasterPts[i-2]), pn=coasterToScreen(coasterPts[i+2]);
       const dx=pn.x-pp.x, dy=pn.y-pp.y, len=Math.hypot(dx,dy)||1, nx=-dy/len, ny=dx/len, half=8;
       ctx.beginPath(); ctx.moveTo(p.x-nx*half,p.y-ny*half); ctx.lineTo(p.x+nx*half,p.y+ny*half); ctx.stroke();
     }
   }
   function setScene(s){ scene=s; if(s==='bubbles') initBubbles(); if(s==='confetti') initConfetti();
-    if(s==='coaster'){ buildCoasterPath(); speedLines=[]; coasterSpeed=1; } }
+    if(s==='coaster'){ resetCoasterTrack(); speedLines=[]; coasterSpeed=1; } }
   function burst(cx,cy){
     cx=(cx==null)?W/2:cx; cy=(cy==null)?H*0.42:cy;
     const n=reduced?70:180;
@@ -735,7 +750,8 @@ const bg = (function(){
     // plain, dvd, and the pipes fallback: just the backdrop
     if(burstParts.length) drawBurst(dts);
   }
-  return { resize, setScene, burst, draw, coasterSample, setCoasterMargins, setCoasterSpeed, newCoasterTrack:buildCoasterPath, get scene(){ return scene; } };
+  return { resize, setScene, burst, draw, coasterSampleAtDist, coasterToScreen,
+    setCoasterMargins, setCoasterCamera, setCoasterSpeed, get scene(){ return scene; } };
 })();
 
 /* ---------------- Pipes 3D (WebGL2 — the "Pipes" scene) ----------------
@@ -948,25 +964,28 @@ const dvd = (function(){
   return { enter, exit, tick };
 })();
 
-/* ---------------- Coaster (2D rollercoaster with loops) ----------------
-   The time display rides bg's randomly generated track (hills + full
-   vertical loops) as a single arc-length position t, always advancing the
-   same direction — no bouncing back. Speed scales with the local descent
-   (faster downhill/through the bottom of a loop, slower climbing) for a
-   real-coaster feel, and reports that speed to bg so the background speed
-   lines get busier as the cart goes faster. On reaching the end of the
-   track it rolls straight into a freshly generated one (a new "lap"), with
-   a quiet chime and corner-pop — no screen flash or particle burst, so the
-   ambient background doesn't jolt every time a new track loads. */
+/* ---------------- Coaster (endless 2D rollercoaster with loops) ----------------
+   The time display rides bg's endlessly-generated track (hills + occasional
+   vertical loops) as an ever-increasing arc-length distance d — there's no
+   "whole path" and so no restart: new track is generated just ahead of the
+   cart, one hill at a time, each starting exactly where the last one ended
+   (see bg.growCoasterTrack). The camera eases toward the cart's own world
+   position each frame instead of snapping to it, so a loop's brief backward
+   wobble doesn't jolt the view — the track just keeps sliding past under a
+   cart that stays roughly in place, edge to edge, with no seam to smooth
+   over. Speed scales with the local descent (faster downhill/through the
+   bottom of a loop, slower climbing) for a real-coaster feel, and reports
+   that speed to bg so the background speed lines get busier as it goes. */
 const coaster = (function(){
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const baseSpeed = reduced?0.06:0.13;   // track-fractions per second at neutral slope
-  let on=false, el=null, t=0, hue=rand(0,360);
+  const baseSpeed = reduced?1.1:2.4;      // world-units of arc-length per second at neutral slope
+  const CAM_FOLLOW = 3;                   // 1/sec — how eagerly the camera eases toward the cart
+  const HUE_DRIFT = 9;                    // deg/sec — a slow continuous colour drift, no lap to key a jump off anymore
+  let on=false, el=null, d=0, camX=0, hue=rand(0,360);
   const activeEl = ()=> mode==='timer' ? $('display') : mode==='stopwatch' ? $('swDisplay') : $('periodDisplay');
   const colour = ()=>{ el.style.color='hsl('+Math.round(hue)+',85%,68%)'; };
   function syncMargins(){
-    const stage=$('stage'), stageR=stage.getBoundingClientRect();
-    const W=stage.clientWidth, H=stage.clientHeight;
+    const stage=$('stage'), stageR=stage.getBoundingClientRect(), H=stage.clientHeight;
     // the cart's rotation sweeps a full circle through loops, so its worst-case screen
     // footprint is the diagonal (a wide-short label rotated 90° stands as tall as it is wide)
     const radius=Math.hypot(el.offsetWidth,el.offsetHeight)/2+16;
@@ -976,40 +995,38 @@ const coaster = (function(){
     const view=document.querySelector('.view:not([hidden])');
     let myBottom=radius+40;
     if(view){ myBottom=clamp((H-(view.getBoundingClientRect().top-stageR.top))+radius+12, radius, H*0.82); }
-    // Every track starts and ends at a hill unit's own zero-slope point (loops are only
-    // ever spliced strictly between units — see buildCoasterPath), but that's a raw-space
-    // property: the independent x/y rescale below can still tilt the ends a bit on screen,
-    // more so the steeper the hills. Scale once with a generous margin, measure the actual
-    // end tangents, then shrink the margin to just fit them — letting the track run right
-    // to the screen edge without the cart clipping off it.
-    bg.setCoasterMargins(clamp(radius, 40, W*0.42), myTop, myBottom);
-    const edgeHalf=(a)=>(el.offsetWidth*Math.abs(Math.cos(a))+el.offsetHeight*Math.abs(Math.sin(a)))/2;
-    const a0=bg.coasterSample(0), a1=bg.coasterSample(1);
-    const mx=clamp(Math.max(edgeHalf(Math.atan2(a0.dy,a0.dx)), edgeHalf(Math.atan2(a1.dy,a1.dx)))+12, 24, W*0.42);
-    bg.setCoasterMargins(mx,myTop,myBottom);
+    bg.setCoasterMargins(myTop,myBottom);
   }
-  function place(){
+  function place(dts){
     syncMargins();
-    const s=bg.coasterSample(t);
-    el.style.left=(s.x-el.offsetWidth/2)+'px';
-    el.style.top=(s.y-el.offsetHeight/2)+'px';
+    const s=bg.coasterSampleAtDist(d);
+    // ease toward the cart's world x instead of snapping — a loop's momentary backward
+    // x-wobble just lags the camera briefly rather than yanking the view around
+    const followRate = dts==null ? 1 : clamp(CAM_FOLLOW*dts, 0, 1);
+    camX += (s.x-camX)*followRate;
+    const stage=$('stage'), W=stage.clientWidth;
+    bg.setCoasterCamera(camX, W*0.35);                  // cart anchored ~1/3 across, room to see the track ahead
+    const p=bg.coasterToScreen(s);
+    // belt-and-suspenders: keep the cart itself fully on screen even in extreme cases
+    // (the track underneath it always still reaches edge to edge regardless)
+    const sx=clamp(p.x, el.offsetWidth/2+8, W-el.offsetWidth/2-8);
+    el.style.left=(sx-el.offsetWidth/2)+'px';
+    el.style.top=(p.y-el.offsetHeight/2)+'px';
     el.style.transform='rotate('+(Math.atan2(s.dy,s.dx)*(180/Math.PI)).toFixed(2)+'deg)';
-    return s;
-  }
-  function celebrate(){
-    chime();
-    el.classList.remove('corner'); void el.offsetWidth; el.classList.add('corner');
-    setTimeout(()=>{ if(el) el.classList.remove('corner'); }, 750);
   }
   function enter(){
     on=true; $('stage').classList.add('coaster');
-    el=activeEl(); t=0; hue=rand(0,360); colour();
-    place();
+    // start partway into the track (not at its literal x=0 origin) so there's already
+    // real track behind the camera's anchor point from frame one — otherwise the left
+    // side of the screen would stay empty until the camera scrolled far enough away
+    // from that hard origin, which at normal speed takes upwards of 30 seconds
+    el=activeEl(); d=12; camX=0; hue=rand(0,360); colour();
+    place();                                            // no dts yet -> camera snaps straight to the start
   }
   function exit(){
     on=false; $('stage').classList.remove('coaster');
     ['display','swDisplay','periodDisplay'].forEach(id=>{ const n=$(id);
-      n.style.left=''; n.style.top=''; n.style.transform=''; n.style.color=''; n.classList.remove('corner'); });
+      n.style.left=''; n.style.top=''; n.style.transform=''; n.style.color=''; });
     bg.setCoasterSpeed(1);
     el=null;
   }
@@ -1018,16 +1035,13 @@ const coaster = (function(){
     const a=activeEl();
     if(a!==el){ el.style.left=''; el.style.top=''; el.style.transform=''; el.style.color=''; el=a; colour(); }
     const dts=Math.min(dt,50)/1000;
-    syncMargins();
-    const cur=bg.coasterSample(t);
+    hue=(hue+HUE_DRIFT*dts)%360; colour();
+    const cur=bg.coasterSampleAtDist(d);
     const descent = cur.segLen>0 ? cur.dy/cur.segLen : 0;         // -1..1, positive = heading downward
     const speedMul = clamp(1+descent*0.6, 0.7, 1.4);
     bg.setCoasterSpeed(speedMul);
-    t += baseSpeed*speedMul*dts;
-    let lapped=false;
-    if(t>=1){ t=0; lapped=true; }
-    place();
-    if(lapped){ bg.newCoasterTrack(); hue=(hue+67)%360; colour(); celebrate(); }
+    d += baseSpeed*speedMul*dts;
+    place(dts);
   }
   return { enter, exit, tick };
 })();
@@ -1036,9 +1050,11 @@ const coaster = (function(){
 let raf=0, lastT=0;
 function loop(t){
   const dt=Math.min(50, t-lastT||16); lastT=t;
+  // cart/camera state must update before the canvas draws, so coaster mode
+  // renders the track using the same frame's camera position as the cart
+  if(bg.scene==='dvd') dvd.tick(dt); else if(bg.scene==='coaster') coaster.tick(dt);
   if(bg.scene==='pipes' && pipes3d.ok) pipes3d.frame(t,dt);   // WebGL pipes
   else bg.draw(t,dt);                                          // 2D scenes
-  if(bg.scene==='dvd') dvd.tick(dt); else if(bg.scene==='coaster') coaster.tick(dt);
   if(mode==='timer') tickTimer(); else if(mode==='stopwatch') tickSW();
   raf=requestAnimationFrame(loop);
 }
