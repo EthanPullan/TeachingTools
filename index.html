@@ -40,7 +40,9 @@
   .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
   .spacer{flex:1;}
   .toolbar .count{font-family:var(--mono);font-size:11px;background:var(--panel-2);
-    border:1px solid var(--line);border-radius:20px;padding:3px 10px;color:var(--muted);}
+    border:1px solid var(--line);border-radius:20px;padding:3px 10px;color:var(--muted);
+    cursor:pointer;transition:border-color .12s,color .12s;}
+  .toolbar .count:hover{border-color:var(--accent);color:var(--ink);}
 
   /* page */
   .wrap{max-width:1040px;margin:0 auto;padding:34px 20px 60px;}
@@ -136,7 +138,7 @@
   <header class="toolbar">
     <div class="brand"><span class="mark"></span>Teaching Tools</div>
     <div class="spacer"></div>
-    <span class="count" id="toolCount">1 tool</span>
+    <span class="count" id="toolCount" role="button" tabindex="0">1 tool</span>
   </header>
 
   <main class="wrap">
@@ -251,7 +253,7 @@
         <span class="open">Open tool <span class="arr">→</span></span>
       </a>
 
-      <a class="card" href="tools/movie-picker/index.html">
+      <a class="card" href="tools/movie-picker/index.html" data-hidden-tool>
         <div class="top">
           <span class="mark">🎬</span>
           <h2>Movie Picker</h2>
@@ -476,9 +478,37 @@
 
   <script>
     // Keep the tool count in the top bar honest as tools are added.
+    // Some tools are hidden from the grid by default (data-hidden-tool) — clicking
+    // the count toggles them on, and the choice is remembered on this device.
     (function(){
-      const n = document.querySelectorAll('#toolGrid .card:not(.soon), #dailyGrid .card:not(.soon)').length;
-      document.getElementById('toolCount').textContent = n + (n===1 ? ' tool' : ' tools');
+      const SHOW_LS = 'teachingtools:showHiddenTools';
+      const countEl = document.getElementById('toolCount');
+      const cardSel = '#toolGrid .card:not(.soon), #dailyGrid .card:not(.soon)';
+      let show = localStorage.getItem(SHOW_LS) === '1';
+
+      function render(){
+        document.querySelectorAll('[data-hidden-tool]').forEach(c=>{
+          c.style.display = show ? '' : 'none';
+        });
+        const cards = document.querySelectorAll(cardSel);
+        let n = cards.length;
+        if(!show){
+          cards.forEach(c=>{ if(c.hasAttribute('data-hidden-tool')) n--; });
+        }
+        countEl.textContent = n + (n===1 ? ' tool' : ' tools');
+      }
+
+      function toggle(){
+        show = !show;
+        try{ localStorage.setItem(SHOW_LS, show ? '1' : '0'); }catch(e){}
+        render();
+      }
+      countEl.addEventListener('click', toggle);
+      countEl.addEventListener('keydown', e=>{
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
+      });
+
+      render();
     })();
   </script>
 
