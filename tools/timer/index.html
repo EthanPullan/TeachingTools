@@ -150,7 +150,7 @@
 
   /* Coaster mode — the time rides a randomly generated 2D rollercoaster track */
   .stage.coaster .overlay{justify-content:flex-end;}
-  .stage.coaster .time{position:absolute;margin:0;font-size:clamp(40px,8vw,150px);will-change:left,top,transform;}
+  .stage.coaster .time{position:absolute;margin:0;font-size:clamp(28px,5.5vw,95px);will-change:left,top,transform;}
   .stage.coaster .bar,.stage.coaster .sub{display:none;}
 
   /* Hide timer (toggle) — keeps the toolbar so Fullscreen stays reachable */
@@ -598,10 +598,10 @@ const bg = (function(){
      to fit the stage each time it's sampled or drawn. */
   function buildCoasterPath(){
     const pts=[{x:0,y:0}]; let x=0,y=0;
-    const numUnits=5+Math.floor(rand(0,4)), maxLoops=1+Math.floor(rand(0,2));
+    const numUnits=6+Math.floor(rand(0,5)), maxLoops=1+Math.floor(rand(0,2));
     let loops=0;
     for(let i=0;i<numUnits;i++){
-      const L=rand(0.8,1.5), H=rand(0.32,0.62)*(Math.random()<0.5?1:-1), steps=16;
+      const L=rand(0.8,1.5), H=rand(0.18,0.85)*(Math.random()<0.5?1:-1), steps=16;
       for(let s=1;s<=steps;s++){ const f=s/steps; pts.push({ x:x+f*L, y:y-H*(1-Math.cos(2*Math.PI*f))/2 }); }
       x+=L;
       if(loops<maxLoops && i<numUnits-1 && Math.random()<0.45){
@@ -1011,7 +1011,7 @@ const coaster = (function(){
     syncMargins();
     const cur=bg.coasterSample(t);
     const descent = cur.segLen>0 ? cur.dy/cur.segLen : 0;         // -1..1, positive = heading downward
-    const speedMul = clamp(1+descent*2.4, 0.3, 3.4);
+    const speedMul = clamp(1+descent*0.6, 0.7, 1.4);
     bg.setCoasterSpeed(speedMul);
     t += baseSpeed*speedMul*dts;
     let lapped=false;
