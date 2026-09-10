@@ -601,7 +601,7 @@ const bg = (function(){
     const numUnits=6+Math.floor(rand(0,5)), maxLoops=1+Math.floor(rand(0,2));
     let loops=0;
     for(let i=0;i<numUnits;i++){
-      const L=rand(0.8,1.5), H=rand(0.18,0.85)*(Math.random()<0.5?1:-1), steps=16;
+      const L=rand(0.5,0.9), H=rand(0.35,0.9)*(Math.random()<0.5?1:-1), steps=16;
       for(let s=1;s<=steps;s++){ const f=s/steps; pts.push({ x:x+f*L, y:y-H*(1-Math.cos(2*Math.PI*f))/2 }); }
       x+=L;
       if(loops<maxLoops && i<numUnits-1 && Math.random()<0.45){
@@ -955,8 +955,9 @@ const dvd = (function(){
    (faster downhill/through the bottom of a loop, slower climbing) for a
    real-coaster feel, and reports that speed to bg so the background speed
    lines get busier as the cart goes faster. On reaching the end of the
-   track it rolls straight into a freshly generated one (a new "lap"),
-   with the same chime/flash/corner-pop celebration DVD mode uses. */
+   track it rolls straight into a freshly generated one (a new "lap"), with
+   a quiet chime and corner-pop — no screen flash or particle burst, so the
+   ambient background doesn't jolt every time a new track loads. */
 const coaster = (function(){
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const baseSpeed = reduced?0.06:0.13;   // track-fractions per second at neutral slope
@@ -969,13 +970,22 @@ const coaster = (function(){
     // the cart's rotation sweeps a full circle through loops, so its worst-case screen
     // footprint is the diagonal (a wide-short label rotated 90° stands as tall as it is wide)
     const radius=Math.hypot(el.offsetWidth,el.offsetHeight)/2+16;
-    const mx=clamp(radius, 40, W*0.42);
     const myTop=clamp(radius, 30, H*0.3);
     // the time is absolutely positioned (out of flow) in coaster mode, so the visible
     // view's own top edge is exactly where its in-flow controls stack begins
     const view=document.querySelector('.view:not([hidden])');
     let myBottom=radius+40;
     if(view){ myBottom=clamp((H-(view.getBoundingClientRect().top-stageR.top))+radius+12, radius, H*0.82); }
+    // Every track starts and ends at a hill unit's own zero-slope point (loops are only
+    // ever spliced strictly between units — see buildCoasterPath), but that's a raw-space
+    // property: the independent x/y rescale below can still tilt the ends a bit on screen,
+    // more so the steeper the hills. Scale once with a generous margin, measure the actual
+    // end tangents, then shrink the margin to just fit them — letting the track run right
+    // to the screen edge without the cart clipping off it.
+    bg.setCoasterMargins(clamp(radius, 40, W*0.42), myTop, myBottom);
+    const edgeHalf=(a)=>(el.offsetWidth*Math.abs(Math.cos(a))+el.offsetHeight*Math.abs(Math.sin(a)))/2;
+    const a0=bg.coasterSample(0), a1=bg.coasterSample(1);
+    const mx=clamp(Math.max(edgeHalf(Math.atan2(a0.dy,a0.dx)), edgeHalf(Math.atan2(a1.dy,a1.dx)))+12, 24, W*0.42);
     bg.setCoasterMargins(mx,myTop,myBottom);
   }
   function place(){
@@ -986,8 +996,8 @@ const coaster = (function(){
     el.style.transform='rotate('+(Math.atan2(s.dy,s.dx)*(180/Math.PI)).toFixed(2)+'deg)';
     return s;
   }
-  function celebrate(cx,cy){
-    bg.burst(cx,cy); flash(); chime();
+  function celebrate(){
+    chime();
     el.classList.remove('corner'); void el.offsetWidth; el.classList.add('corner');
     setTimeout(()=>{ if(el) el.classList.remove('corner'); }, 750);
   }
@@ -1016,8 +1026,8 @@ const coaster = (function(){
     t += baseSpeed*speedMul*dts;
     let lapped=false;
     if(t>=1){ t=0; lapped=true; }
-    const s=place();
-    if(lapped){ bg.newCoasterTrack(); hue=(hue+67)%360; colour(); celebrate(s.x,s.y); }
+    place();
+    if(lapped){ bg.newCoasterTrack(); hue=(hue+67)%360; colour(); celebrate(); }
   }
   return { enter, exit, tick };
 })();
