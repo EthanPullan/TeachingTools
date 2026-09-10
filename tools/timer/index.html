@@ -564,7 +564,10 @@ const bg = (function(){
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W=0,H=0, scene='aurora';
   let blobs=[], bubbles=[], confetti=[], burstParts=[];
-  let coasterHills=[], coasterMx=60, coasterMy=60;
+  let coasterRaw=[], coasterPts=[], coasterCum=[0], coasterTotalLen=1, coasterDirty=true;
+  let coasterMx=60, coasterMyTop=60, coasterMyBottom=60;
+  let coasterScaledW=-1, coasterScaledH=-1, coasterScaledMx=-1, coasterScaledMyTop=-1, coasterScaledMyBottom=-1;
+  let speedLines=[], coasterSpeed=1;
 
   function resize(){
     const dpr=Math.min(2, window.devicePixelRatio||1);
@@ -587,32 +590,83 @@ const bg = (function(){
     vy:rand(45,95), vx:rand(-25,25), rot:rand(0,6.28), vr:rand(-3,3), a:rand(0.7,1) }; }
   function initConfetti(){ const n=reduced?44:120; confetti=[]; for(let i=0;i<n;i++) confetti.push(newConfetti(rand(-H,H))); }
 
-  function newCoasterTrack(){                       // a few summed sine waves = a smooth random hill profile
-    const n = 3+Math.floor(rand(0,3));
-    coasterHills = [];
-    for(let i=0;i<n;i++) coasterHills.push({ freq:rand(0.6,2.2), phase:rand(0,6.28), amp:rand(0.5,1)/n });
+  /* Coaster track: a "turtle" walk of smooth hill units (each a self-contained
+     bump that starts/ends at zero slope, so units join seamlessly) with an
+     occasional full vertical loop spliced in at one of those zero-slope
+     joints — a loop's entry/exit tangent is exactly horizontal, so it drops
+     into the walk with no kink. Built in unrelated "path units", then scaled
+     to fit the stage each time it's sampled or drawn. */
+  function buildCoasterPath(){
+    const pts=[{x:0,y:0}]; let x=0,y=0;
+    const numUnits=5+Math.floor(rand(0,4)), maxLoops=1+Math.floor(rand(0,2));
+    let loops=0;
+    for(let i=0;i<numUnits;i++){
+      const L=rand(0.8,1.5), H=rand(0.32,0.62)*(Math.random()<0.5?1:-1), steps=16;
+      for(let s=1;s<=steps;s++){ const f=s/steps; pts.push({ x:x+f*L, y:y-H*(1-Math.cos(2*Math.PI*f))/2 }); }
+      x+=L;
+      if(loops<maxLoops && i<numUnits-1 && Math.random()<0.45){
+        const r=rand(0.22,0.34), cx=x, cy=y-r, steps2=32;
+        for(let s=1;s<=steps2;s++){ const a=s/steps2*2*Math.PI; pts.push({ x:cx+r*Math.sin(a), y:cy+r*Math.cos(a) }); }
+        loops++;
+      }
+    }
+    coasterRaw=pts; coasterDirty=true;
   }
-  function coasterYFrac(xf){                        // 0 (top) .. 1 (bottom) height at track-position xf (0..1)
-    let y=0.38;                                      // biased toward the upper stage, clear of the bottom controls
-    for(const h of coasterHills) y += Math.sin(xf*Math.PI*2*h.freq+h.phase)*h.amp*0.34;
-    return clamp(y,0.03,0.72);
+  function setCoasterMargins(mx,myTop,myBottom){ coasterMx=mx; coasterMyTop=myTop; coasterMyBottom=myBottom; }
+  function setCoasterSpeed(v){ coasterSpeed=v; }
+  function rescaleCoaster(){                          // fit the raw path into the current stage bounds
+    if(!coasterDirty && coasterScaledW===W && coasterScaledH===H && coasterScaledMx===coasterMx
+       && coasterScaledMyTop===coasterMyTop && coasterScaledMyBottom===coasterMyBottom) return;
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for(const p of coasterRaw){ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; }
+    const spanX=Math.max(1e-4,maxX-minX), spanY=Math.max(1e-4,maxY-minY);
+    const uw=Math.max(10,W-coasterMx*2), uh=Math.max(10,H-coasterMyTop-coasterMyBottom);
+    const sx=uw/spanX, sy=uh/spanY;
+    coasterPts=coasterRaw.map(p=>({ x:coasterMx+(p.x-minX)*sx, y:coasterMyTop+(p.y-minY)*sy }));
+    coasterCum=[0];
+    for(let i=1;i<coasterPts.length;i++){ const a=coasterPts[i-1],b=coasterPts[i]; coasterCum.push(coasterCum[i-1]+Math.hypot(b.x-a.x,b.y-a.y)); }
+    coasterTotalLen=coasterCum[coasterCum.length-1]||1;
+    coasterScaledW=W; coasterScaledH=H; coasterScaledMx=coasterMx;
+    coasterScaledMyTop=coasterMyTop; coasterScaledMyBottom=coasterMyBottom; coasterDirty=false;
   }
-  function setCoasterMargins(mx,my){ coasterMx=mx; coasterMy=my; }
-  function drawCoaster(){
-    const uw=Math.max(10,W-coasterMx*2), uh=Math.max(10,H-coasterMy*2);
-    const steps=64, pts=[];
-    for(let i=0;i<=steps;i++){ const xf=i/steps; pts.push([coasterMx+xf*uw, coasterMy+coasterYFrac(xf)*uh]); }
-    ctx.lineJoin='round'; ctx.lineCap='round';
-    ctx.strokeStyle='rgba(224,152,46,.6)'; ctx.lineWidth=4;
-    ctx.beginPath(); pts.forEach((p,i)=> i? ctx.lineTo(p[0],p[1]) : ctx.moveTo(p[0],p[1])); ctx.stroke();
-    ctx.strokeStyle='rgba(255,255,255,.24)'; ctx.lineWidth=2.5;      // perpendicular tie marks, like rail sleepers
-    for(let i=3;i<steps-3;i+=4){
-      const [x,y]=pts[i], [xp,yp]=pts[i-1], [xn,yn]=pts[i+1];
-      const dx=xn-xp, dy=yn-yp, len=Math.hypot(dx,dy)||1, nx=-dy/len, ny=dx/len, half=8;
-      ctx.beginPath(); ctx.moveTo(x-nx*half,y-ny*half); ctx.lineTo(x+nx*half,y+ny*half); ctx.stroke();
+  function coasterSample(t){                          // position + local tangent at arc-length fraction t (0..1)
+    rescaleCoaster();
+    const target=clamp(t,0,1)*coasterTotalLen;
+    let lo=0,hi=coasterCum.length-1;
+    while(lo<hi){ const mid=(lo+hi)>>1; if(coasterCum[mid]<target) lo=mid+1; else hi=mid; }
+    const i=Math.max(1,lo), segLen=coasterCum[i]-coasterCum[i-1]||1e-6;
+    const f=(target-coasterCum[i-1])/segLen, a=coasterPts[i-1], b=coasterPts[i];
+    return { x:a.x+(b.x-a.x)*f, y:a.y+(b.y-a.y)*f, dx:b.x-a.x, dy:b.y-a.y, segLen:Math.hypot(b.x-a.x,b.y-a.y) };
+  }
+  function newSpeedLine(){ return { x:rand(-300,W), y:rand(0,H), len:rand(90,320), a:rand(0.22,0.6),
+    spd:rand(500,1100), w:rand(1.5,3.5), warm:Math.random()<0.35 }; }
+  function drawSpeedLines(dts){                        // streaks implying fast forward motion; density follows speed
+    const density=clamp(coasterSpeed,0.3,3.4), target=Math.round(28+density*40);
+    while(speedLines.length<target) speedLines.push(newSpeedLine());
+    while(speedLines.length>target) speedLines.pop();
+    for(const l of speedLines){
+      l.x+=l.spd*density*dts;
+      if(l.x>W+300) Object.assign(l,newSpeedLine(),{x:-300-rand(0,300)});
+      ctx.lineWidth=l.w;
+      ctx.strokeStyle = l.warm ? `rgba(255,196,120,${l.a})` : `rgba(255,255,255,${l.a})`;
+      ctx.beginPath(); ctx.moveTo(l.x,l.y); ctx.lineTo(l.x+l.len,l.y); ctx.stroke();
     }
   }
-  function setScene(s){ scene=s; if(s==='bubbles') initBubbles(); if(s==='confetti') initConfetti(); if(s==='coaster') newCoasterTrack(); }
+  function drawCoaster(dts){
+    drawSpeedLines(dts);
+    rescaleCoaster();
+    ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.strokeStyle='rgba(224,152,46,.7)'; ctx.lineWidth=4;
+    ctx.beginPath(); coasterPts.forEach((p,i)=> i? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.24)'; ctx.lineWidth=2.5;      // perpendicular tie marks, like rail sleepers
+    for(let i=4;i<coasterPts.length-4;i+=6){
+      const p=coasterPts[i], pp=coasterPts[i-2], pn=coasterPts[i+2];
+      const dx=pn.x-pp.x, dy=pn.y-pp.y, len=Math.hypot(dx,dy)||1, nx=-dy/len, ny=dx/len, half=8;
+      ctx.beginPath(); ctx.moveTo(p.x-nx*half,p.y-ny*half); ctx.lineTo(p.x+nx*half,p.y+ny*half); ctx.stroke();
+    }
+  }
+  function setScene(s){ scene=s; if(s==='bubbles') initBubbles(); if(s==='confetti') initConfetti();
+    if(s==='coaster'){ buildCoasterPath(); speedLines=[]; coasterSpeed=1; } }
   function burst(cx,cy){
     cx=(cx==null)?W/2:cx; cy=(cy==null)?H*0.42:cy;
     const n=reduced?70:180;
@@ -677,11 +731,11 @@ const bg = (function(){
     if(scene==='aurora') drawAurora(t);
     else if(scene==='bubbles') drawBubbles(dts,k);
     else if(scene==='confetti') drawConfetti(dts,k);
-    else if(scene==='coaster') drawCoaster();
+    else if(scene==='coaster') drawCoaster(dts);
     // plain, dvd, and the pipes fallback: just the backdrop
     if(burstParts.length) drawBurst(dts);
   }
-  return { resize, setScene, burst, draw, coasterYFrac, setCoasterMargins, get scene(){ return scene; } };
+  return { resize, setScene, burst, draw, coasterSample, setCoasterMargins, setCoasterSpeed, newCoasterTrack:buildCoasterPath, get scene(){ return scene; } };
 })();
 
 /* ---------------- Pipes 3D (WebGL2 — the "Pipes" scene) ----------------
@@ -894,36 +948,43 @@ const dvd = (function(){
   return { enter, exit, tick };
 })();
 
-/* ---------------- Coaster (2D rollercoaster) ----------------
-   A randomly generated hill profile (see bg.newCoasterTrack) drawn by the
-   bg module; the time display rides it as a cart, tracked by a single
-   0..1 position along the track. Speed scales with the local slope ahead
-   (faster downhill, slower up) so it feels like a real coaster rather than
-   a constant-speed bounce. Bounces at each end with the same
-   chime/flash/corner-pop celebration DVD mode uses. */
+/* ---------------- Coaster (2D rollercoaster with loops) ----------------
+   The time display rides bg's randomly generated track (hills + full
+   vertical loops) as a single arc-length position t, always advancing the
+   same direction — no bouncing back. Speed scales with the local descent
+   (faster downhill/through the bottom of a loop, slower climbing) for a
+   real-coaster feel, and reports that speed to bg so the background speed
+   lines get busier as the cart goes faster. On reaching the end of the
+   track it rolls straight into a freshly generated one (a new "lap"),
+   with the same chime/flash/corner-pop celebration DVD mode uses. */
 const coaster = (function(){
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const baseSpeed = reduced?0.05:0.09;   // track-fractions per second at neutral slope
-  let on=false, el=null, xFrac=0, dir=1, hue=rand(0,360);
+  const baseSpeed = reduced?0.06:0.13;   // track-fractions per second at neutral slope
+  let on=false, el=null, t=0, hue=rand(0,360);
   const activeEl = ()=> mode==='timer' ? $('display') : mode==='stopwatch' ? $('swDisplay') : $('periodDisplay');
   const colour = ()=>{ el.style.color='hsl('+Math.round(hue)+',85%,68%)'; };
-  function bounds(){
-    const stage=$('stage'), W=stage.clientWidth, H=stage.clientHeight;
-    const mx=clamp(el.offsetWidth/2+16, 40, W*0.45);
-    const my=clamp(el.offsetHeight/2+16, 40, H*0.35);
-    bg.setCoasterMargins(mx,my);
-    return { W,H,mx,my, uw:Math.max(10,W-mx*2), uh:Math.max(10,H-my*2) };
+  function syncMargins(){
+    const stage=$('stage'), stageR=stage.getBoundingClientRect();
+    const W=stage.clientWidth, H=stage.clientHeight;
+    // the cart's rotation sweeps a full circle through loops, so its worst-case screen
+    // footprint is the diagonal (a wide-short label rotated 90° stands as tall as it is wide)
+    const radius=Math.hypot(el.offsetWidth,el.offsetHeight)/2+16;
+    const mx=clamp(radius, 40, W*0.42);
+    const myTop=clamp(radius, 30, H*0.3);
+    // the time is absolutely positioned (out of flow) in coaster mode, so the visible
+    // view's own top edge is exactly where its in-flow controls stack begins
+    const view=document.querySelector('.view:not([hidden])');
+    let myBottom=radius+40;
+    if(view){ myBottom=clamp((H-(view.getBoundingClientRect().top-stageR.top))+radius+12, radius, H*0.82); }
+    bg.setCoasterMargins(mx,myTop,myBottom);
   }
   function place(){
-    const b=bounds();
-    const cx=b.mx+xFrac*b.uw, cy=b.my+bg.coasterYFrac(xFrac)*b.uh;
-    el.style.left=(cx-el.offsetWidth/2)+'px';
-    el.style.top=(cy-el.offsetHeight/2)+'px';
-    const d=0.01, xa=clamp(xFrac-d,0,1), xb=clamp(xFrac+d,0,1);
-    const ya=bg.coasterYFrac(xa)*b.uh, yb=bg.coasterYFrac(xb)*b.uh;
-    const angle=Math.atan2(yb-ya,(xb-xa)*b.uw)*(180/Math.PI);
-    el.style.transform='rotate('+angle.toFixed(2)+'deg)';
-    return { cx, cy };
+    syncMargins();
+    const s=bg.coasterSample(t);
+    el.style.left=(s.x-el.offsetWidth/2)+'px';
+    el.style.top=(s.y-el.offsetHeight/2)+'px';
+    el.style.transform='rotate('+(Math.atan2(s.dy,s.dx)*(180/Math.PI)).toFixed(2)+'deg)';
+    return s;
   }
   function celebrate(cx,cy){
     bg.burst(cx,cy); flash(); chime();
@@ -932,13 +993,14 @@ const coaster = (function(){
   }
   function enter(){
     on=true; $('stage').classList.add('coaster');
-    el=activeEl(); xFrac=0; dir=1; hue=rand(0,360); colour();
+    el=activeEl(); t=0; hue=rand(0,360); colour();
     place();
   }
   function exit(){
     on=false; $('stage').classList.remove('coaster');
     ['display','swDisplay','periodDisplay'].forEach(id=>{ const n=$(id);
       n.style.left=''; n.style.top=''; n.style.transform=''; n.style.color=''; n.classList.remove('corner'); });
+    bg.setCoasterSpeed(1);
     el=null;
   }
   function tick(dt){
@@ -946,14 +1008,16 @@ const coaster = (function(){
     const a=activeEl();
     if(a!==el){ el.style.left=''; el.style.top=''; el.style.transform=''; el.style.color=''; el=a; colour(); }
     const dts=Math.min(dt,50)/1000;
-    const d=0.01, xa=clamp(xFrac-dir*d,0,1), xb=clamp(xFrac+dir*d,0,1);
-    const slope=(bg.coasterYFrac(xb)-bg.coasterYFrac(xa))/d;    // positive = descending ahead
-    const speedMul=clamp(1+slope*1.8, 0.35, 2.4);
-    xFrac += dir*baseSpeed*speedMul*dts;
-    let bounced=false;
-    if(xFrac>=1){ xFrac=1; dir=-1; bounced=true; } else if(xFrac<=0){ xFrac=0; dir=1; bounced=true; }
-    const {cx,cy}=place();
-    if(bounced){ hue=(hue+53)%360; colour(); celebrate(cx,cy); }
+    syncMargins();
+    const cur=bg.coasterSample(t);
+    const descent = cur.segLen>0 ? cur.dy/cur.segLen : 0;         // -1..1, positive = heading downward
+    const speedMul = clamp(1+descent*2.4, 0.3, 3.4);
+    bg.setCoasterSpeed(speedMul);
+    t += baseSpeed*speedMul*dts;
+    let lapped=false;
+    if(t>=1){ t=0; lapped=true; }
+    const s=place();
+    if(lapped){ bg.newCoasterTrack(); hue=(hue+67)%360; colour(); celebrate(s.x,s.y); }
   }
   return { enter, exit, tick };
 })();
