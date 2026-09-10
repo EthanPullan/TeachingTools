@@ -148,6 +148,11 @@
   .time.corner{animation:cornerpop .7s cubic-bezier(.2,.7,.3,1);}
   @keyframes cornerpop{0%{transform:scale(1) rotate(0deg);}40%{transform:scale(1.34) rotate(8deg);}100%{transform:scale(1) rotate(0deg);}}
 
+  /* Coaster mode — the time rides a randomly generated 2D rollercoaster track */
+  .stage.coaster .overlay{justify-content:flex-end;}
+  .stage.coaster .time{position:absolute;margin:0;font-size:clamp(40px,8vw,150px);will-change:left,top,transform;}
+  .stage.coaster .bar,.stage.coaster .sub{display:none;}
+
   /* Hide timer (toggle) — keeps the toolbar so Fullscreen stays reachable */
   .app.hide-ui .overlay{display:none;}
   .app.hide-ui .scrim{opacity:0;}
@@ -187,6 +192,7 @@
         <button data-scene="confetti">Confetti</button>
         <button data-scene="pipes">Pipes</button>
         <button data-scene="dvd">DVD</button>
+        <button data-scene="coaster">Coaster</button>
       </div>
     </div>
     <button class="icon-btn on" id="soundBtn" title="Sound on / off" aria-label="Toggle sound">🔊</button>
@@ -286,6 +292,7 @@ const clamp = (v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 const rand = (a,b)=>a+Math.random()*(b-a);
 const now = ()=>performance.now();
 const pad = n=>String(n).padStart(2,'0');
+const coasterMargin = v => clamp(v*0.08, 30, 100);
 
 let mode = 'timer';                 // 'timer' | 'stopwatch' | 'period'
 let soundOn = true;
@@ -391,7 +398,7 @@ function updatePie(frac){
 }
 function setPie(on){
   pieOn=on;
-  if(on && bg.scene==='dvd') selectScene('plain');   // pie and DVD bounce can't coexist
+  if(on && (bg.scene==='dvd'||bg.scene==='coaster')) selectScene('plain');   // pie and free-floating time can't coexist
   $('timerView').classList.toggle('pie-on',on);
   $('pieBtn').classList.toggle('on',on);
   renderTimer(true);
@@ -557,6 +564,7 @@ const bg = (function(){
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W=0,H=0, scene='aurora';
   let blobs=[], bubbles=[], confetti=[], burstParts=[];
+  let coasterHills=[], coasterMx=60, coasterMy=60;
 
   function resize(){
     const dpr=Math.min(2, window.devicePixelRatio||1);
@@ -579,7 +587,32 @@ const bg = (function(){
     vy:rand(45,95), vx:rand(-25,25), rot:rand(0,6.28), vr:rand(-3,3), a:rand(0.7,1) }; }
   function initConfetti(){ const n=reduced?44:120; confetti=[]; for(let i=0;i<n;i++) confetti.push(newConfetti(rand(-H,H))); }
 
-  function setScene(s){ scene=s; if(s==='bubbles') initBubbles(); if(s==='confetti') initConfetti(); }
+  function newCoasterTrack(){                       // a few summed sine waves = a smooth random hill profile
+    const n = 3+Math.floor(rand(0,3));
+    coasterHills = [];
+    for(let i=0;i<n;i++) coasterHills.push({ freq:rand(0.6,2.2), phase:rand(0,6.28), amp:rand(0.5,1)/n });
+  }
+  function coasterYFrac(xf){                        // 0 (top) .. 1 (bottom) height at track-position xf (0..1)
+    let y=0.38;                                      // biased toward the upper stage, clear of the bottom controls
+    for(const h of coasterHills) y += Math.sin(xf*Math.PI*2*h.freq+h.phase)*h.amp*0.34;
+    return clamp(y,0.03,0.72);
+  }
+  function setCoasterMargins(mx,my){ coasterMx=mx; coasterMy=my; }
+  function drawCoaster(){
+    const uw=Math.max(10,W-coasterMx*2), uh=Math.max(10,H-coasterMy*2);
+    const steps=64, pts=[];
+    for(let i=0;i<=steps;i++){ const xf=i/steps; pts.push([coasterMx+xf*uw, coasterMy+coasterYFrac(xf)*uh]); }
+    ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.strokeStyle='rgba(224,152,46,.6)'; ctx.lineWidth=4;
+    ctx.beginPath(); pts.forEach((p,i)=> i? ctx.lineTo(p[0],p[1]) : ctx.moveTo(p[0],p[1])); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.24)'; ctx.lineWidth=2.5;      // perpendicular tie marks, like rail sleepers
+    for(let i=3;i<steps-3;i+=4){
+      const [x,y]=pts[i], [xp,yp]=pts[i-1], [xn,yn]=pts[i+1];
+      const dx=xn-xp, dy=yn-yp, len=Math.hypot(dx,dy)||1, nx=-dy/len, ny=dx/len, half=8;
+      ctx.beginPath(); ctx.moveTo(x-nx*half,y-ny*half); ctx.lineTo(x+nx*half,y+ny*half); ctx.stroke();
+    }
+  }
+  function setScene(s){ scene=s; if(s==='bubbles') initBubbles(); if(s==='confetti') initConfetti(); if(s==='coaster') newCoasterTrack(); }
   function burst(cx,cy){
     cx=(cx==null)?W/2:cx; cy=(cy==null)?H*0.42:cy;
     const n=reduced?70:180;
@@ -644,10 +677,11 @@ const bg = (function(){
     if(scene==='aurora') drawAurora(t);
     else if(scene==='bubbles') drawBubbles(dts,k);
     else if(scene==='confetti') drawConfetti(dts,k);
+    else if(scene==='coaster') drawCoaster();
     // plain, dvd, and the pipes fallback: just the backdrop
     if(burstParts.length) drawBurst(dts);
   }
-  return { resize, setScene, burst, draw, get scene(){ return scene; } };
+  return { resize, setScene, burst, draw, coasterYFrac, setCoasterMargins, get scene(){ return scene; } };
 })();
 
 /* ---------------- Pipes 3D (WebGL2 — the "Pipes" scene) ----------------
@@ -860,13 +894,77 @@ const dvd = (function(){
   return { enter, exit, tick };
 })();
 
+/* ---------------- Coaster (2D rollercoaster) ----------------
+   A randomly generated hill profile (see bg.newCoasterTrack) drawn by the
+   bg module; the time display rides it as a cart, tracked by a single
+   0..1 position along the track. Speed scales with the local slope ahead
+   (faster downhill, slower up) so it feels like a real coaster rather than
+   a constant-speed bounce. Bounces at each end with the same
+   chime/flash/corner-pop celebration DVD mode uses. */
+const coaster = (function(){
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const baseSpeed = reduced?0.05:0.09;   // track-fractions per second at neutral slope
+  let on=false, el=null, xFrac=0, dir=1, hue=rand(0,360);
+  const activeEl = ()=> mode==='timer' ? $('display') : mode==='stopwatch' ? $('swDisplay') : $('periodDisplay');
+  const colour = ()=>{ el.style.color='hsl('+Math.round(hue)+',85%,68%)'; };
+  function bounds(){
+    const stage=$('stage'), W=stage.clientWidth, H=stage.clientHeight;
+    const mx=clamp(el.offsetWidth/2+16, 40, W*0.45);
+    const my=clamp(el.offsetHeight/2+16, 40, H*0.35);
+    bg.setCoasterMargins(mx,my);
+    return { W,H,mx,my, uw:Math.max(10,W-mx*2), uh:Math.max(10,H-my*2) };
+  }
+  function place(){
+    const b=bounds();
+    const cx=b.mx+xFrac*b.uw, cy=b.my+bg.coasterYFrac(xFrac)*b.uh;
+    el.style.left=(cx-el.offsetWidth/2)+'px';
+    el.style.top=(cy-el.offsetHeight/2)+'px';
+    const d=0.01, xa=clamp(xFrac-d,0,1), xb=clamp(xFrac+d,0,1);
+    const ya=bg.coasterYFrac(xa)*b.uh, yb=bg.coasterYFrac(xb)*b.uh;
+    const angle=Math.atan2(yb-ya,(xb-xa)*b.uw)*(180/Math.PI);
+    el.style.transform='rotate('+angle.toFixed(2)+'deg)';
+    return { cx, cy };
+  }
+  function celebrate(cx,cy){
+    bg.burst(cx,cy); flash(); chime();
+    el.classList.remove('corner'); void el.offsetWidth; el.classList.add('corner');
+    setTimeout(()=>{ if(el) el.classList.remove('corner'); }, 750);
+  }
+  function enter(){
+    on=true; $('stage').classList.add('coaster');
+    el=activeEl(); xFrac=0; dir=1; hue=rand(0,360); colour();
+    place();
+  }
+  function exit(){
+    on=false; $('stage').classList.remove('coaster');
+    ['display','swDisplay','periodDisplay'].forEach(id=>{ const n=$(id);
+      n.style.left=''; n.style.top=''; n.style.transform=''; n.style.color=''; n.classList.remove('corner'); });
+    el=null;
+  }
+  function tick(dt){
+    if(!on || !el) return;
+    const a=activeEl();
+    if(a!==el){ el.style.left=''; el.style.top=''; el.style.transform=''; el.style.color=''; el=a; colour(); }
+    const dts=Math.min(dt,50)/1000;
+    const d=0.01, xa=clamp(xFrac-dir*d,0,1), xb=clamp(xFrac+dir*d,0,1);
+    const slope=(bg.coasterYFrac(xb)-bg.coasterYFrac(xa))/d;    // positive = descending ahead
+    const speedMul=clamp(1+slope*1.8, 0.35, 2.4);
+    xFrac += dir*baseSpeed*speedMul*dts;
+    let bounced=false;
+    if(xFrac>=1){ xFrac=1; dir=-1; bounced=true; } else if(xFrac<=0){ xFrac=0; dir=1; bounced=true; }
+    const {cx,cy}=place();
+    if(bounced){ hue=(hue+53)%360; colour(); celebrate(cx,cy); }
+  }
+  return { enter, exit, tick };
+})();
+
 /* ---------------- Main loop ---------------- */
 let raf=0, lastT=0;
 function loop(t){
   const dt=Math.min(50, t-lastT||16); lastT=t;
   if(bg.scene==='pipes' && pipes3d.ok) pipes3d.frame(t,dt);   // WebGL pipes
   else bg.draw(t,dt);                                          // 2D scenes
-  if(bg.scene==='dvd') dvd.tick(dt);
+  if(bg.scene==='dvd') dvd.tick(dt); else if(bg.scene==='coaster') coaster.tick(dt);
   if(mode==='timer') tickTimer(); else if(mode==='stopwatch') tickSW();
   raf=requestAnimationFrame(loop);
 }
@@ -894,9 +992,10 @@ function selectScene(s){
   bg.setScene(s);
   $('bgPicker').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x.dataset.scene===s));
   if(s==='dvd') dvd.enter(); else dvd.exit();
+  if(s==='coaster') coaster.enter(); else coaster.exit();
   if(s==='pipes') pipes3d.activate(); else pipes3d.deactivate();
   applyScrim(s);
-  if(s==='dvd' && pieOn) setPie(false);              // pie and DVD bounce can't coexist
+  if((s==='dvd'||s==='coaster') && pieOn) setPie(false);   // pie and free-floating time can't coexist
 }
 $('bgPicker').addEventListener('click',e=>{
   const b=e.target.closest('button[data-scene]'); if(b) selectScene(b.dataset.scene);
