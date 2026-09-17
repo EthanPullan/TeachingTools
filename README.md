@@ -13,7 +13,7 @@ works offline, and can be downloaded on its own.
 | --- | --- |
 | [Seating Chart Generator](https://ethanpullan.github.io/TeachingTools/tools/seating-chart/) | Drag-and-drop room, keep-apart / keep-together rules, seatmate rotation, print |
 | [Class Timer](https://ethanpullan.github.io/TeachingTools/tools/timer/) | Countdown & stopwatch with fun fullscreen backgrounds |
-| [Staff-Room Board](https://ethanpullan.github.io/TeachingTools/tools/staff-board/) | Corkboard with sticky notes, checklists, calendar & day countdown |
+| [Class Board](https://ethanpullan.github.io/TeachingTools/tools/class-board/) | Corkboard with sticky notes, checklists, calendar & day countdown |
 | [Name Wheel](https://ethanpullan.github.io/TeachingTools/tools/name-wheel/) | Spin to pick a name — pulls from your shared Class Lists, no repeats |
 | [Name Caller](https://ethanpullan.github.io/TeachingTools/tools/name-caller/) | Pull a name out of a hat — pulls from your shared Class Lists, no repeats |
 | [Movie Picker](https://ethanpullan.github.io/TeachingTools/tools/movie-picker/) | Cinema board with a ballot, votes and a weighted draw |
