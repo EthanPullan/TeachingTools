@@ -194,6 +194,7 @@
         <button data-scene="dvd">DVD</button>
         <button data-scene="coaster">Coaster</button>
       </div>
+      <button class="icon-btn" id="shuffleBtn" title="Shuffle backgrounds" aria-label="Toggle background shuffle">🔀</button>
     </div>
     <button class="icon-btn on" id="soundBtn" title="Sound on / off" aria-label="Toggle sound">🔊</button>
     <button class="icon-btn" id="hideBtn" title="Hide everything" aria-label="Hide all controls">👁</button>
@@ -1088,8 +1089,28 @@ function selectScene(s){
   if((s==='dvd'||s==='coaster') && pieOn) setPie(false);   // pie and free-floating time can't coexist
 }
 $('bgPicker').addEventListener('click',e=>{
-  const b=e.target.closest('button[data-scene]'); if(b) selectScene(b.dataset.scene);
+  const b=e.target.closest('button[data-scene]'); if(b){ setShuffle(false); selectScene(b.dataset.scene); }
 });
+
+/* ---------------- Shuffle backgrounds ---------------- */
+const SHUFFLE_SCENES=['aurora','bubbles','confetti','pipes','dvd','coaster'];
+const SHUFFLE_INTERVAL=30000;
+let shuffleOn=false, shuffleTimer=null;
+function shuffleTick(){
+  const opts=SHUFFLE_SCENES.filter(s=>s!==bg.scene);
+  selectScene(opts[Math.floor(Math.random()*opts.length)]);
+}
+function setShuffle(on){
+  shuffleOn=on;
+  $('shuffleBtn').classList.toggle('on',on);
+  if(shuffleTimer){ clearInterval(shuffleTimer); shuffleTimer=null; }
+  if(on){
+    $('bgPicker').querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+    shuffleTick();
+    shuffleTimer=setInterval(shuffleTick,SHUFFLE_INTERVAL);
+  }
+}
+$('shuffleBtn').addEventListener('click',()=>setShuffle(!shuffleOn));
 
 /* ---------------- Controls wiring ---------------- */
 $('startBtn').addEventListener('click',timerToggle);
