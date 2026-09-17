@@ -1193,7 +1193,7 @@ function exportBoard(){
   const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href=url; a.download='staff-board.json'; a.click();
+  a.href=url; a.download='class-board.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
   toast('Board exported.','ok');
 }
