@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A digital staff-room corkboard — pin sticky notes, checklists and a month calendar. Runs offline, saves to your browser.">
+<meta name="description" content="A digital class corkboard — pin a calendar and a year-end countdown. Runs offline, saves to your browser.">
 <meta name="theme-color" content="#1f3d35">
-<title>Staff-Room Board</title>
+<title>Class Board</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23c0904f'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23c43d35'/%3E%3C/svg%3E">
 <style>
   :root{
@@ -294,7 +294,7 @@
 <body>
 <div class="app">
   <header class="toolbar">
-    <div class="brand"><span class="mark"></span>Staff-Room Board <small>corkboard · notes &amp; lists</small></div>
+    <div class="brand"><span class="mark"></span>Class Board <small>corkboard · notes &amp; lists</small></div>
     <div class="spacer"></div>
     <button class="btn" id="addNote"><span class="ic">📝</span><span class="lbl">Sticky note</span></button>
     <button class="btn" id="addList"><span class="ic">✓</span><span class="lbl">Checklist</span></button>
@@ -337,9 +337,9 @@
 
 <script>
 /* =====================================================================
-   Staff-Room Board — single-file, offline.
+   Class Board — single-file, offline.
 
-   A digital corkboard for the staff room: pin sticky notes, checklists,
+   A digital corkboard for the classroom: pin sticky notes, checklists,
    a month calendar and a day countdown to a cork surface and arrange them.
 
    • Items live on a zoomable, auto-growing cork SURFACE inside a scroll
@@ -1251,37 +1251,16 @@ function renderAll(){
 /* ---------------- first-run seed ---------------- */
 function seed(){
   const w = boardWrap.clientWidth;
-  // welcome note (classic yellow for the first impression)
-  addNote(28, 30,
-    'Welcome to the staff-room board!\n\nGrab a pin to drag things around. Double-click the cork for a new note.',
-    NOTE_COLORS[0]);
-  // a starter checklist
-  const list = addList();
-  list.title = 'This week';
-  list.items = [
-    {text:'Photocopy Yr 9 worksheets', done:true},
-    {text:'Email parents re: trip', done:false},
-    {text:'Mark Set B essays', done:false},
-    {text:'Book the hall', done:false},
-  ];
-  // a calendar, with a couple of sample day-notes so the agenda has content
+  // a blank calendar, ready for the class to use
   const cal = addCal();
-  const t0 = new Date(); t0.setHours(0,0,0,0);
-  const t2 = new Date(t0); t2.setDate(t2.getDate()+2);
-  cal.dayNotes[dkey(t0)] = 'Staff meeting · 3:30';
-  cal.dayNotes[dkey(t2)] = 'Fire drill';
   // a day countdown (instructional days to the last day of school)
   const count = addCount();
   count.title = 'Last day of school';
-  // an agenda (lists the calendar's day-notes, iPhone-style)
-  const agenda = addAgenda();
   // lay them out across the board
-  els.get(list.id)   && place(list,   Math.min(w-260, 250), 26);
-  els.get(cal.id)    && place(cal,    Math.min(w-360, 540), 22);
+  els.get(cal.id)    && place(cal,    Math.min(w-360, 250), 22);
   els.get(count.id)  && place(count,  32, 250);
-  els.get(agenda.id) && place(agenda, 250, 250);
   // rebuild the ones we mutated after creation
-  rebuild(list); rebuild(cal); rebuild(count); rebuild(agenda);
+  rebuild(cal); rebuild(count);
   updateEmpty(); fitBoard(); refreshAgendas(); save();
 }
 function place(item, x, y){ item.x=x; item.y=y; const el=els.get(item.id); if(el){ el.style.left=x+'px'; el.style.top=y+'px'; } }
