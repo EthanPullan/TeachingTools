@@ -22,3 +22,7 @@ static site via **GitHub Pages** from the repo root.
   code, comments, or any other artifact. No `Claude-Session:` trailer and no
   `https://claude.ai/code/session…` URLs anywhere. (Plain co-author attribution
   is fine.)
+- **Push finished work straight to `main`** — standing instruction from the repo
+  owner, no need to ask each time. Work on a branch if you like, but land it on
+  `main` when it's done and tested. (Solo project; `main` is what GitHub Pages
+  serves.)
