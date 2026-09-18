@@ -21,6 +21,7 @@
     --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
   }
   *{box-sizing:border-box;} html,body{height:100%;}
+  [hidden]{display:none !important;}
   body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
     -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;}
   button{font-family:inherit;}
@@ -126,7 +127,7 @@
 
     <section class="card">
       <h3 class="section-title">Student</h3>
-      <div class="row cols2">
+      <div class="row cols2" id="classPickers">
         <div class="field">
           <label for="classSelect">Class</label>
           <select id="classSelect"></select>
@@ -262,7 +263,8 @@
   const els = {
     divisionSeg:$('divisionSeg'), divisionTitlePreview:$('divisionTitlePreview'),
     rubricCaption:$('rubricCaption'), rubricCanvas:$('rubricCanvas'),
-    classSelect:$('classSelect'), studentSelect:$('studentSelect'), studentHint:$('studentHint'),
+    classPickers:$('classPickers'), classSelect:$('classSelect'), studentSelect:$('studentSelect'),
+    studentHint:$('studentHint'),
     nameInput:$('nameInput'), addToClassBtn:$('addToClassBtn'),
     dateInput:$('dateInput'), gradeSelect:$('gradeSelect'), asnInput:$('asnInput'),
     teacherInput:$('teacherInput'), subjectInput:$('subjectInput'),
@@ -445,12 +447,15 @@
     els.progressPill.hidden = false;
     els.progressPill.textContent = done + ' / ' + cls.students.length + ' downloaded';
   }
+  /* With no saved Class Lists the pickers are hidden rather than shown empty, so
+     a copy of this file passed to someone else is just "type the name". */
   function renderStudentHint(){
-    if(!rosters.length){
-      els.studentHint.textContent = 'No saved Class Lists on this device — type a name above, or add one on the Teaching Tools home page.';
-    }else{
-      els.studentHint.textContent = 'Not every student needs a form — pick one, fill it in, and download. Picking a student clears grade, ASN, context, LP scores and next steps from any previous entry.';
-    }
+    const hasRosters = rosters.length > 0;
+    els.classPickers.hidden = !hasRosters;
+    els.addToClassBtn.hidden = !hasRosters;
+    els.studentHint.textContent = hasRosters
+      ? 'Not every student needs a form — pick one, fill it in, and download. Picking a student clears grade, ASN, context, LP scores and next steps from any previous entry.'
+      : 'Not every student needs a form — type a name, fill it in, and download.';
   }
 
   els.classSelect.addEventListener('change', ()=>{ renderStudentSelect(); updateAddBtn(); });
