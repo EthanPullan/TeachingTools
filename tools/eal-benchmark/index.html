@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Fill in a Div 3 EAL annotation benchmark on screen and download a completed PDF named after the student and date. Pulls names from your shared Class Lists, or type a new one.">
+<meta name="theme-color" content="#1f3d35">
+<title>EAL Benchmark PDF Template</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+
+  /* toolbar */
+  .toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;color:var(--ink);white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+  .progress-pill{font-family:var(--mono);font-size:11px;background:var(--panel-2);
+    border:1px solid var(--line);border-radius:20px;padding:3px 10px;color:var(--muted);white-space:nowrap;}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;
+    gap:7px;transition:background .12s,border-color .12s,transform .05s;white-space:nowrap;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.danger{color:var(--danger);border-color:var(--danger-soft);background:#fff;}
+  .btn.danger:hover{background:var(--danger-soft);}
+  .btn.small{padding:5px 9px;font-size:12px;border-radius:7px;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+
+  /* layout */
+  .wrap{max-width:760px;margin:0 auto;padding:22px 16px 60px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:18px;margin-bottom:16px;}
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 12px;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px;}
+  .hint.warn{color:var(--danger);}
+
+  .field{display:flex;flex-direction:column;gap:5px;min-width:0;}
+  .field label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  select,input[type=text],input[type=date],textarea{
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel-2);width:100%;}
+  select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent);}
+  textarea{resize:vertical;min-height:76px;line-height:1.5;font-family:var(--sans);}
+
+  .row{display:grid;gap:12px;}
+  .row.cols2{grid-template-columns:1fr 1fr;}
+  .row.cols4{grid-template-columns:repeat(4,1fr);}
+  .row + .row{margin-top:12px;}
+
+  .name-row{display:flex;gap:8px;align-items:flex-end;}
+  .name-row .field{flex:1;}
+
+  .legend{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;}
+  .legend h4{margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .legend ul{margin:0;padding:0;list-style:none;font-size:12.5px;line-height:1.85;color:var(--ink);}
+  .legend b{font-family:var(--mono);color:var(--board);margin-right:5px;}
+
+  @media (max-width:560px){ .row.cols2,.row.cols4{grid-template-columns:1fr 1fr;} .legend{grid-template-columns:1fr;} }
+
+  /* toast */
+  .toast-wrap{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:1000;
+    display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .toast{background:var(--ink);color:#fff;padding:10px 15px;border-radius:10px;font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,560px);
+    border-left:3px solid var(--accent);animation:tin .2s ease both;}
+  .toast.err{border-left-color:var(--danger);}
+  .toast.ok{border-left-color:var(--ok);}
+  @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  @media (prefers-reduced-motion:reduce){ .btn:active{transform:none;} *{scroll-behavior:auto;} .toast{animation:none;} }
+</style>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>EAL Benchmark <small>PDF template</small></div>
+    <div class="spacer"></div>
+    <span class="progress-pill" id="progressPill" hidden></span>
+    <button class="btn" id="clearBtn"><span class="ic">↺</span>Clear form</button>
+    <button class="btn primary" id="downloadBtn" disabled><span class="ic">⭳</span>Download PDF</button>
+  </header>
+
+  <main class="wrap">
+
+    <section class="card">
+      <h3 class="section-title">Student</h3>
+      <div class="row cols2">
+        <div class="field">
+          <label for="classSelect">Class</label>
+          <select id="classSelect"></select>
+        </div>
+        <div class="field">
+          <label for="studentSelect">From class list</label>
+          <select id="studentSelect"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="name-row">
+          <div class="field">
+            <label for="nameInput">Legal student name (first &amp; last)</label>
+            <input type="text" id="nameInput" autocomplete="off" placeholder="e.g. Ada Lovelace">
+          </div>
+          <button class="btn small" id="addToClassBtn" title="Add this name to the selected class list">＋ Add to class</button>
+        </div>
+      </div>
+      <p class="hint" id="studentHint"></p>
+    </section>
+
+    <section class="card">
+      <h3 class="section-title">Details</h3>
+      <div class="row cols2">
+        <div class="field">
+          <label for="dateInput">Date</label>
+          <input type="date" id="dateInput">
+        </div>
+        <div class="field">
+          <label for="gradeSelect">Grade</label>
+          <select id="gradeSelect">
+            <option value="">—</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+          </select>
+        </div>
+      </div>
+      <div class="row cols2">
+        <div class="field">
+          <label for="asnInput">ASN</label>
+          <input type="text" id="asnInput" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="teacherInput">Teacher</label>
+          <input type="text" id="teacherInput" autocomplete="off">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="subjectInput">Subject</label>
+          <input type="text" id="subjectInput" autocomplete="off">
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3 class="section-title">Context</h3>
+      <textarea id="contextArea" spellcheck="true" placeholder="What was the student doing when this sample was collected?"></textarea>
+      <p class="hint" id="contextHint"></p>
+    </section>
+
+    <section class="card">
+      <h3 class="section-title">Annotation</h3>
+      <div class="row cols4">
+        <div class="field">
+          <label for="vocabLP">Vocabulary LP</label>
+          <select id="vocabLP"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+        </div>
+        <div class="field">
+          <label for="syntaxLP">Syntax LP</label>
+          <select id="syntaxLP"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+        </div>
+        <div class="field">
+          <label for="discourseLP">Discourse LP</label>
+          <select id="discourseLP"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+        </div>
+        <div class="field">
+          <label for="overallLP">Overall LP</label>
+          <select id="overallLP"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div>
+          <h4>Vocabulary</h4>
+          <ul>
+            <li><b>U</b>utility</li>
+            <li><b>D</b>descriptive</li>
+            <li><b>SS</b>subject specific</li>
+            <li><b>A</b>academic</li>
+            <li><b>MM</b>multiple meaning</li>
+          </ul>
+        </div>
+        <div>
+          <h4>Discourse</h4>
+          <ul>
+            <li><b>WF</b>word forms</li>
+            <li><b>CJN</b>conjunction</li>
+            <li><b>TM</b>time marker</li>
+            <li><b>SM</b>sequence marker</li>
+            <li><b>CD</b>cohesive devices</li>
+            <li><b>TW</b>transition word</li>
+          </ul>
+        </div>
+      </div>
+      <p class="hint">Printed on every PDF as a fixed reference — it isn't editable here.</p>
+    </section>
+
+    <section class="card">
+      <h3 class="section-title">Next steps</h3>
+      <textarea id="nextStepsArea" spellcheck="true" style="min-height:120px" placeholder="What should happen next for this student?"></textarea>
+      <p class="hint" id="nextStepsHint"></p>
+    </section>
+
+    <p class="hint">Nothing here is uploaded anywhere — the form autosaves to this browser only, and the PDF is built and downloaded locally.</p>
+  </main>
+
+  <div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const ROSTER_LS = 'teachingtools:rosters';
+  const DRAFT_LS  = 'teachingtools:ealBenchmark:draft';
+  const DONE_LS   = 'teachingtools:ealBenchmark:completed';
+
+  const els = {
+    classSelect:$('classSelect'), studentSelect:$('studentSelect'), studentHint:$('studentHint'),
+    nameInput:$('nameInput'), addToClassBtn:$('addToClassBtn'),
+    dateInput:$('dateInput'), gradeSelect:$('gradeSelect'), asnInput:$('asnInput'),
+    teacherInput:$('teacherInput'), subjectInput:$('subjectInput'),
+    contextArea:$('contextArea'), contextHint:$('contextHint'),
+    vocabLP:$('vocabLP'), syntaxLP:$('syntaxLP'), discourseLP:$('discourseLP'), overallLP:$('overallLP'),
+    nextStepsArea:$('nextStepsArea'), nextStepsHint:$('nextStepsHint'),
+    downloadBtn:$('downloadBtn'), clearBtn:$('clearBtn'), progressPill:$('progressPill'),
+  };
+
+  /* ---------- toast ---------- */
+  function toast(msg, kind){
+    const wrap = $('toastWrap');
+    const t = document.createElement('div');
+    t.className = 'toast' + (kind ? ' ' + kind : '');
+    t.textContent = msg;
+    wrap.appendChild(t);
+    setTimeout(()=>{ t.remove(); }, 3600);
+  }
+
+  /* ---------- shared class lists (read-only + best-effort append) ---------- */
+  let rosters = [];
+  function loadRosters(){
+    rosters = [];
+    try{
+      const d = JSON.parse(localStorage.getItem(ROSTER_LS) || 'null');
+      if(d && Array.isArray(d.classes)){
+        rosters = d.classes.map(c=>({
+          name: (c && c.name != null) ? String(c.name).trim() : '',
+          students: (c && Array.isArray(c.students)) ? c.students.map(s=>String(s).trim()).filter(Boolean) : []
+        })).filter(c=>c.name && c.students.length);
+      }
+    }catch(e){ /* unreadable — start empty */ }
+  }
+  function saveRosterAdd(className, studentName){
+    try{
+      const d = JSON.parse(localStorage.getItem(ROSTER_LS) || 'null');
+      const classes = (d && Array.isArray(d.classes)) ? d.classes : [];
+      const cls = classes.find(c=>c && (c.name||'').trim().toLowerCase() === className.toLowerCase());
+      if(!cls) return false;
+      if(!Array.isArray(cls.students)) cls.students = [];
+      if(cls.students.some(s=>String(s).trim().toLowerCase() === studentName.toLowerCase())) return true; // already there
+      cls.students.push(studentName);
+      localStorage.setItem(ROSTER_LS, JSON.stringify({
+        type:'teachingtools-rosters', version:1, source:'eal-benchmark', savedAt:Date.now(), classes
+      }));
+      return true;
+    }catch(e){ return false; }
+  }
+
+  /* ---------- per-student "downloaded" tracking (this tool only) ---------- */
+  function loadCompleted(){
+    try{ const a = JSON.parse(localStorage.getItem(DONE_LS) || '[]'); return Array.isArray(a) ? a : []; }
+    catch(e){ return []; }
+  }
+  function markCompleted(className, studentName){
+    try{
+      const list = loadCompleted();
+      list.push({ cls: className || '', name: studentName, at: Date.now() });
+      localStorage.setItem(DONE_LS, JSON.stringify(list.slice(-3000)));
+    }catch(e){ /* ignore */ }
+  }
+  function isCompleted(className, studentName){
+    return loadCompleted().some(r=>r.cls === (className||'') && r.name === studentName);
+  }
+
+  /* ---------- class / student pickers ---------- */
+  function renderClassSelect(){
+    const prev = els.classSelect.value;
+    els.classSelect.innerHTML = '';
+    const noneOpt = document.createElement('option');
+    noneOpt.value = ''; noneOpt.textContent = rosters.length ? '— Choose a class —' : 'No saved classes yet';
+    els.classSelect.appendChild(noneOpt);
+    rosters.forEach(c=>{
+      const o = document.createElement('option');
+      o.value = c.name; o.textContent = c.name + ' (' + c.students.length + ')';
+      els.classSelect.appendChild(o);
+    });
+    if(rosters.some(c=>c.name === prev)) els.classSelect.value = prev;
+  }
+  function currentClass(){
+    return rosters.find(c=>c.name === els.classSelect.value) || null;
+  }
+  function renderStudentSelect(){
+    const cls = currentClass();
+    els.studentSelect.innerHTML = '';
+    const opt0 = document.createElement('option');
+    opt0.value = ''; opt0.textContent = cls ? '— Choose a student —' : 'Pick a class first';
+    els.studentSelect.appendChild(opt0);
+    if(cls){
+      cls.students.slice().sort((a,b)=>a.localeCompare(b)).forEach(name=>{
+        const o = document.createElement('option');
+        o.value = name;
+        o.textContent = (isCompleted(cls.name, name) ? '✓ ' : '') + name;
+        els.studentSelect.appendChild(o);
+      });
+    }
+    els.studentSelect.disabled = !cls;
+    renderProgress();
+  }
+  function renderProgress(){
+    const cls = currentClass();
+    if(!cls || !cls.students.length){ els.progressPill.hidden = true; return; }
+    const done = cls.students.filter(n=>isCompleted(cls.name, n)).length;
+    els.progressPill.hidden = false;
+    els.progressPill.textContent = done + ' / ' + cls.students.length + ' downloaded';
+  }
+  function renderStudentHint(){
+    if(!rosters.length){
+      els.studentHint.textContent = 'No saved Class Lists on this device — type a name above, or add one on the Teaching Tools home page.';
+    }else{
+      els.studentHint.textContent = 'Not every student needs a form — pick one, fill it in, and download. Picking a student clears grade, ASN, context, LP scores and next steps from any previous entry.';
+    }
+  }
+
+  els.classSelect.addEventListener('change', ()=>{ renderStudentSelect(); updateAddBtn(); });
+  els.studentSelect.addEventListener('change', ()=>{
+    const name = els.studentSelect.value;
+    if(!name) return;
+    els.nameInput.value = name;
+    // A new student record — never carry over another student's per-student fields.
+    els.gradeSelect.value = '';
+    els.asnInput.value = '';
+    els.contextArea.value = '';
+    els.vocabLP.value = ''; els.syntaxLP.value = ''; els.discourseLP.value = ''; els.overallLP.value = '';
+    els.nextStepsArea.value = '';
+    onAnyInput();
+  });
+  els.nameInput.addEventListener('input', updateAddBtn);
+  function updateAddBtn(){
+    const cls = currentClass();
+    const name = els.nameInput.value.trim();
+    const already = cls && cls.students.some(s=>s.toLowerCase() === name.toLowerCase());
+    els.addToClassBtn.disabled = !cls || !name || already;
+    els.addToClassBtn.title = !cls ? 'Choose a class first' : already ? 'Already in this class' : 'Add this name to the selected class list';
+  }
+  els.addToClassBtn.addEventListener('click', ()=>{
+    const cls = currentClass();
+    const name = els.nameInput.value.trim();
+    if(!cls || !name) return;
+    if(saveRosterAdd(cls.name, name)){
+      loadRosters(); renderClassSelect(); els.classSelect.value = cls.name; renderStudentSelect();
+      els.studentSelect.value = name;
+      toast('Added “' + name + '” to ' + cls.name + '.', 'ok');
+    }else{
+      toast('Could not save to the class list.', 'err');
+    }
+    updateAddBtn();
+  });
+
+  /* ---------- text measuring / wrapping (shared by the on-screen hints and the PDF) ---------- */
+  const _measureCanvas = document.createElement('canvas');
+  const _measureCtx = _measureCanvas.getContext('2d');
+  function measure(sizePx, bold){
+    _measureCtx.font = (bold ? 'bold ' : '') + sizePx + 'px Helvetica, Arial, sans-serif';
+    return _measureCtx;
+  }
+  function wrapParagraphs(text, maxWidth, sizePx, bold){
+    const ctx = measure(sizePx, bold);
+    const paras = String(text || '').replace(/\r\n/g, '\n').split('\n');
+    const lines = [];
+    paras.forEach(p=>{
+      const words = p.split(/\s+/).filter(Boolean);
+      if(!words.length){ lines.push(''); return; }
+      let cur = '';
+      words.forEach(w=>{
+        const test = cur ? cur + ' ' + w : w;
+        if(cur && ctx.measureText(test).width > maxWidth){ lines.push(cur); cur = w; }
+        else cur = test;
+      });
+      if(cur) lines.push(cur);
+    });
+    return lines;
+  }
+
+  const BOX = { width: 504, size: 10 };
+  const CONTEXT_MAX_LINES = 5;
+  const NEXTSTEPS_MAX_LINES = 13;
+
+  function updateBoxHint(textarea, hintEl, maxLines){
+    const lines = wrapParagraphs(textarea.value, BOX.width, BOX.size, false);
+    const over = lines.length - maxLines;
+    if(!textarea.value.trim()){
+      hintEl.textContent = 'Fits the printed box (' + maxLines + ' lines available).';
+      hintEl.className = 'hint';
+    }else if(over > 0){
+      hintEl.textContent = 'Longer than the printed box — the last ' + over + ' line' + (over===1?'':'s') + ' will be trimmed on download.';
+      hintEl.className = 'hint warn';
+    }else{
+      hintEl.textContent = lines.length + ' of ' + maxLines + ' lines used.';
+      hintEl.className = 'hint';
+    }
+  }
+
+  /* ---------- name / date parsing ---------- */
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function parseISODate(v){
+    if(!v) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if(!m) return null;
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  function formatDateLong(dt){ return MONTHS[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear(); }
+  function formatDateFile(dt){ return MONTHS[dt.getMonth()] + ' ' + dt.getDate() + ' ' + dt.getFullYear(); }
+  function nameParts(full){
+    const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+    if(!parts.length) return null;
+    return { first: parts[0], last: parts[parts.length - 1] };
+  }
+  function safeToken(s){ return String(s || '').toUpperCase().replace(/[^A-Z-]/g, ''); }
+  function buildFilename(){
+    const np = nameParts(els.nameInput.value);
+    const dt = parseISODate(els.dateInput.value);
+    if(!np || !dt) return null;
+    const last = safeToken(np.last);
+    const initial = safeToken(np.first).charAt(0);
+    if(!last || !initial) return null;
+    return last + initial + ' ' + formatDateFile(dt) + '.pdf';
+  }
+
+  /* ---------- validation ---------- */
+  function validate(){
+    const missing = [];
+    if(!nameParts(els.nameInput.value)) missing.push('student name');
+    if(!parseISODate(els.dateInput.value)) missing.push('date');
+    return missing;
+  }
+  function refreshValidity(){
+    const missing = validate();
+    els.downloadBtn.disabled = missing.length > 0;
+    els.downloadBtn.title = missing.length ? 'Missing: ' + missing.join(', ') : '';
+  }
+
+  /* ---------- PDF generation (hand-built, no library — Helvetica is a standard PDF font) ---------- */
+  const PAGE_W = 612, PAGE_H = 792, MX = 54, RX = 558;
+
+  function pdfEscape(s){ return String(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
+  function toLatin1(s){
+    return String(s)
+      .replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-')
+      .split('').map(ch => (ch.charCodeAt(0) <= 255 ? ch : '?')).join('');
+  }
+  function bytesToBlob(str){
+    const arr = new Uint8Array(str.length);
+    for(let i = 0; i < str.length; i++) arr[i] = str.charCodeAt(i) & 0xFF;
+    return new Blob([arr], { type: 'application/pdf' });
+  }
+
+  function buildContentStream(v){
+    const ops = [];
+    function text(x, topY, s, size, bold, gray){
+      const y = PAGE_H - topY;
+      if(gray != null) ops.push(gray + ' g');
+      ops.push('BT /' + (bold ? 'F2' : 'F1') + ' ' + size + ' Tf ' + x.toFixed(2) + ' ' + y.toFixed(2) +
+        ' Td (' + pdfEscape(toLatin1(s)) + ') Tj ET');
+      if(gray != null) ops.push('0 g');
+    }
+    function centeredText(topY, s, size, bold, gray){
+      const w = measure(size, bold).measureText(s).width;
+      text((PAGE_W - w) / 2, topY, s, size, bold, gray);
+    }
+    function rightText(rightX, topY, s, size, bold, gray){
+      const w = measure(size, bold).measureText(s).width;
+      text(rightX - w, topY, s, size, bold, gray);
+    }
+    function rule(x1, topY, x2, gray){
+      const y = PAGE_H - topY;
+      ops.push((gray != null ? gray : 0) + ' G');
+      ops.push('0.75 w ' + x1.toFixed(2) + ' ' + y.toFixed(2) + ' m ' + x2.toFixed(2) + ' ' + y.toFixed(2) + ' l S');
+      ops.push('0 G');
+    }
+    function box(x, topY, w, h, gray){
+      const y = PAGE_H - topY - h;
+      ops.push((gray != null ? gray : 0) + ' G');
+      ops.push('0.75 w ' + x.toFixed(2) + ' ' + y.toFixed(2) + ' ' + w.toFixed(2) + ' ' + h.toFixed(2) + ' re S');
+      ops.push('0 G');
+    }
+    function labelValue(x, topY, label, value, size){
+      size = size || 10.5;
+      const labelStr = label + ': ';
+      text(x, topY, labelStr, size, true);
+      const w = measure(size, true).measureText(labelStr).width;
+      text(x + w, topY, value || '—', size, false);
+    }
+    function wrappedBox(x, topY, w, h, value, maxLines){
+      box(x, topY, w, h, 0.8);
+      const lines = wrapParagraphs(value, w - 16, 10, false).slice(0, maxLines);
+      const show = lines.length ? lines : ['—'];
+      show.forEach((line, i) => text(x + 8, topY + 14 + i * 13, line, 10, false));
+    }
+
+    centeredText(56, 'Div 3 Annotation Template', 18, true);
+    centeredText(76, 'EAL Benchmark · Division 3', 10, false, 0.45);
+    rule(MX, 90, RX, 0.75);
+
+    labelValue(MX, 112, 'Date', v.dateLabel);
+    labelValue(MX, 136, 'Legal Student Name (First & Last)', v.name);
+    labelValue(MX, 160, 'Grade', v.grade);
+    labelValue(MX, 184, 'ASN', v.asn);
+    labelValue(MX, 208, 'Teacher', v.teacher);
+    labelValue(MX, 232, 'Subject', v.subject);
+
+    text(MX, 258, 'Context:', 10.5, true);
+    wrappedBox(MX, 266, RX - MX, 92, v.context, CONTEXT_MAX_LINES);
+
+    text(MX, 384, 'Annotating Legend Vocabulary', 11, true);
+    const legendLeft = [
+      ['Vocabulary:', true], ['U - utility'], ['D - descriptive'], ['SS - subject specific'],
+      ['A - academic'], ['MM - multiple meaning']
+    ];
+    const legendRight = [
+      ['Discourse:', true], ['WF - word forms'], ['CJN - conjunction'], ['TM - time marker'],
+      ['SM - sequence marker'], ['CD - cohesive devices'], ['TW - transition word']
+    ];
+    legendLeft.forEach((row, i) => text(MX, 402 + i * 13, row[0], 9.5, !!row[1]));
+    legendRight.forEach((row, i) => text(306, 402 + i * 13, row[0], 9.5, !!row[1]));
+
+    const lpX = [MX, 180, 306, 432];
+    labelValue(lpX[0], 508, 'Vocabulary LP', v.vocabLP, 10.5);
+    labelValue(lpX[1], 508, 'Syntax LP', v.syntaxLP, 10.5);
+    labelValue(lpX[2], 508, 'Discourse LP', v.discourseLP, 10.5);
+    labelValue(lpX[3], 508, 'Overall LP', v.overallLP, 10.5);
+
+    text(MX, 534, 'Next Steps:', 10.5, true);
+    wrappedBox(MX, 542, RX - MX, 188, v.nextSteps, NEXTSTEPS_MAX_LINES);
+
+    rightText(RX, 756, 'Generated ' + v.generatedLabel, 8, false, 0.5);
+    return ops.join('\n');
+  }
+
+  function buildPdf(contentStream){
+    const objects = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + PAGE_W + ' ' + PAGE_H + '] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
+      '<< /Length ' + contentStream.length + ' >>\nstream\n' + contentStream + '\nendstream'
+    ];
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    objects.forEach((body, idx) => {
+      offsets.push(pdf.length);
+      pdf += (idx + 1) + ' 0 obj\n' + body + '\nendobj\n';
+    });
+    const xrefStart = pdf.length;
+    let xref = 'xref\n0 ' + (objects.length + 1) + '\n0000000000 65535 f \n';
+    for(let i = 1; i <= objects.length; i++) xref += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+    pdf += xref;
+    pdf += 'trailer\n<< /Size ' + (objects.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + xrefStart + '\n%%EOF';
+    return pdf;
+  }
+
+  function collectValues(){
+    const dt = parseISODate(els.dateInput.value);
+    const now = new Date();
+    return {
+      dateLabel: dt ? formatDateLong(dt) : '',
+      name: els.nameInput.value.trim(),
+      grade: els.gradeSelect.value,
+      asn: els.asnInput.value.trim(),
+      teacher: els.teacherInput.value.trim(),
+      subject: els.subjectInput.value.trim(),
+      context: els.contextArea.value,
+      vocabLP: els.vocabLP.value, syntaxLP: els.syntaxLP.value,
+      discourseLP: els.discourseLP.value, overallLP: els.overallLP.value,
+      nextSteps: els.nextStepsArea.value,
+      generatedLabel: formatDateLong(now) + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
+    };
+  }
+
+  els.downloadBtn.addEventListener('click', ()=>{
+    const missing = validate();
+    if(missing.length){ toast('Missing: ' + missing.join(', ') + '.', 'err'); return; }
+    const filename = buildFilename();
+    if(!filename){ toast('Enter the student’s first and last name, and a date.', 'err'); return; }
+    const v = collectValues();
+    const pdfStr = buildPdf(buildContentStream(v));
+    const blob = bytesToBlob(pdfStr);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+
+    const cls = currentClass();
+    markCompleted(cls ? cls.name : '', els.nameInput.value.trim());
+    renderStudentSelect();
+    toast('Downloaded ' + filename, 'ok');
+  });
+
+  /* ---------- clear / autosave ---------- */
+  function fieldEls(){
+    return [els.nameInput, els.dateInput, els.gradeSelect, els.asnInput, els.teacherInput, els.subjectInput,
+      els.contextArea, els.vocabLP, els.syntaxLP, els.discourseLP, els.overallLP, els.nextStepsArea];
+  }
+  function hasAnyValue(){ return fieldEls().some(el => (el.value || '').trim()); }
+
+  els.clearBtn.addEventListener('click', ()=>{
+    if(hasAnyValue() && !confirm('Clear every field on this form?')) return;
+    fieldEls().forEach(el => { el.value = ''; });
+    els.classSelect.value = ''; renderStudentSelect();
+    els.dateInput.value = todayISO();
+    onAnyInput();
+  });
+
+  function todayISO(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  function saveDraft(){
+    try{
+      const draft = {};
+      fieldEls().forEach(el => { draft[el.id] = el.value; });
+      draft.classSelect = els.classSelect.value;
+      localStorage.setItem(DRAFT_LS, JSON.stringify(draft));
+    }catch(e){ /* storage unavailable / full — ignore */ }
+  }
+  function loadDraft(){
+    try{
+      const d = JSON.parse(localStorage.getItem(DRAFT_LS) || 'null');
+      if(!d) return false;
+      fieldEls().forEach(el => { if(d[el.id] != null) el.value = d[el.id]; });
+      if(d.classSelect) els.classSelect.value = d.classSelect;
+      return true;
+    }catch(e){ return false; }
+  }
+
+  function onAnyInput(){
+    updateBoxHint(els.contextArea, els.contextHint, CONTEXT_MAX_LINES);
+    updateBoxHint(els.nextStepsArea, els.nextStepsHint, NEXTSTEPS_MAX_LINES);
+    refreshValidity();
+    updateAddBtn();
+    saveDraft();
+  }
+  fieldEls().forEach(el => el.addEventListener('input', onAnyInput));
+  fieldEls().forEach(el => el.addEventListener('change', onAnyInput));
+
+  /* ---------- init ---------- */
+  loadRosters();
+  renderClassSelect();
+  loadDraft();
+  renderStudentSelect();
+  renderStudentHint();
+  if(!els.dateInput.value) els.dateInput.value = todayISO();
+  onAnyInput();
+})();
+</script>
+</body>
+</html>
