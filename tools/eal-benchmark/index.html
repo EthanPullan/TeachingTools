@@ -80,6 +80,11 @@
   .legend ul{margin:0;padding:0;list-style:none;font-size:12.5px;line-height:1.85;color:var(--ink);}
   .legend b{font-family:var(--mono);color:var(--board);margin-right:5px;}
 
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:7px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);}
+  .seg button:not(:first-child){border-left:1px solid var(--line);}
+  .seg button.active{background:var(--board);color:#fff;}
+
   @media (max-width:560px){ .row.cols2,.row.cols4{grid-template-columns:1fr 1fr;} .legend{grid-template-columns:1fr;} }
 
   /* toast */
@@ -105,6 +110,15 @@
   </header>
 
   <main class="wrap">
+
+    <section class="card">
+      <h3 class="section-title">Division</h3>
+      <div class="seg" id="divisionSeg" role="group" aria-label="Division">
+        <button type="button" data-division="2">Division 2</button>
+        <button type="button" data-division="3">Division 3</button>
+      </div>
+      <p class="hint">Sets the grade options and the title printed on the PDF — <span id="divisionTitlePreview"></span>.</p>
+    </section>
 
     <section class="card">
       <h3 class="section-title">Student</h3>
@@ -236,6 +250,7 @@
   const DONE_LS   = 'teachingtools:ealBenchmark:completed';
 
   const els = {
+    divisionSeg:$('divisionSeg'), divisionTitlePreview:$('divisionTitlePreview'),
     classSelect:$('classSelect'), studentSelect:$('studentSelect'), studentHint:$('studentHint'),
     nameInput:$('nameInput'), addToClassBtn:$('addToClassBtn'),
     dateInput:$('dateInput'), gradeSelect:$('gradeSelect'), asnInput:$('asnInput'),
@@ -245,6 +260,33 @@
     nextStepsArea:$('nextStepsArea'), nextStepsHint:$('nextStepsHint'),
     downloadBtn:$('downloadBtn'), clearBtn:$('clearBtn'), progressPill:$('progressPill'),
   };
+
+  /* ---------- division (the two source templates only differ by title + grade band) ---------- */
+  const DIVISIONS = {
+    '2': { label: 'Division 2', title: 'Div 2 Annotation Template', grades: ['6', '7'] },
+    '3': { label: 'Division 3', title: 'Div 3 Annotation Template', grades: ['8', '9'] },
+  };
+  let division = '3';
+
+  function renderDivision(){
+    els.divisionSeg.querySelectorAll('button').forEach(b=>{
+      b.classList.toggle('active', b.dataset.division === division);
+    });
+    els.divisionTitlePreview.textContent = '“' + DIVISIONS[division].title + '”';
+
+    const grades = DIVISIONS[division].grades;
+    const prev = els.gradeSelect.value;
+    els.gradeSelect.innerHTML = '<option value="">—</option>' +
+      grades.map(g => '<option>' + g + '</option>').join('');
+    els.gradeSelect.value = grades.includes(prev) ? prev : '';
+  }
+  els.divisionSeg.addEventListener('click', e=>{
+    const btn = e.target.closest('button[data-division]');
+    if(!btn || btn.dataset.division === division) return;
+    division = btn.dataset.division;
+    renderDivision();
+    onAnyInput();
+  });
 
   /* ---------- toast ---------- */
   function toast(msg, kind){
@@ -539,8 +581,8 @@
       wrappedText(x + 8, topY + 14, w - 16, value, maxLines);
     }
 
-    centeredText(50, 'Div 3 Annotation Template', 17, true);
-    centeredText(68, 'EAL Benchmark · Division 3', 10, false, 0.45);
+    centeredText(50, v.divisionTitle, 17, true);
+    centeredText(68, 'EAL Benchmark · ' + v.divisionLabel, 10, false, 0.45);
 
     // Table 1 — the same two-column layout as the source form: student
     // details + context on the left, the annotation legend on the right.
@@ -618,6 +660,8 @@
     const dt = parseISODate(els.dateInput.value);
     const now = new Date();
     return {
+      divisionTitle: DIVISIONS[division].title,
+      divisionLabel: DIVISIONS[division].label,
       dateLabel: dt ? formatDateLong(dt) : '',
       name: els.nameInput.value.trim(),
       grade: els.gradeSelect.value,
@@ -677,6 +721,7 @@
       const draft = {};
       fieldEls().forEach(el => { draft[el.id] = el.value; });
       draft.classSelect = els.classSelect.value;
+      draft.division = division;
       localStorage.setItem(DRAFT_LS, JSON.stringify(draft));
     }catch(e){ /* storage unavailable / full — ignore */ }
   }
@@ -684,6 +729,8 @@
     try{
       const d = JSON.parse(localStorage.getItem(DRAFT_LS) || 'null');
       if(!d) return false;
+      if(d.division && DIVISIONS[d.division]) division = d.division;
+      renderDivision(); // rebuild the grade options for the restored division before restoring its value
       fieldEls().forEach(el => { if(d[el.id] != null) el.value = d[el.id]; });
       if(d.classSelect) els.classSelect.value = d.classSelect;
       return true;
@@ -703,6 +750,7 @@
   /* ---------- init ---------- */
   loadRosters();
   renderClassSelect();
+  renderDivision();
   loadDraft();
   renderStudentSelect();
   renderStudentHint();
