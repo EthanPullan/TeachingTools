@@ -411,12 +411,14 @@
     return lines;
   }
 
-  const BOX = { width: 504, size: 10 };
+  const BOX_SIZE = 10;
+  const CONTEXT_WIDTH = 262;      // Context sits in the narrower left column, beside the legend table
+  const NEXTSTEPS_WIDTH = 488;    // Next Steps runs the full page width, below both tables
   const CONTEXT_MAX_LINES = 5;
-  const NEXTSTEPS_MAX_LINES = 13;
+  const NEXTSTEPS_MAX_LINES = 24;
 
-  function updateBoxHint(textarea, hintEl, maxLines){
-    const lines = wrapParagraphs(textarea.value, BOX.width, BOX.size, false);
+  function updateBoxHint(textarea, hintEl, maxLines, width){
+    const lines = wrapParagraphs(textarea.value, width, BOX_SIZE, false);
     const over = lines.length - maxLines;
     if(!textarea.value.trim()){
       hintEl.textContent = 'Fits the printed box (' + maxLines + ' lines available).';
@@ -513,6 +515,12 @@
       ops.push('0.75 w ' + x.toFixed(2) + ' ' + y.toFixed(2) + ' ' + w.toFixed(2) + ' ' + h.toFixed(2) + ' re S');
       ops.push('0 G');
     }
+    function vLine(x, topY, h, gray){
+      const y = PAGE_H - topY - h;
+      ops.push((gray != null ? gray : 0) + ' G');
+      ops.push('0.75 w ' + x.toFixed(2) + ' ' + y.toFixed(2) + ' m ' + x.toFixed(2) + ' ' + (y + h).toFixed(2) + ' l S');
+      ops.push('0 G');
+    }
     function labelValue(x, topY, label, value, size){
       size = size || 10.5;
       const labelStr = label + ': ';
@@ -520,28 +528,39 @@
       const w = measure(size, true).measureText(labelStr).width;
       text(x + w, topY, value || '—', size, false);
     }
+    function wrappedText(x, topY, w, value, maxLines, size){
+      size = size || 10;
+      const lines = wrapParagraphs(value, w, size, false).slice(0, maxLines);
+      const show = lines.length ? lines : ['—'];
+      show.forEach((line, i) => text(x, topY + i * 13, line, size, false));
+    }
     function wrappedBox(x, topY, w, h, value, maxLines){
       box(x, topY, w, h, 0.8);
-      const lines = wrapParagraphs(value, w - 16, 10, false).slice(0, maxLines);
-      const show = lines.length ? lines : ['—'];
-      show.forEach((line, i) => text(x + 8, topY + 14 + i * 13, line, 10, false));
+      wrappedText(x + 8, topY + 14, w - 16, value, maxLines);
     }
 
-    centeredText(56, 'Div 3 Annotation Template', 18, true);
-    centeredText(76, 'EAL Benchmark · Division 3', 10, false, 0.45);
-    rule(MX, 90, RX, 0.75);
+    centeredText(50, 'Div 3 Annotation Template', 17, true);
+    centeredText(68, 'EAL Benchmark · Division 3', 10, false, 0.45);
 
-    labelValue(MX, 112, 'Date', v.dateLabel);
-    labelValue(MX, 136, 'Legal Student Name (First & Last)', v.name);
-    labelValue(MX, 160, 'Grade', v.grade);
-    labelValue(MX, 184, 'ASN', v.asn);
-    labelValue(MX, 208, 'Teacher', v.teacher);
-    labelValue(MX, 232, 'Subject', v.subject);
+    // Table 1 — the same two-column layout as the source form: student
+    // details + context on the left, the annotation legend on the right.
+    const T1_TOP = 84, T1_BOTTOM = 330, T1_DIVIDER = 336;
+    box(MX, T1_TOP, RX - MX, T1_BOTTOM - T1_TOP, 0);
+    vLine(T1_DIVIDER, T1_TOP, T1_BOTTOM - T1_TOP, 0);
 
-    text(MX, 258, 'Context:', 10.5, true);
-    wrappedBox(MX, 266, RX - MX, 92, v.context, CONTEXT_MAX_LINES);
+    const leftX = MX + 10, leftRight = T1_DIVIDER - 10;
+    labelValue(leftX, 102, 'Date', v.dateLabel, 10);
+    text(leftX, 124, 'Legal Student Name (First & Last):', 10, true);
+    text(leftX, 136, v.name || '—', 10, false);
+    labelValue(leftX, 156, 'Grade', v.grade, 10);
+    labelValue(leftX, 176, 'ASN', v.asn, 10);
+    labelValue(leftX, 196, 'Teacher', v.teacher, 10);
+    labelValue(leftX, 216, 'Subject', v.subject, 10);
+    text(leftX, 240, 'Context:', 10, true);
+    wrappedText(leftX, 254, leftRight - leftX, v.context, CONTEXT_MAX_LINES, 10);
 
-    text(MX, 384, 'Annotating Legend Vocabulary', 11, true);
+    const rightX = T1_DIVIDER + 10;
+    text(rightX, 102, 'Annotating Legend Vocabulary', 10, true);
     const legendLeft = [
       ['Vocabulary:', true], ['U - utility'], ['D - descriptive'], ['SS - subject specific'],
       ['A - academic'], ['MM - multiple meaning']
@@ -550,17 +569,23 @@
       ['Discourse:', true], ['WF - word forms'], ['CJN - conjunction'], ['TM - time marker'],
       ['SM - sequence marker'], ['CD - cohesive devices'], ['TW - transition word']
     ];
-    legendLeft.forEach((row, i) => text(MX, 402 + i * 13, row[0], 9.5, !!row[1]));
-    legendRight.forEach((row, i) => text(306, 402 + i * 13, row[0], 9.5, !!row[1]));
+    legendLeft.forEach((row, i) => text(rightX, 120 + i * 12, row[0], 9, !!row[1]));
+    legendRight.forEach((row, i) => text(rightX, 200 + i * 12, row[0], 9, !!row[1]));
 
-    const lpX = [MX, 180, 306, 432];
-    labelValue(lpX[0], 508, 'Vocabulary LP', v.vocabLP, 10.5);
-    labelValue(lpX[1], 508, 'Syntax LP', v.syntaxLP, 10.5);
-    labelValue(lpX[2], 508, 'Discourse LP', v.discourseLP, 10.5);
-    labelValue(lpX[3], 508, 'Overall LP', v.overallLP, 10.5);
+    // Table 2 — the four-column Language Proficiency score row.
+    const T2_TOP = 344, T2_BOTTOM = 372;
+    const lpX = [MX, 180, 306, 432, RX];
+    box(MX, T2_TOP, RX - MX, T2_BOTTOM - T2_TOP, 0);
+    vLine(lpX[1], T2_TOP, T2_BOTTOM - T2_TOP, 0);
+    vLine(lpX[2], T2_TOP, T2_BOTTOM - T2_TOP, 0);
+    vLine(lpX[3], T2_TOP, T2_BOTTOM - T2_TOP, 0);
+    labelValue(lpX[0] + 8, 362, 'Vocabulary LP', v.vocabLP, 9.5);
+    labelValue(lpX[1] + 8, 362, 'Syntax LP', v.syntaxLP, 9.5);
+    labelValue(lpX[2] + 8, 362, 'Discourse LP', v.discourseLP, 9.5);
+    labelValue(lpX[3] + 8, 362, 'Overall LP', v.overallLP, 9.5);
 
-    text(MX, 534, 'Next Steps:', 10.5, true);
-    wrappedBox(MX, 542, RX - MX, 188, v.nextSteps, NEXTSTEPS_MAX_LINES);
+    text(MX, 396, 'Next Steps:', 10.5, true);
+    wrappedBox(MX, 404, RX - MX, 326, v.nextSteps, NEXTSTEPS_MAX_LINES);
 
     rightText(RX, 756, 'Generated ' + v.generatedLabel, 8, false, 0.5);
     return ops.join('\n');
@@ -666,8 +691,8 @@
   }
 
   function onAnyInput(){
-    updateBoxHint(els.contextArea, els.contextHint, CONTEXT_MAX_LINES);
-    updateBoxHint(els.nextStepsArea, els.nextStepsHint, NEXTSTEPS_MAX_LINES);
+    updateBoxHint(els.contextArea, els.contextHint, CONTEXT_MAX_LINES, CONTEXT_WIDTH);
+    updateBoxHint(els.nextStepsArea, els.nextStepsHint, NEXTSTEPS_MAX_LINES, NEXTSTEPS_WIDTH);
     refreshValidity();
     updateAddBtn();
     saveDraft();
