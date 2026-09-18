@@ -95,6 +95,10 @@
   .rubric .rowlab span{display:block;font-weight:400;font-size:8.5px;margin-top:3px;}
   .rubric td p{margin:0 0 1px;}
   .rubric td ul{margin:0 0 1px;padding-left:11px;}
+  .rubric td.date{padding:2px;}
+  .rubric .date-in{width:100%;border:none;background:transparent;border-bottom:1px solid #b9c2dd;
+    border-radius:0;padding:1px 2px;font-size:9px;font-family:var(--sans);text-align:center;color:#000;}
+  .rubric .date-in:focus{outline:none;background:#fff;border-bottom-color:var(--accent);}
 
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
   .seg button{border:none;background:#fff;padding:7px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);}
@@ -133,7 +137,6 @@
         <button type="button" data-division="2">Division 2</button>
         <button type="button" data-division="3">Division 3</button>
       </div>
-      <p class="hint">Sets the grade options and the title printed on the PDF — <span id="divisionTitlePreview"></span>.</p>
     </section>
 
     <section class="card">
@@ -157,7 +160,6 @@
           <button class="btn small" id="addToClassBtn" title="Add this name to the selected class list">＋ Add to class</button>
         </div>
       </div>
-      <p class="hint" id="studentHint"></p>
     </section>
 
     <section class="card">
@@ -244,12 +246,10 @@
           </ul>
         </div>
       </div>
-      <p class="hint">Printed on every PDF as a fixed reference — it isn't editable here.</p>
     </section>
 
     <section class="card">
       <h3 class="section-title">Writing rubric</h3>
-      <p class="hint" id="rubricCaption" style="margin-top:0"></p>
       <div class="rubric-wrap"><table class="rubric" id="rubricTable"></table></div>
     </section>
 
@@ -272,8 +272,7 @@
   const DONE_LS   = 'teachingtools:ealBenchmark:completed';
 
   const els = {
-    divisionSeg:$('divisionSeg'), divisionTitlePreview:$('divisionTitlePreview'),
-    rubricCaption:$('rubricCaption'), rubricTable:$('rubricTable'),
+    divisionSeg:$('divisionSeg'), rubricTable:$('rubricTable'),
     classPickers:$('classPickers'), classSelect:$('classSelect'), studentSelect:$('studentSelect'),
     studentHint:$('studentHint'),
     nameInput:$('nameInput'), addToClassBtn:$('addToClassBtn'),
@@ -289,10 +288,12 @@
      The Div 2 and Div 3 source forms are identical apart from the title, the
      grade band, and the writing rubric table at the bottom of the page. */
   const DIVISIONS = {
-    '2': { title: 'Div 2 Annotation Template', grades: ['6', '7'], rubric: 'Writing rubric — Grades 4–6' },
-    '3': { title: 'Div 3 Annotation Template', grades: ['8', '9'], rubric: 'Writing rubric — Grades 7–9' },
+    '2': { title: 'Div 2 Annotation Template', grades: ['6', '7'] },
+    '3': { title: 'Div 3 Annotation Template', grades: ['8', '9'] },
   };
   let division = '3';
+  // Dates pencilled into the rubric's DATE columns, keyed "<row>-<level>".
+  let rubricDates = {};
 
   /* The writing rubric from the bottom of each source form, transcribed cell by
      cell so it can be drawn as a real table — vector text in the PDF, an HTML
@@ -383,9 +384,6 @@
     els.divisionSeg.querySelectorAll('button').forEach(b=>{
       b.classList.toggle('active', b.dataset.division === division);
     });
-    els.divisionTitlePreview.textContent = '“' + DIVISIONS[division].title + '”';
-    els.rubricCaption.textContent = DIVISIONS[division].rubric + ' · printed on the PDF exactly as it appears on the paper template.';
-
     const grades = DIVISIONS[division].grades;
     const prev = els.gradeSelect.value;
     els.gradeSelect.innerHTML = '<option value="">—</option>' +
@@ -439,7 +437,7 @@
     table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
-    r.rows.forEach(row => {
+    r.rows.forEach((row, ri) => {
       const tr = tbody.insertRow();
       const lab = document.createElement('th');
       lab.className = 'rowlab';
@@ -448,7 +446,7 @@
       sub.textContent = row.sub;
       lab.appendChild(sub);
       tr.appendChild(lab);
-      row.cells.forEach(cell => {
+      row.cells.forEach((cell, ci) => {
         const td = tr.insertCell();
         let list = null;
         cell.forEach(para => {
@@ -463,6 +461,16 @@
         });
         const date = tr.insertCell();
         date.className = 'date';
+        const key = ri + '-' + ci;
+        const input = document.createElement('input');
+        input.type = 'text'; input.className = 'date-in'; input.value = rubricDates[key] || '';
+        input.setAttribute('aria-label', row.label + ', ' + LEVELS[ci][0] + ' date');
+        input.addEventListener('input', ()=>{
+          const val = input.value.trim();
+          if(val) rubricDates[key] = val; else delete rubricDates[key];
+          saveDraft();
+        });
+        date.appendChild(input);
       });
     });
     table.appendChild(tbody);
@@ -567,13 +575,10 @@
   }
   /* With no saved Class Lists the pickers are hidden rather than shown empty, so
      a copy of this file passed to someone else is just "type the name". */
-  function renderStudentHint(){
+  function renderRosterUi(){
     const hasRosters = rosters.length > 0;
     els.classPickers.hidden = !hasRosters;
     els.addToClassBtn.hidden = !hasRosters;
-    els.studentHint.textContent = hasRosters
-      ? 'Not every student needs a form — pick one, fill it in, and download. Picking a student clears grade, ASN, context, LP scores and next steps from any previous entry.'
-      : 'Not every student needs a form — type a name, fill it in, and download.';
   }
 
   els.classSelect.addEventListener('change', ()=>{ renderStudentSelect(); updateAddBtn(); });
@@ -587,6 +592,7 @@
     els.contextArea.value = '';
     els.vocabLP.value = ''; els.syntaxLP.value = ''; els.discourseLP.value = ''; els.overallLP.value = '';
     els.nextStepsArea.value = '';
+    rubricDates = {}; renderRubricPreview();
     onAnyInput();
   });
   els.nameInput.addEventListener('input', updateAddBtn);
@@ -763,7 +769,7 @@
     /* The writing rubric, drawn on the source form's own grid: a coloured title
        bar, the LEVEL 1–5 / DATE header, the footnote, and three criterion rows.
        Body text is Times to match the original; headers are Helvetica. */
-    function drawRubric(r, x0, topY0, totalW, totalH){
+    function drawRubric(r, dates, x0, topY0, totalW, totalH){
       const LAB_W = 36, LVL_W = 69, DATE_W = 17.4;
       const H_BAR = 7, H_HEAD = 11.9, H_NOTE = 6.3, ROW_H = [94.8, 49.3, 69];
       const SIZE = 5.2, LEAD = 6.3, PAD = 2, DATE_FILL = [242, 244, 255];
@@ -809,6 +815,18 @@
         });
 
         row.cells.forEach((cell, ci) => {
+          const dateVal = dates[ri + '-' + ci];
+          if(dateVal){
+            // The DATE columns are narrow, so shrink anything too wide to fit.
+            const dw = DATE_W - 2 * PAD;
+            let ds = SIZE;
+            const widest = Math.max.apply(null, dateVal.split(/\s+/)
+              .map(word => measure(ds, false, true).measureText(word).width));
+            if(widest > dw) ds = Math.max(3.2, ds * dw / widest);
+            wrapParagraphs(dateVal, dw, ds, false, true).forEach((line, li) => {
+              text(colX[2 + ci * 2] + PAD, rowTop + PAD + ds + li * (ds + 1.2), line, ds, false, null, 'F3');
+            });
+          }
           const cellX = colX[1 + ci * 2];
           let cy = rowTop + PAD + SIZE;
           cell.forEach(para => {
@@ -900,7 +918,7 @@
     lpCell(311.4, LP_BASE, 'Discourse LP',  v.discourseLP, [0, 175, 239]);
     lpCell(428.4, LP_BASE, 'Overall LP',    v.overallLP, null);
 
-    drawRubric(RUBRICS[v.division], MX, 441.5, RX - MX, 238.3);
+    drawRubric(RUBRICS[v.division], v.dates, MX, 441.5, RX - MX, 238.3);
 
     text(MX, 682.6 + BL, 'Next Steps:', BODY, false);
     wrappedText(leftX, 705, 535 - leftX, v.nextSteps, NEXTSTEPS_MAX_LINES, BODY);
@@ -937,6 +955,7 @@
     const dt = parseISODate(els.dateInput.value);
     return {
       division: division,
+      dates: rubricDates,
       divisionTitle: DIVISIONS[division].title,
       dateLabel: dt ? formatDateLong(dt) : '',
       name: els.nameInput.value.trim(),
@@ -976,12 +995,15 @@
     return [els.nameInput, els.dateInput, els.gradeSelect, els.asnInput, els.teacherInput, els.subjectInput,
       els.contextArea, els.vocabLP, els.syntaxLP, els.discourseLP, els.overallLP, els.nextStepsArea];
   }
-  function hasAnyValue(){ return fieldEls().some(el => (el.value || '').trim()); }
+  function hasAnyValue(){
+    return fieldEls().some(el => (el.value || '').trim()) || Object.keys(rubricDates).length > 0;
+  }
 
   els.clearBtn.addEventListener('click', ()=>{
     if(hasAnyValue() && !confirm('Clear every field on this form?')) return;
     fieldEls().forEach(el => { el.value = ''; });
     els.classSelect.value = ''; renderStudentSelect();
+    rubricDates = {}; renderRubricPreview();
     els.dateInput.value = todayISO();
     onAnyInput();
   });
@@ -997,6 +1019,7 @@
       fieldEls().forEach(el => { draft[el.id] = el.value; });
       draft.classSelect = els.classSelect.value;
       draft.division = division;
+      draft.rubricDates = rubricDates;
       localStorage.setItem(DRAFT_LS, JSON.stringify(draft));
     }catch(e){ /* storage unavailable / full — ignore */ }
   }
@@ -1008,6 +1031,7 @@
       renderDivision(); // rebuild the grade options for the restored division before restoring its value
       fieldEls().forEach(el => { if(d[el.id] != null) el.value = d[el.id]; });
       if(d.classSelect) els.classSelect.value = d.classSelect;
+      if(d.rubricDates && typeof d.rubricDates === 'object'){ rubricDates = d.rubricDates; renderRubricPreview(); }
       return true;
     }catch(e){ return false; }
   }
@@ -1028,7 +1052,7 @@
   renderDivision();
   loadDraft();
   renderStudentSelect();
-  renderStudentHint();
+  renderRosterUi();
   if(!els.dateInput.value) els.dateInput.value = todayISO();
   onAnyInput();
 })();
