@@ -444,6 +444,11 @@
         var lo=Math.floor(r), hi=Math.ceil(r);
         return {q:'Square root is between', a:fmt(lo)+' and '+fmt(hi)};
       }},
+    {id:'sqrt1dp',cat:'pow',label:'Square root (1 d.p.)', gen:function(n){
+        if(n < 0) return null;
+        var r = Math.round(Math.sqrt(n)*10)/10;
+        return {q:'Square root to 1 decimal place', a:r.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1})};
+      }},
     {id:'recip',cat:'pow',label:'Its reciprocal', gen:function(n){ if(n===0) return null; return {q:'Its reciprocal is', a:'1⁄'+fmt(n)}; }},
     {id:'cuberoot',cat:'pow',label:'Cube root', gen:function(n){
         var r = Math.cbrt(n), ri = Math.round(r);
