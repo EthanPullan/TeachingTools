@@ -52,7 +52,7 @@
   .btn[disabled]{opacity:.45;cursor:not-allowed;}
 
   /* layout */
-  .wrap{max-width:760px;margin:0 auto;padding:22px 16px 60px;}
+  .wrap{max-width:880px;margin:0 auto;padding:22px 16px 60px;}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
     box-shadow:var(--shadow);padding:18px;margin-bottom:16px;}
   .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
@@ -84,7 +84,7 @@
   /* The writing rubric, matching the source form's own colours. */
   .rubric-wrap{margin-top:10px;border:1px solid var(--line);border-radius:9px;background:#fff;
     overflow-x:auto;padding:6px;}
-  .rubric{border-collapse:collapse;width:100%;min-width:1040px;table-layout:fixed;
+  .rubric{border-collapse:collapse;width:100%;min-width:960px;table-layout:fixed;
     font-size:9.5px;line-height:1.35;color:#000;}
   .rubric th,.rubric td{border:1px solid #333;padding:3px 4px;vertical-align:top;text-align:left;}
   .rubric .bar{color:#fff;text-align:center;font-size:11px;letter-spacing:.02em;padding:3px;}
@@ -104,6 +104,12 @@
   .seg button{border:none;background:#fff;padding:7px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);}
   .seg button:not(:first-child){border-left:1px solid var(--line);}
   .seg button.active{background:var(--board);color:#fff;}
+
+  /* The rubric is far wider than the form, so on a desktop it steps outside the
+     reading column and centres on the viewport instead of scrolling sideways. */
+  @media (min-width:1060px){
+    .card.wide{width:min(1400px,calc(100vw - 40px));position:relative;left:50%;transform:translateX(-50%);}
+  }
 
   @media (max-width:560px){ .row.cols2,.row.cols4{grid-template-columns:1fr 1fr;} .legend{grid-template-columns:1fr;} }
 
@@ -248,7 +254,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card wide">
       <h3 class="section-title">Writing rubric</h3>
       <div class="rubric-wrap"><table class="rubric" id="rubricTable"></table></div>
     </section>
