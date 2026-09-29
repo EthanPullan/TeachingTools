@@ -245,10 +245,12 @@
             <button class="btn small" type="button" data-act="addPoint">+ Point</button>
             <button class="btn small" type="button" data-act="addShape" data-kind="polygon">+ Polygon</button>
             <button class="btn small" type="button" data-act="addShape" data-kind="path">+ Line segments</button>
+            <button class="btn small" type="button" data-act="addTransform" title="Translate, reflect, rotate or dilate a shape or point; the image follows the original">+ Transformation</button>
             <button class="btn small" type="button" id="pasteBtn">Paste points from spreadsheet…</button>
           </div>
           <div id="pointsWrap"></div>
           <div id="shapesWrap"></div>
+          <div id="transformsWrap"></div>
           <p class="hint">You can also click on the graph: turn on “Click to add points” above the preview. Drag a point or a corner to move it. In the table, paste a block copied from Excel or Google Sheets into any cell (label, x, y or just x, y). Enter moves down. Red cells aren’t numbers and are left off the graph.</p>
         </section>
 
@@ -320,7 +322,7 @@
      kinds instead of growing one big function.
    Helpers marked "(from science)" are copied from tools/science-graph-maker.
    ========================================================================== */
-const SPEC_VERSION = 3;                                     // 2: equations, tables and related objects; 3: number lines (an older tool would silently drop what it does not know)
+const SPEC_VERSION = 4;                                     // 2: equations, tables and related objects; 3: number lines; 4: transformations (an older tool would silently drop what it does not know)
 const TOOL = 'math-graph-maker';
 
 /* ---------- constants ---------- */
@@ -348,8 +350,8 @@ const FORMAT_NAMES = { decimal: 'Decimals', fraction: 'Fractions and mixed numbe
 
 /* Show/hide tokens. `hidden` in the spec lists what the QUESTION version hides: these element tokens and/or object ids.
    The answer key always shows everything. */
-const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'notation', 'signs', 'results', 'objects'];
-const BLANK_TOKENS = ['title', 'xTitle', 'yTitle', 'units'];
+const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'aids', 'notation', 'signs', 'results', 'objects'];
+const BLANK_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'notation'];
 const SCAFFOLD_LEVELS = ['complete', 'labels', 'axes', 'blank'];
 const SCAFFOLD = {   // visibility presets over the same spec — not separate code paths
   complete: [],
@@ -972,7 +974,8 @@ function removeObject(spec, id) {
   });
 }
 const vertsOf = o => o.vertices.map((v, k) => ({ x: parseNum(v[0]), y: parseNum(v[1]), label: o.labels[k] || '', k })).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
-const objName = o => o.kind === 'point' ? 'Point' + (o.label ? ' ' + o.label : '')
+const objName = (o, all, depth) => o.kind === 'transform' ? HOW_NAMES[o.how] + ' of ' + ((() => { const s = all && o.of && (depth || 0) < 8 ? all.find(x => x.id === o.of) : null; return s ? objName(s, all, (depth || 0) + 1) : o.of || '…'; })())
+  : o.kind === 'point' ? 'Point' + (o.label ? ' ' + o.label : '')
   : o.kind === 'function' ? 'Equation ' + (o.expr.trim() || '(empty)')
   : o.kind === 'related' ? (o.rel === 'parallel' ? 'Parallel line' : 'Perpendicular line')
   : o.kind === 'nlpoint' ? 'Point ' + (o.label || (isBlank(o.at) ? '' : String(o.at)))
@@ -1387,6 +1390,13 @@ function readability(spec) {
     if (o.kind === 'point') {
       const x = parseNum(o.x), y = parseNum(o.y);
       if (isFin(x) && isFin(y) && insidePlane(x, y, A) && !(onG(x, A.ax) && onG(y, A.ay))) issues.push({ id: o.id, fix: 'snap', text: objName(o) + ' ' + at(x, y) + ' falls between gridlines.' });
+    } else if (o.kind === 'transform') {
+      if (!o.img) issues.push({ id: o.id, text: objName(o, spec.objects) + ': choose the shape or point to transform.' });
+      else if (!o.img.ok) issues.push({ id: o.id, text: objName(o, spec.objects) + ': fill in every setting (distance, mirror line, centre, angle or scale factor).' });
+      else {
+        const off = o.img.pts.filter(p => isFin(p.x) && isFin(p.y) && insidePlane(p.x, p.y, A) && !(onG(p.x, A.ax) && onG(p.y, A.ay)));
+        if (off.length) issues.push({ id: o.id, text: objName(o, spec.objects) + ': ' + off.length + ' corner' + (off.length === 1 ? '' : 's') + ' of the image (' + off.slice(0, 3).map(p => at(p.x, p.y)).join(', ') + (off.length > 3 ? ', …' : '') + ') fall between gridlines. Move the original or change the setting.' });
+      }
     } else if (o.kind === 'polygon' || o.kind === 'path') {
       const off = vertsOf(o).filter(p => insidePlane(p.x, p.y, A) && !(onG(p.x, A.ax) && onG(p.y, A.ay)));
       if (off.length) issues.push({ id: o.id, fix: 'snap', text: objName(o) + ': ' + off.length + ' corner' + (off.length === 1 ? '' : 's') + ' (' + off.slice(0, 3).map(p => at(p.x, p.y)).join(', ') + (off.length > 3 ? ', …' : '') + ') fall between gridlines.' });
@@ -1856,9 +1866,11 @@ function renderSVG(spec, o) {
   const rightW = rightTabs.length ? Math.max(...rightTabs.map(t => t.lay.w)) + tgap : 0;
   const rightH = rightTabs.length ? rightTabs.reduce((a, t) => a + t.lay.ht + tgap, 0) - tgap : 0;
   const belowH = belowTabs.reduce((a, t) => a + t.lay.ht + tgap, 0);
+  const capLines = objs.filter(ob => OBJECT_KINDS[ob.kind].captions).flatMap(ob => OBJECT_KINDS[ob.kind].captions(ob).map(l => Object.assign({ live: !hid.has(OBJECT_KINDS[ob.kind].token || 'objects') }, l)));
+  const capLH = FS * 1.5, capH = capLines.length ? capLines.length * capLH + 1.5 * S : 0;
   const R = PAD + Math.max(halfLast, extHiX + xLetterW) + rightW;
   const T = PAD + titleSp + FT * .6 + extHiY + (letters ? FS + 1 : 0);
-  const B = PAD + Math.max(xTickSp, extLoY) + xTitleSp + belowH;
+  const B = PAD + Math.max(xTickSp, extLoY) + xTitleSp + belowH + capH;
   let cell, W, H;
   if (spec.scale.lock) {                                             // physical scale lock: one major grid square prints at exactly scale.mm; the page grows to fit
     cell = spec.scale.mm; W = L + nx * cell + R; H = Math.max(T + ny * cell + B, T + rightH + PAD);
@@ -1942,20 +1954,28 @@ function renderSVG(spec, o) {
     if (left < PAD) x += PAD - left; else if (left + w > W - PAD) x -= left + w - (W - PAD);
     return txt(x, clamp(y, PAD + FS, H - PAD), text, { anchor, bold, halo: true });
   };
-  const shown = ob => !hid.has(ob.id) && !hid.has(OBJECT_KINDS[ob.kind].token || 'objects');      // tables answer to their own token, not "all points and shapes"
+  const live = ob => !hid.has(OBJECT_KINDS[ob.kind].token || 'objects');
+  const shown = ob => !hid.has(ob.id) && live(ob);      // tables answer to their own token, not "all points and shapes"
   const ghostOf = ob => !K.isQ && o.ghost && spec.hidden.includes(ob.id) ? ' opacity=".3"' : '';
   const pick = o.hits ? ' style="cursor:pointer"' : '';
   const ids = objs.map(ob => ob.id);
   objs.forEach((ob, i) => {
-    if (!OBJECT_KINDS[ob.kind] || !shown(ob)) return;
-    const C = { o, K, S, lw, sx, sy, ax, ay, inside, hatch, labelNear, labelAt, head: arrowHead, res: objs.res, ids, x0, x1, y0, y1, xAx, yAx, xAtBottom, yAtLeft, yLabW,
+    if (!OBJECT_KINDS[ob.kind] || !(shown(ob) || (OBJECT_KINDS[ob.kind].keep && live(ob)))) return;     // a transformation hidden by name still draws its mirror line, centre and arrow
+    const C = { off: !shown(ob), o, K, S, lw, sx, sy, ax, ay, inside, hatch, labelNear, labelAt, head: arrowHead, res: objs.res, ids, x0, x1, y0, y1, xAx, yAx, xAtBottom, yAtLeft, yLabW,
                 win: { xlo: ax.lo, xhi: ax.hi, ylo: ay.lo, yhi: ay.hi }, kx: pw / axSpan(ax), ky: ph / axSpan(ay), col: spec.style.colour ? PALETTE[i % PALETTE.length] : '#000' };
     const res = OBJECT_KINDS[ob.kind].draw(ob, C);
     if (!res) return;
-    data.push(`<g data-obj="${ob.id}"${ghostOf(ob)}${pick}>${res.shape}</g>`);
+    data.push(`<g ${C.off ? 'data-aid' : 'data-obj'}="${ob.id}"${ghostOf(ob)}${pick}>${res.shape}</g>`);
     if (res.label) labels.push(`<g${ghostOf(ob)}>${res.label}</g>`);
   });
   if (data.length) out.push(`<g clip-path="url(#${clipId})">${data.join('')}</g>`);
+  /* caption lines beneath everything (mapping rules, descriptions): the space is reserved whether or not the question shows them */
+  if (capLines.length) capLines.forEach((l, i) => {
+    const y = H - PAD - capH + (i + 1) * capLH - FS * .32, text = l.head ? l.head + ': ' + l.text : l.text;
+    if (!l.live) return;
+    if (!hid.has('notation')) out.push(txt((x0 + x1) / 2, y, text, { fs: FS }));
+    else if (K.blk.has('notation') && l.head) out.push(txt((x0 + x1) / 2, y, l.head + ': ' + K.under(24), { fs: FS }));
+  });
   /* tables of values sit in the margin: to the right of the graph, top-aligned, or below it */
   let tyR = y0;
   rightTabs.forEach(({ ob, lay }) => { if (shown(ob)) out.push(`<g data-obj="${ob.id}"${ghostOf(ob)}${pick}>${paintTable(ob, K, W - PAD - (rightW - tgap), tyR)}</g>`); tyR += lay.ht + tgap; });
@@ -2386,6 +2406,198 @@ function renderNumberLine(spec, o) {
   return K.shell(W, H, '', out.join(''));
 }
 
+/* ==========================================================================
+   Phase 4: transformations. Pure functions first (tested on their own), then one object kind.
+   The image is derived at render time from the original, so editing a vertex of the original moves the image.
+   ========================================================================== */
+const HOWS = ['translate', 'reflect', 'rotate', 'dilate'];
+const HOW_NAMES = { translate: 'Translation', reflect: 'Reflection', rotate: 'Rotation', dilate: 'Dilation' };
+const MIRRORS = ['xaxis', 'yaxis', 'yx', 'ynx', 'horizontal', 'vertical'];
+const MIRROR_NAMES = { xaxis: 'the x-axis', yaxis: 'the y-axis', yx: 'the line y = x', ynx: 'the line y = −x', horizontal: 'a horizontal line, y = k', vertical: 'a vertical line, x = k' };
+const primes = n => n <= 0 ? '' : n === 1 ? '′' : n === 2 ? '″' : n === 3 ? '‴' : '′'.repeat(n);
+const stripPrimes = s => s.replace(/[′″‴]+$/, '');
+/* A scale factor may be typed as 2, 0.5, −1 or 1/2. */
+function parseK(v) {
+  const n = parseNum(v);
+  if (isFin(n)) return n;
+  const m = /^\s*([-+−]?\d+)\s*\/\s*(\d+)\s*$/.exec(String(v == null ? '' : v));
+  return m && +m[2] !== 0 ? clean(+m[1].replace('−', '-') / +m[2]) : NaN;
+}
+
+/* Mirror line as a x + b y = c. */
+function mirrorLine(mirror, at) {
+  const k = parseNum(at);
+  switch (mirror) {
+    case 'xaxis': return { a: 0, b: 1, c: 0 };
+    case 'yaxis': return { a: 1, b: 0, c: 0 };
+    case 'yx': return { a: 1, b: -1, c: 0 };
+    case 'ynx': return { a: 1, b: 1, c: 0 };
+    case 'horizontal': return isFin(k) ? { a: 0, b: 1, c: k } : null;
+    case 'vertical': return isFin(k) ? { a: 1, b: 0, c: k } : null;
+  }
+  return null;
+}
+const translatePt = (p, dx, dy) => ({ x: clean(p.x + dx), y: clean(p.y + dy) });
+const reflectPt = (p, L) => { const d = (L.a * p.x + L.b * p.y - L.c) / (L.a * L.a + L.b * L.b); return { x: clean(p.x - 2 * d * L.a), y: clean(p.y - 2 * d * L.b) }; };
+const dilatePt = (p, c, k) => ({ x: clean(c.x + k * (p.x - c.x)), y: clean(c.y + k * (p.y - c.y)) });
+/* Quarter turns are exact (no cos/sin noise); other angles work too. deg counts from the direction given by cw. */
+function rotatePt(p, c, deg, cw) {
+  const q = (((cw ? -deg : deg) % 360) + 360) % 360, dx = p.x - c.x, dy = p.y - c.y;
+  let x, y;
+  if (q === 0) { x = dx; y = dy; } else if (q === 90) { x = -dy; y = dx; } else if (q === 180) { x = -dx; y = -dy; } else if (q === 270) { x = dy; y = -dx; }
+  else { const r = q * Math.PI / 180, co = Math.cos(r), si = Math.sin(r); x = dx * co - dy * si; y = dx * si + dy * co; }
+  return { x: clean(c.x + x), y: clean(c.y + y) };
+}
+const centreOf = o => { const x = parseNum(o.center.x), y = parseNum(o.center.y); return isFin(x) && isFin(y) ? { x, y } : null; };
+/* A function point -> point for this transformation, or null while a setting is missing. */
+function transformer(o) {
+  if (o.how === 'translate') { const dx = parseNum(o.dx), dy = parseNum(o.dy); return isFin(dx) && isFin(dy) ? p => translatePt(p, dx, dy) : null; }
+  if (o.how === 'reflect') { const L = mirrorLine(o.mirror, o.at); return L ? p => reflectPt(p, L) : null; }
+  const c = centreOf(o);
+  if (o.how === 'rotate') return c ? p => rotatePt(p, c, o.angle, o.dir === 'cw') : null;
+  const k = parseK(o.k);
+  return c && isFin(k) ? p => dilatePt(p, c, k) : null;
+}
+const isOrigin = c => c && c.x === 0 && c.y === 0;
+
+/* The description in words ("3 right, 2 down") and the mapping rule ((x, y) → (x + 2, y − 3)); null when there is no simple one. */
+function transformWords(o) {
+  if (o.how === 'translate') {
+    const dx = parseNum(o.dx), dy = parseNum(o.dy);
+    if (!isFin(dx) || !isFin(dy)) return null;
+    const parts = [];
+    if (dx) parts.push(fmtNum(Math.abs(dx)) + (dx > 0 ? ' right' : ' left'));
+    if (dy) parts.push(fmtNum(Math.abs(dy)) + (dy > 0 ? ' up' : ' down'));
+    return parts.length ? parts.join(', ') : 'no movement';
+  }
+  const c = centreOf(o), where = c ? (isOrigin(c) ? 'the origin' : '(' + fmtNum(c.x) + ', ' + fmtNum(c.y) + ')') : null;
+  if (o.how === 'reflect') {
+    const L = mirrorLine(o.mirror, o.at), k = parseNum(o.at);
+    if (!L) return null;
+    return o.mirror === 'horizontal' ? 'in the line y = ' + fmtNum(k) : o.mirror === 'vertical' ? 'in the line x = ' + fmtNum(k) : 'in ' + MIRROR_NAMES[o.mirror];
+  }
+  if (o.how === 'rotate') return where ? o.angle + '°' + (o.angle === 180 ? '' : o.dir === 'cw' ? ' clockwise' : ' counterclockwise') + ' about ' + where : null;
+  const k = parseK(o.k);
+  return where && isFin(k) ? 'scale factor ' + kText(o.k) + ', centre ' + where : null;
+}
+const kText = v => { const m = /^\s*([-+−]?\d+)\s*\/\s*(\d+)\s*$/.exec(String(v)); return m ? '{' + m[1].replace('-', MINUS) + '/' + m[2] + '}' : fmtNum(parseK(v)); };
+function transformMapping(o) {
+  const lin = (v, d) => d === 0 ? v : v + ' ' + (d > 0 ? '+' : MINUS) + ' ' + fmtNum(Math.abs(d));
+  const rule = (a, b) => '(x, y) → (' + a + ', ' + b + ')';
+  if (o.how === 'translate') { const dx = parseNum(o.dx), dy = parseNum(o.dy); return isFin(dx) && isFin(dy) ? rule(lin('x', dx), lin('y', dy)) : null; }
+  if (o.how === 'reflect') {
+    const k = parseNum(o.at);
+    if (o.mirror === 'xaxis') return rule('x', MINUS + 'y');
+    if (o.mirror === 'yaxis') return rule(MINUS + 'x', 'y');
+    if (o.mirror === 'yx') return rule('y', 'x');
+    if (o.mirror === 'ynx') return rule(MINUS + 'y', MINUS + 'x');
+    if (!isFin(k)) return null;
+    const two = k === 0 ? MINUS : fmtNum(2 * k) + ' ' + MINUS + ' ';
+    return o.mirror === 'horizontal' ? rule('x', two + 'y') : rule(two + 'x', 'y');
+  }
+  const c = centreOf(o);
+  if (!isOrigin(c)) return null;                                       // about another centre there is no one-line rule worth showing
+  if (o.how === 'rotate') { const q = ((o.dir === 'cw' ? -o.angle : o.angle) % 360 + 360) % 360; return q === 90 ? rule(MINUS + 'y', 'x') : q === 180 ? rule(MINUS + 'x', MINUS + 'y') : rule('y', MINUS + 'x'); }
+  const k = parseK(o.k);
+  if (!isFin(k)) return null;
+  const co = k === 1 ? '' : k === -1 ? MINUS : kText(o.k);
+  return rule(co + 'x', co + 'y');
+}
+
+OBJECT_KINDS.transform = {
+  name: 'Transformation', prefix: 'tf', keep: true,
+  norm: r => {
+    const ctr = r.center && typeof r.center === 'object' ? r.center : {};
+    return { id: vStr(r.id, ''), kind: 'transform', of: vStr(r.of, ''), how: vPick(r.how, HOWS, 'translate'),
+             dx: cellClean(r.dx), dy: cellClean(r.dy), mirror: vPick(r.mirror, MIRRORS, 'yaxis'), at: cellClean(r.at),
+             angle: vPick(+r.angle, [90, 180, 270], 90), dir: vPick(r.dir, ['ccw', 'cw'], 'ccw'), center: { x: cellClean(ctr.x), y: cellClean(ctr.y) }, k: cellClean(r.k),
+             fill: vPick(r.fill, FILLS, 'none'), dash: vPick(r.dash, Object.keys(DASHES), 'solid'), dots: vBool(r.dots, true), coords: vBool(r.coords, false),
+             aids: vBool(r.aids, true), words: vBool(r.words, false), mapping: vBool(r.mapping, false) };
+  },
+  resolve(o, res) {
+    const src = res(o.of);
+    let base = null;
+    if (src && src.kind === 'transform') base = src.img;
+    else if (src && (src.kind === 'polygon' || src.kind === 'path')) base = { shape: src.kind, depth: 0, pts: src.vertices.map((v, k) => ({ x: parseNum(v[0]), y: parseNum(v[1]), label: src.labels[k] || '' })) };
+    else if (src && src.kind === 'point') base = { shape: 'point', depth: 0, pts: [{ x: parseNum(src.x), y: parseNum(src.y), label: src.label || '' }] };
+    if (!base) return { img: null };
+    const f = transformer(o), d = base.depth + 1;
+    const pts = base.pts.map(p => {
+      if (!f || !isFin(p.x) || !isFin(p.y)) return { x: NaN, y: NaN, label: '', from: p };
+      const q = f(p);
+      q.label = p.label ? stripPrimes(p.label) + primes(d) : ''; q.from = p;
+      return q;
+    });
+    return { img: { shape: base.shape, depth: d, pts, ok: !!f } };
+  },
+  bounds: o => o.img ? o.img.pts.filter(p => isFin(p.x) && isFin(p.y)).map(p => ({ x: p.x, y: p.y })).concat(o.how === 'rotate' || o.how === 'dilate' ? (centreOf(o) ? [centreOf(o)] : []) : []) : [],
+  captions(o) {
+    const out = [], head = HOW_NAMES[o.how];
+    if (o.words) out.push({ head, text: transformWords(o) });
+    if (o.mapping) out.push({ head: 'Mapping', text: transformMapping(o) });
+    return out.filter(l => l.text);
+  },
+  draw(o, C) {
+    if (!o.img || !o.img.ok) return null;
+    const pts = o.img.pts.filter(p => isFin(p.x) && isFin(p.y));
+    let shape = '', label = '';
+    if (!C.off && pts.length) {
+      const one = o.img.shape === 'point';
+      const synth = one ? { kind: 'point', id: o.id, x: pts[0].x, y: pts[0].y, label: pts[0].label, style: 'filled', marker: 'circle', coords: o.coords }
+                        : { kind: o.img.shape, id: o.id, vertices: pts.map(p => [p.x, p.y]), labels: pts.map(p => p.label), fill: o.fill, dash: o.dash, dots: o.dots, coords: o.coords };
+      const r = OBJECT_KINDS[synth.kind].draw(synth, C);
+      if (r) { shape += r.shape; label += r.label; }
+    }
+    if (o.aids && !C.K.hid.has('aids')) { const a = transformAids(o, C); shape += a.shape; label += a.label; }
+    return shape || label ? { shape, label } : null;
+  }
+};
+
+/* The mirror line, the centre and the arrow that show how a shape was moved. */
+function transformAids(o, C) {
+  const { S, win } = C, st = `stroke="${C.col}" stroke-width="${C.lw(.4)}" stroke-dasharray="2 1.2" fill="none"`, first = o.img.pts.find(p => isFin(p.x) && isFin(p.y) && isFin(p.from.x));
+  const sc = p => [C.sx(p.x), C.sy(p.y)], f3p = q => f3(q[0]) + ',' + f3(q[1]);
+  let shape = '', label = '';
+  const centre = c => { if (c && C.inside(c.x, c.y)) shape += markerSVG('cross', C.sx(c.x), C.sy(c.y), 1.5 * S, C.col, S, false); };
+  const arrow = P => {                                                   // a polyline with an arrowhead at its end
+    if (P.length < 2) return;
+    const n = P.length, dx = P[n - 1][0] - P[n - 2][0], dy = P[n - 1][1] - P[n - 2][1], d = Math.hypot(dx, dy) || 1, u = [dx / d, dy / d];
+    const Q = P.slice(); Q[n - 1] = [P[n - 1][0] - u[0] * 2 * S, P[n - 1][1] - u[1] * 2 * S];
+    shape += `<polyline points="${Q.map(f3p).join(' ')}" ${st}/>` + C.head(P[n - 1][0], P[n - 1][1], u[0], u[1], C.col, .8);
+  };
+  if (o.how === 'reflect') {
+    const L = mirrorLine(o.mirror, o.at);
+    if (L && o.mirror !== 'xaxis' && o.mirror !== 'yaxis') {
+      let p, q;
+      if (L.b === 0) { p = [L.c / L.a, win.ylo]; q = [L.c / L.a, win.yhi]; } else { p = [win.xlo, (L.c - L.a * win.xlo) / L.b]; q = [win.xhi, (L.c - L.a * win.xhi) / L.b]; }
+      const t = clipSeg(p, q, win.xlo, win.xhi, win.ylo, win.yhi);
+      if (t) {
+        const a = [p[0] + (q[0] - p[0]) * t[0], p[1] + (q[1] - p[1]) * t[0]], b = [p[0] + (q[0] - p[0]) * t[1], p[1] + (q[1] - p[1]) * t[1]];
+        shape += `<line x1="${f3(C.sx(a[0]))}" y1="${f3(C.sy(a[1]))}" x2="${f3(C.sx(b[0]))}" y2="${f3(C.sy(b[1]))}" ${st}/>`;
+        const txt = o.mirror === 'yx' ? 'y = x' : o.mirror === 'ynx' ? 'y = −x' : o.mirror === 'horizontal' ? 'y = ' + fmtNum(o.at) : 'x = ' + fmtNum(o.at);
+        if (!C.K.hid.has('equations')) label += o.mirror === 'vertical' ? C.labelAt(C.sx(b[0]) + 1.2, C.sy(b[1]) + C.K.FS * 1.1, txt, 'start', false)
+          : o.mirror === 'horizontal' ? C.labelAt(C.sx(b[0]) - 1.2, C.sy(b[1]) - 1.2, txt, 'end', false) : C.labelAt(C.sx(b[0]) - 1.6, C.sy(b[1]) + C.K.FS * 1.2, txt, 'end', false);
+      }
+    }
+  } else if (o.how === 'translate' && first) {
+    arrow([sc(first.from), sc(first)]);
+  } else if (o.how === 'rotate') {
+    const c = centreOf(o); centre(c);
+    if (c && first && (first.from.x !== c.x || first.from.y !== c.y)) {
+      const r = Math.hypot(first.from.x - c.x, first.from.y - c.y), a0 = Math.atan2(first.from.y - c.y, first.from.x - c.x), sgn = o.dir === 'cw' ? -1 : 1, steps = Math.max(8, Math.round(o.angle / 6)), P = [];
+      for (let i = 0; i <= steps; i++) { const a = a0 + sgn * o.angle * Math.PI / 180 * i / steps; P.push(sc({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) })); }
+      arrow(P);
+    }
+  } else if (o.how === 'dilate') {
+    const c = centreOf(o); centre(c);
+    if (c) o.img.pts.filter(p => isFin(p.x) && isFin(p.from.x)).forEach(p => {
+      const three = [c, p.from, p], best = [[0, 1], [0, 2], [1, 2]].map(([i, j]) => [three[i], three[j], Math.hypot(three[i].x - three[j].x, three[i].y - three[j].y)]).sort((a, b) => b[2] - a[2])[0];
+      if (best[2] > 1e-9) shape += `<line x1="${f3(C.sx(best[0].x))}" y1="${f3(C.sy(best[0].y))}" x2="${f3(C.sx(best[1].x))}" y2="${f3(C.sy(best[1].y))}" ${st}/>`;
+    });
+  }
+  return { shape, label };
+}
+
 /* The page size actually drawn (a locked physical scale makes the page follow the grid). */
 function svgSize(spec) {
   const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(renderSVG(spec));
@@ -2435,11 +2647,11 @@ function pngWithDpi(u8, dpi) {
     ['xTicks', 'X-axis numbers'], ['yTicks', 'Y-axis numbers'], ['axisLetters', 'Axis letters (x, y)'], ['quadrantLabels', 'Quadrant labels'],
     ['pointLabels', 'Point and vertex names (A, B, C…)'], ['coordLabels', 'Coordinates beside points'],
     ['equations', 'Equation and function-name labels'], ['keyPoints', 'Intercepts, intersections and critical values'], ['slopeTriangle', 'Slope triangles'],
-    ['tables', 'Tables of values'], ['notation', 'Notation beneath the line'], ['signs', 'Signs (+ and −) on a sign chart'],
+    ['tables', 'Tables of values'], ['aids', 'Mirror lines, centres and arrows'], ['notation', 'Notation, descriptions and mapping rules', true], ['signs', 'Signs (+ and −) on a sign chart'],
     ['results', 'Solutions, hop results and answers'], ['objects', 'All points, shapes and graphs']
   ];
   const VIS_FOR = {
-    plane: ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'objects'],
+    plane: ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'aids', 'notation', 'objects'],
     numberline: ['title', 'xTitle', 'units', 'xTicks', 'pointLabels', 'keyPoints', 'notation', 'signs', 'results', 'objects']
   };
   const MARKER_SYMBOLS = { circle: '●', square: '■', triangle: '▲', diamond: '◆', cross: '✕', plus: '＋' };
@@ -2547,12 +2759,37 @@ function pngWithDpi(u8, dpi) {
       <div class="row tight"><button class="btn small" type="button" data-act="addVert" data-i="${i}">+ Vertex</button></div></div>`).join('') + '</div>' : '';
   }
 
+  function buildTransforms() {
+    const tfs = spec.objects.map((o, i) => [o, i]).filter(([o]) => o.kind === 'transform');
+    const num = (path, lab, ph) => `<div><label class="lab">${lab}</label><input type="number" step="any" data-bind="${path}"${ph ? ` placeholder="${ph}"` : ''}></div>`;
+    const centre = i => `<div class="row">${num(`objects.${i}.center.x`, 'Centre x')}${num(`objects.${i}.center.y`, 'Centre y')}</div>`;
+    const kinds = (i, list, inner, cls) => `<div class="${cls || ''}" data-kinds="${list}" data-kindpath="objects.${i}.how">${inner}</div>`;
+    $('#transformsWrap').innerHTML = tfs.length ? `<h3 class="section-title">Transformations</h3><div style="display:grid;gap:12px">` + tfs.map(([o, i]) => `<div class="card">
+      <div class="row"><div><h4>${HOW_NAMES[o.how]}</h4></div><div style="flex:none"><button class="xbtn" type="button" data-act="delObj" data-i="${i}" title="Remove this transformation">×</button></div></div>
+      <div class="row"><div><label class="lab">Transform</label><select data-bind="objects.${i}.of" data-objsel="shape" data-first="choose a shape…"></select></div>
+        <div><label class="lab">How</label><select data-bind="objects.${i}.how">${optList(HOW_NAMES)}</select></div></div>
+      ${kinds(i, 'translate', `<div class="row">${num(`objects.${i}.dx`, 'Right (+) or left (−)')}${num(`objects.${i}.dy`, 'Up (+) or down (−)')}</div>`)}
+      ${kinds(i, 'reflect', `<div class="row"><div><label class="lab">Mirror line</label><select data-bind="objects.${i}.mirror">${optList(MIRROR_NAMES)}</select></div>
+        <div data-kinds="horizontal,vertical" data-kindpath="objects.${i}.mirror">${num(`objects.${i}.at`, 'k')}</div></div>`)}
+      ${kinds(i, 'rotate', `<div class="row"><div><label class="lab">Angle</label><select data-bind="objects.${i}.angle"><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></div>
+        <div><label class="lab">Direction</label><select data-bind="objects.${i}.dir"><option value="ccw">Counterclockwise</option><option value="cw">Clockwise</option></select></div></div>${centre(i)}`)}
+      ${kinds(i, 'dilate', `<div class="row"><div><label class="lab">Scale factor</label><input type="text" data-bind="objects.${i}.k" placeholder="e.g. 2, 0.5 or 1/2" spellcheck="false" autocomplete="off"></div></div>${centre(i)}`)}
+      <div class="row"><div><label class="lab">Image line</label><select data-bind="objects.${i}.dash">${optList(DASH_NAMES)}</select></div>
+        <div data-kinds="translate,reflect,rotate,dilate" data-kindpath="objects.${i}.how"><label class="lab">Fill</label><select data-bind="objects.${i}.fill">${optList({ none: 'None', light: 'Light grey', hatch: 'Hatched' })}</select></div></div>
+      <div style="display:grid;gap:6px"><div class="row" style="gap:16px"><label class="check sm"><input type="checkbox" data-bind="objects.${i}.dots"> Vertex dots</label><label class="check sm"><input type="checkbox" data-bind="objects.${i}.coords"> Coordinates</label></div>
+        <label class="check sm" title="Mirror line, centre of rotation or dilation, translation and rotation arrows, dilation rays"><input type="checkbox" data-bind="objects.${i}.aids"> Show the mirror line, centre and arrows</label>
+        <label class="check sm"><input type="checkbox" data-bind="objects.${i}.words"> Describe it in words beneath the graph</label>
+        <label class="check sm"><input type="checkbox" data-bind="objects.${i}.mapping"> Write the mapping rule (x, y) → … beneath the graph</label></div>
+      <div class="row tight"><button class="btn small" type="button" data-act="addTransformAfter" data-i="${i}" title="Apply another transformation to this image (A′ then A″)">+ Then another transformation</button></div>
+    </div>`).join('') + `</div><p class="hint">Hide the image in the question on the Test tab (“Individual points and shapes”); hide the mirror line and centre, or the description and rule, separately. The mapping rule is written for movements about the origin, reflections and translations only.</p>` : '';
+  }
+
   /* ---------- the Equations tab: equations, tables of values, related lines and marks ---------- */
-  const OBJ_KINDS = { fn: ['function', 'related'], pt: ['point'] };
+  const OBJ_KINDS = { fn: ['function', 'related'], pt: ['point'], shape: ['polygon', 'path', 'point', 'transform'] };
   function fillObjSelects() {                                        // pickers list the current objects, by their current names
     $$('[data-objsel]').forEach(sel => {
       const kinds = OBJ_KINDS[sel.dataset.objsel];
-      const want = [['', sel.dataset.first || 'choose…'], ...spec.objects.filter(o => kinds.includes(o.kind)).map(o => [o.id, objName(o)])];
+      const want = [['', sel.dataset.first || 'choose…'], ...spec.objects.filter(o => kinds.includes(o.kind)).map(o => [o.id, objName(o, spec.objects)])];
       const have = [...sel.options].map(o => [o.value, o.textContent]);
       if (JSON.stringify(want) !== JSON.stringify(have)) { const cur = sel.value; sel.innerHTML = want.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join(''); sel.value = cur; }
     });
@@ -2687,7 +2924,7 @@ function pngWithDpi(u8, dpi) {
   function buildTest() {
     const rows = VIS_ROWS.filter(r => VIS_FOR[spec.type].includes(r[0])).map(([tok, name, blankable]) =>
       `<label class="check"><input type="checkbox" data-vis="${tok}"> ${name}</label>` +
-      (blankable ? `<label class="check sm" data-blankwrap="${tok}"><input type="checkbox" data-blank="${tok}"> Answer line</label>` : '<span></span>')).join('');
+      (blankable && (tok !== 'notation' || spec.type === 'plane') ? `<label class="check sm" data-blankwrap="${tok}"><input type="checkbox" data-blank="${tok}"> Answer line</label>` : '<span></span>')).join('');
     const objs = spec.objects.filter(o => kindOn(o.kind) === spec.type).map(o => `<label class="check"><input type="checkbox" data-vis="${o.id}"> <span data-oname="${o.id}"></span></label>`).join('');
     $('#testPane').innerHTML = `
       <div><h3 class="section-title">Scaffold level <span class="pill" id="levelPill"></span></h3>
@@ -2749,7 +2986,7 @@ function pngWithDpi(u8, dpi) {
     $$('[data-tblank]').forEach(el => { const [i, c, k] = el.dataset.tblank.split(':'); el.checked = spec.objects[+i].blank.includes(c + ':' + k); });
     if ($('[data-ycell]')) { const R = resolveObjects(spec); $$('[data-ycell]').forEach(el => { const [i, k] = el.dataset.ycell.split(':'), r = R.res(spec.objects[+i].id); el.textContent = r && r.model && r.model.rows[+k] ? r.model.rows[+k].ytext : ''; }); }
     $$('[data-lnames]').forEach(el => { const o = spec.objects.find(x => x.id === el.dataset.lnames); el.textContent = o ? o.labels.filter(Boolean).join('') || 'no names' : ''; });
-    $$('[data-oname]').forEach(el => { const o = spec.objects.find(x => x.id === el.dataset.oname); el.textContent = o ? objName(o) : ''; });
+    $$('[data-oname]').forEach(el => { const o = spec.objects.find(x => x.id === el.dataset.oname); el.textContent = o ? objName(o, spec.objects) : ''; });
     const locked = spec.scale.lock, { w, h } = state.size || { w: 0, h: 0 }, sz = sizeMM(spec.size);
     $('#sizePreset').value = spec.size.preset;
     if (active !== $('#sizeW')) $('#sizeW').value = sz.w;
@@ -2804,7 +3041,7 @@ function pngWithDpi(u8, dpi) {
       (bad ? `${dot}<span class="warn">${bad} cell${bad === 1 ? ' isn’t a number and is' : 's aren’t numbers and are'} left off the graph</span>` : '');
   }
   function refresh() { state.outside = outsideObjects(spec); state.issues = readability(spec); renderPreview(); syncControls(); renderStatus(); }
-  function rebuildStructure() { buildObjects(); buildFunctions(); buildLine(); buildTest(); refresh(); }
+  function rebuildStructure() { buildObjects(); buildTransforms(); buildFunctions(); buildLine(); buildTest(); refresh(); }
 
   /* ---------- actions ---------- */
   function showQuestion() { if (state.view !== 'question') { state.view = 'question'; state.pick = false; state.edit = false; const p = $('#pick'); if (p) p.checked = false; } }
@@ -2825,6 +3062,11 @@ function pngWithDpi(u8, dpi) {
     const tri = [[1, 1], [4, 1], [1, 4]].map(([a, b]) => [clean(a * u + off), clean(b * u + off)]);
     spec.objects.push(makeObject(spec, kind, kind === 'polygon' ? { vertices: tri, labels: labs } : { vertices: tri.slice(0, 2), labels: labs.slice(0, 2) }));
     commit(null, true);
+  }
+  function addTransform(after) {
+    const src = after || spec.objects.filter(o => o.kind === 'polygon' || o.kind === 'path' || o.kind === 'point').pop();
+    if (!src) return toast('Add a polygon, line segments or a point first.', 'err');
+    addObj('transform', { of: src.id, how: 'reflect', mirror: 'yaxis', dx: 3, dy: -2, at: 0, angle: 90, dir: 'cw', center: { x: 0, y: 0 }, k: 2, words: true });
   }
   const fnObjs = () => spec.objects.filter(o => o.kind === 'function' || o.kind === 'related');
   function addObj(kind, props) {
@@ -2981,6 +3223,8 @@ function pngWithDpi(u8, dpi) {
     }
     else if (a === 'addPoint') addPoint();
     else if (a === 'addShape') addShape(b.dataset.kind);
+    else if (a === 'addTransform') addTransform();
+    else if (a === 'addTransformAfter') addTransform(spec.objects[+b.dataset.i]);
     else if (a === 'delObj') delObj(+b.dataset.i);
     else if (a === 'addVert') addVert(+b.dataset.i);
     else if (a === 'delVert') delVert(+b.dataset.i, +b.dataset.k);

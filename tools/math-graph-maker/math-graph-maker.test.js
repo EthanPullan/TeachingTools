@@ -19,7 +19,8 @@ const G = vm.runInNewContext(core + `;({ SPEC_VERSION, TOOL, SCAFFOLD, SCAFFOLD_
   findZeros, findIntersections, findExtrema, sampleFunction, clipSeg, clipRun, simplifyPts, plotRuns,
   interceptPoints, intersectionPoints, lineCross, slopeTriangle, suggestXs, relatedEq,
   resolveObjects, readability, snapPoints, pasteRows, dropRow, fillRows, tableLayout, MAX_ROWS, TABLE_COLS,
-  analyseLine, applyLinePreset, dropLineRow, ineqSegments, ineqText, intervalText, setText, noteTexts, signChartData, findPoles, valText, renderNumberLine, LINE_PRESETS })`, {});
+  analyseLine, applyLinePreset, dropLineRow, ineqSegments, ineqText, intervalText, setText, noteTexts, signChartData, findPoles, valText, renderNumberLine, LINE_PRESETS,
+  translatePt, reflectPt, rotatePt, dilatePt, mirrorLine, parseK, transformer, transformWords, transformMapping, primes, stripPrimes })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -793,7 +794,7 @@ test('new object kinds normalise, round-trip, and clean up references when somet
   s.objects.push(G.makeObject(s, 'intersect', { of: [f1, f2], label: 'A' }));
   s.objects.push(G.makeObject(s, 'vlt', { at: [1, 2, '-'] }));
   const n = G.normalize(s);
-  assert.equal(n.specVersion, 3);
+  assert.equal(n.specVersion, 4);
   assert.deepEqual(plain(n.objects.map(o => o.id)), ['fn1', 'fn2', 'pt1', 'tb1', 'rl1', 'gd1', 'gd2', 'is1', 'vl1']);
   assert.deepEqual(plain(n.objects[3].blank), ['y:0', 'y:2', 'x:1'], 'blank marks outside the table are dropped');
   assert.equal(G.serialize(G.parseFile(G.serialize(n))), G.serialize(n));
@@ -810,8 +811,8 @@ test('new object kinds normalise, round-trip, and clean up references when somet
 });
 test('files: a version 1 file still opens; a newer one is refused', () => {
   const v1 = JSON.stringify({ tool: 'math-graph-maker', specVersion: 1, objects: [{ kind: 'point', id: 'pt1', x: 1, y: 2, label: 'A' }] });
-  const s = G.parseFile(v1); assert.equal(s.specVersion, 3); assert.equal(s.objects[0].label, 'A');
-  assert.throws(() => G.parseFile('{"tool":"math-graph-maker","specVersion":4}'), /newer version/);
+  const s = G.parseFile(v1); assert.equal(s.specVersion, 4); assert.equal(s.objects[0].label, 'A');
+  assert.throws(() => G.parseFile('{"tool":"math-graph-maker","specVersion":5}'), /newer version/);
 });
 test('tables of values: calculated y, typed y, headings, undefined values, paste, delete and fill', () => {
   const s = fnSpec(['f(x) = 2x + 1', 'y = 1/x']);
@@ -1130,4 +1131,120 @@ test('number line readability and outside warnings', () => {
   s = nlSpec([['nlpoint', { at: 9 }]]); assert.equal(G.outsideObjects(s).length, 1);
   s = nlSpec([['signchart', { expr: 'x = 4' }]]); assert.match(G.readability(s)[0].text, /Sign chart/);
   assert.equal(G.snapPoints(s), 0);
+});
+
+
+/* ================= Phase 4A: transformations ================= */
+const tfSpec = (extra, verts) => {
+  const s = G.blankSpec();
+  s.objects.push(G.makeObject(s, 'polygon', { vertices: verts || [[1, 1], [4, 1], [1, 3]], labels: ['A', 'B', 'C'] }));
+  s.objects.push(G.makeObject(s, 'transform', Object.assign({ of: 'pg1' }, extra)));
+  return s;
+};
+const imgOf = (s, id) => plain(G.resolveObjects(s).res(id || 'tf1').img.pts.map(p => [p.x, p.y, p.label]));
+const P = (x, y) => ({ x, y });
+
+test('point maps: translate, reflect, rotate (exact quarter turns), dilate', () => {
+  assert.deepEqual(plain(G.translatePt(P(1, 1), -3, 2)), P(-2, 3));
+  const m = (k, at, p) => plain(G.reflectPt(p, G.mirrorLine(k, at)));
+  assert.deepEqual(m('xaxis', 0, P(2, 3)), P(2, -3)); assert.deepEqual(m('yaxis', 0, P(2, 3)), P(-2, 3));
+  assert.deepEqual(m('yx', 0, P(2, 3)), P(3, 2)); assert.deepEqual(m('ynx', 0, P(2, 3)), P(-3, -2));
+  assert.deepEqual(m('vertical', -2, P(1, 5)), P(-5, 5)); assert.deepEqual(m('horizontal', 1, P(1, 5)), P(1, -3));
+  assert.equal(G.mirrorLine('horizontal', ''), null, 'a blank mirror position is not a guess');
+  const r = (deg, cw, p, c) => plain(G.rotatePt(p, c || P(0, 0), deg, cw));
+  assert.deepEqual(r(90, false, P(1, 0)), P(0, 1)); assert.deepEqual(r(90, true, P(1, 0)), P(0, -1));
+  assert.deepEqual(r(180, true, P(2, 3)), P(-2, -3)); assert.deepEqual(r(180, false, P(2, 3)), P(-2, -3), '180° has no direction');
+  assert.deepEqual(r(270, false, P(1, 0)), r(90, true, P(1, 0)), '270° counterclockwise = 90° clockwise');
+  assert.deepEqual(r(90, false, P(3, 1), P(1, 1)), P(1, 3));
+  const d45 = G.rotatePt(P(1, 0), P(0, 0), 45, false); assert.ok(Math.abs(d45.x - Math.SQRT1_2) < 1e-5 && Math.abs(d45.y - Math.SQRT1_2) < 1e-5, 'other angles work too');
+  assert.deepEqual(plain(G.dilatePt(P(4, 2), P(0, 0), 0.5)), P(2, 1)); assert.deepEqual(plain(G.dilatePt(P(4, 2), P(2, 2), -1)), P(0, 2));
+  assert.equal(G.parseK('1/2'), 0.5); assert.equal(G.parseK('−3'), -3); assert.equal(G.parseK('2.5'), 2.5); assert.ok(Number.isNaN(G.parseK('1/0'))); assert.ok(Number.isNaN(G.parseK('')));
+});
+
+test('transformations undo each other (properties)', () => {
+  const pts = [P(1, 1), P(-3, 4), P(0, -2.5), P(7, 0)];
+  for (const p of pts) {
+    for (const [k, at] of [['xaxis', 0], ['yaxis', 0], ['yx', 0], ['ynx', 0], ['vertical', 3], ['horizontal', -1.5]]) {
+      const L = G.mirrorLine(k, at); assert.deepEqual(plain(G.reflectPt(G.reflectPt(p, L), L)), plain(p), 'reflect twice: ' + k);
+    }
+    let q = p; for (let i = 0; i < 4; i++) q = G.rotatePt(q, P(2, -1), 90, false); assert.deepEqual(plain(q), plain(p), 'four quarter turns');
+    assert.deepEqual(plain(G.rotatePt(G.rotatePt(p, P(1, 1), 90, false), P(1, 1), 90, true)), plain(p));
+    assert.deepEqual(plain(G.dilatePt(G.dilatePt(p, P(1, 2), 4), P(1, 2), 0.25)), plain(p));
+    assert.deepEqual(plain(G.translatePt(G.translatePt(p, 3, -2), -3, 2)), plain(p));
+    const L = G.mirrorLine('yx', 0), d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);   // reflection preserves distance from the mirror
+    assert.ok(Math.abs(d(p, P(0, 0)) - d(G.reflectPt(p, L), P(0, 0))) < 1e-9);
+  }
+});
+
+test('the image is derived: prime labels, successive images, edits of the original follow', () => {
+  let s = tfSpec({ how: 'translate', dx: -3, dy: -2 });
+  assert.deepEqual(imgOf(s), [[-2, -1, 'A′'], [1, -1, 'B′'], [-2, 1, 'C′']]);
+  s.objects.push(G.makeObject(s, 'transform', { of: 'tf1', how: 'reflect', mirror: 'yaxis' }));
+  assert.deepEqual(imgOf(s, 'tf2'), [[2, -1, 'A″'], [-1, -1, 'B″'], [2, 1, 'C″']]);
+  s.objects[0].vertices[0] = [2, 2];                                    // move A: the image follows, no other edit
+  assert.deepEqual(imgOf(s, 'tf1')[0], [-1, 0, 'A′']); assert.deepEqual(imgOf(s, 'tf2')[0], [1, 0, 'A″']);
+  assert.equal(G.primes(3), '‴'); assert.equal(G.stripPrimes('A″'), 'A');
+  s = G.blankSpec(); s.objects.push(G.makeObject(s, 'point', { x: 2, y: 3, label: 'P' }), G.makeObject(s, 'transform', { of: 'pt1', how: 'rotate', angle: 90, dir: 'ccw', center: { x: 0, y: 0 } }));
+  assert.deepEqual(imgOf(s), [[-3, 2, 'P′']], 'a point can be transformed too');
+  s = tfSpec({ how: 'translate', dx: 1, dy: 1 }, [[0, 0], [1, 0], [1, 1]]); s.objects[0].labels = ['', '', ''];
+  assert.deepEqual(imgOf(s).map(r => r[2]), ['', '', ''], 'no labels are invented');
+});
+
+test('incomplete or dangling transformations draw nothing and say so', () => {
+  let s = tfSpec({ how: 'dilate', k: '', center: { x: 0, y: 0 } });
+  assert.equal(G.resolveObjects(s).res('tf1').img.ok, false); noBad(G.renderSVG(s, {}));
+  assert.match(G.readability(s)[0].text, /fill in every setting/);
+  s = tfSpec({ how: 'translate', dx: 1, dy: 1 }); G.removeObject(s, 'pg1');
+  assert.equal(s.objects[0].of, '', 'deleting the original clears the pointer'); assert.equal(G.resolveObjects(s).res('tf1').img, null);
+  assert.match(G.readability(s)[0].text, /choose the shape/); noBad(G.renderSVG(s, {}));
+  s = tfSpec({ how: 'translate', dx: 1, dy: 1 }); s.objects[1].of = 'tf1';                                // a loop is refused, not followed forever
+  assert.equal(G.resolveObjects(s).res('tf1').img, null); noBad(G.renderSVG(s, {}));
+});
+
+test('transformation words and mapping rules', () => {
+  const W = p => G.transformWords(G.makeObject(G.blankSpec(), 'transform', p)), M = p => G.transformMapping(G.makeObject(G.blankSpec(), 'transform', p));
+  assert.equal(W({ how: 'translate', dx: 3, dy: -2 }), '3 right, 2 down'); assert.equal(W({ how: 'translate', dx: -1, dy: 0 }), '1 left');
+  assert.equal(M({ how: 'translate', dx: 2, dy: -3 }), '(x, y) → (x + 2, y − 3)'); assert.equal(M({ how: 'translate', dx: 0, dy: 4 }), '(x, y) → (x, y + 4)');
+  assert.equal(W({ how: 'reflect', mirror: 'yaxis' }), 'in the y-axis'); assert.equal(W({ how: 'reflect', mirror: 'vertical', at: -2 }), 'in the line x = −2');
+  assert.equal(M({ how: 'reflect', mirror: 'xaxis' }), '(x, y) → (x, −y)'); assert.equal(M({ how: 'reflect', mirror: 'ynx' }), '(x, y) → (−y, −x)');
+  assert.equal(M({ how: 'reflect', mirror: 'vertical', at: 3 }), '(x, y) → (6 − x, y)'); assert.equal(M({ how: 'reflect', mirror: 'horizontal', at: 0 }), '(x, y) → (x, −y)');
+  const rot = (angle, dir) => M({ how: 'rotate', angle, dir, center: { x: 0, y: 0 } });
+  assert.equal(rot(90, 'ccw'), '(x, y) → (−y, x)'); assert.equal(rot(90, 'cw'), '(x, y) → (y, −x)'); assert.equal(rot(270, 'ccw'), '(x, y) → (y, −x)'); assert.equal(rot(180, 'cw'), '(x, y) → (−x, −y)');
+  assert.equal(M({ how: 'rotate', angle: 90, center: { x: 1, y: 1 } }), null, 'no one-line rule about another centre');
+  assert.equal(W({ how: 'rotate', angle: 90, dir: 'cw', center: { x: 1, y: 2 } }), '90° clockwise about (1, 2)'); assert.equal(W({ how: 'rotate', angle: 180, center: { x: 0, y: 0 } }), '180° about the origin');
+  assert.equal(M({ how: 'dilate', k: 2, center: { x: 0, y: 0 } }), '(x, y) → (2x, 2y)'); assert.equal(M({ how: 'dilate', k: -1, center: { x: 0, y: 0 } }), '(x, y) → (−x, −y)');
+  assert.equal(M({ how: 'dilate', k: '1/2', center: { x: 0, y: 0 } }), '(x, y) → ({1/2}x, {1/2}y)'); assert.equal(W({ how: 'dilate', k: 3, center: { x: 1, y: 1 } }), 'scale factor 3, centre (1, 1)');
+  assert.equal(W({ how: 'translate', dx: '', dy: 1 }), null);
+  /* the rule agrees with the numbers */
+  const o = G.makeObject(G.blankSpec(), 'transform', { how: 'rotate', angle: 90, dir: 'cw', center: { x: 0, y: 0 } });
+  assert.deepEqual(plain(G.transformer(o)(P(3, 5))), P(5, -3));
+});
+
+test('transformation rendering: image by name, aids and captions by token; same page in question and key', () => {
+  const s = tfSpec({ how: 'reflect', mirror: 'vertical', at: -2, words: true, mapping: true });
+  const key = G.renderSVG(s, { version: 'key' }); noBad(key);
+  const vb = v => /viewBox="([^"]+)"/.exec(v)[1];
+  assert.match(key, /data-obj="tf1"/); assert.match(key, /Reflection: in the line/); assert.match(key, /Mapping:/);
+  const q = G.renderSVG(Object.assign({}, s, { hidden: ['tf1'] }), { version: 'question' });
+  assert.ok(!/data-obj="tf1"/.test(q) && /data-aid="tf1"/.test(q), 'image hidden, mirror line kept');
+  assert.ok(!/A′/.test(q) && /A′/.test(key), 'the image is not leaked through its labels');
+  assert.ok(/Mapping:/.test(q), 'the given rule stays in the question'); assert.equal(vb(q), vb(key));
+  const noAid = G.renderSVG(Object.assign({}, s, { hidden: ['aids'] }), { version: 'question' });
+  assert.ok(!/data-aid/.test(noAid) && /data-obj="tf1"/.test(noAid), 'aids can be hidden while the image stays'); assert.equal(vb(noAid), vb(key));
+  const noNote = G.renderSVG(Object.assign({}, s, { hidden: ['notation'] }), { version: 'question' });
+  assert.ok(!/Mapping:/.test(noNote) && !/Reflection:/.test(noNote)); assert.equal(vb(noNote), vb(key), 'hidden captions still reserve their space');
+  const blank = G.renderSVG(Object.assign({}, s, { hidden: ['notation'], blanks: ['notation'] }), { version: 'question' });
+  assert.match(blank, /Mapping: _{3,}/); assert.ok(!/\(x, y\) →/.test(blank), 'the rule itself is not leaked');
+  const all = G.renderSVG(Object.assign({}, s, { hidden: ['objects'] }), { version: 'question' });
+  assert.ok(!/data-obj|data-aid/.test(all) && !/Mapping:/.test(all), '“all objects” hides the aids and captions too'); assert.equal(vb(all), vb(key));
+  for (const lvl of G.SCAFFOLD_LEVELS) { const z = G.renderSVG(Object.assign({}, s, { hidden: G.SCAFFOLD[lvl] }), { version: 'question' }); noBad(z); assert.equal(vb(z), vb(key)); }
+});
+
+test('transformations: spec round trip, idempotent normalize, names, extent grows to fit the image', () => {
+  const s = tfSpec({ how: 'rotate', angle: 270, dir: 'cw', center: { x: 1, y: 2 }, k: '1/2', words: true });
+  const n = G.normalize(s); assert.deepEqual(plain(G.normalize(n)), plain(n)); assert.deepEqual(plain(G.parseFile(G.serialize(n))), plain(n));
+  assert.equal(G.normalize({ objects: [{ kind: 'transform', how: 'spin', angle: 45 }] }).objects[0].how, 'translate'); assert.equal(G.normalize({ objects: [{ kind: 'transform', angle: 45 }] }).objects[0].angle, 90);
+  assert.equal(G.objName(n.objects[1], n.objects), 'Rotation of Polygon ABC');
+  const big = tfSpec({ how: 'dilate', k: 10, center: { x: 0, y: 0 } }); const A = G.analyse(big);
+  assert.ok(A.ax.hi >= 40 && A.ay.hi >= 30, 'the window grows to show the image: ' + A.ax.hi + ',' + A.ay.hi);
 });
