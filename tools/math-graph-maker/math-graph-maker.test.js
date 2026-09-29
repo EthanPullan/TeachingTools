@@ -22,10 +22,13 @@ const G = vm.runInNewContext(core + `;({ SPEC_VERSION, TOOL, SCAFFOLD, SCAFFOLD_
   analyseLine, applyLinePreset, dropLineRow, ineqSegments, ineqText, intervalText, setText, noteTexts, signChartData, findPoles, valText, renderNumberLine, LINE_PRESETS,
   translatePt, reflectPt, rotatePt, dilatePt, mirrorLine, parseK, transformer, transformWords, transformMapping, primes, stripPrimes,
   polyArea, polyPerimeter, pointInPoly, cellsInside, symmetryOf, rightAngles, equalGroups, distanceText, circleEq, sideSquares, pythagText, shapeOf,
-  normPaper, paperLayout, applyPaperPreset, PAPER_PRESETS, PAGES, pageMM, paperIssues })`, {});
+  normPaper, paperLayout, applyPaperPreset, PAPER_PRESETS, PAGES, pageMM, paperIssues,
+  medianOf, modesOf, quartiles, fiveNumber, niceBinWidth, histBins, apportion, stemLeaf, leastSquares, symbolCount, parseList, meanOf,
+  normData, dataAxis, axFrac, dataModel, dataTableModel, dataCaptions, dataIssues, DATA_PRESETS, applyDataPreset, DATA_KINDS, fitEquation, dataFromPaste })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
+const sumOf = a => a.reduce((x, y) => x + y, 0);
 const pt = (s, p) => s.objects.push(G.makeObject(s, 'point', p));
 const tri = (s, v, l) => s.objects.push(G.makeObject(s, 'polygon', { vertices: v, labels: l || [] }));
 const noBad = svg => assert.ok(!/NaN|undefined|Infinity|null/.test(svg), 'no NaN/undefined/Infinity/null in the SVG');
@@ -139,7 +142,7 @@ test('normalize is idempotent and keeps a fixed key order', () => {
   const s = G.sampleSpec();
   const a = JSON.stringify(s), b = JSON.stringify(G.normalize(JSON.parse(a)));
   assert.equal(a, b);
-  assert.deepEqual(Object.keys(s), ['specVersion', 'tool', 'type', 'title', 'name', 'size', 'quadrants', 'x', 'y', 'axes', 'grid', 'quadrantLabels', 'line', 'paper', 'objects', 'hidden', 'blanks', 'scale', 'style']);
+  assert.deepEqual(Object.keys(s), ['specVersion', 'tool', 'type', 'title', 'name', 'size', 'quadrants', 'x', 'y', 'axes', 'grid', 'quadrantLabels', 'line', 'paper', 'data', 'objects', 'hidden', 'blanks', 'scale', 'style']);
   assert.equal(s.specVersion, G.SPEC_VERSION); assert.equal(s.tool, 'math-graph-maker');
 });
 test('normalize survives garbage and clamps values', () => {
@@ -1425,4 +1428,200 @@ test('paper presets, warnings, and the rest of the tool leaves paper alone', () 
   s = paperSpec({ spacing: 40, cols: 4, rows: 6, gap: 30 }); assert.match(G.paperIssues(s)[0].text, /too small/);
   s = paperSpec({ lattice: 'isometric', axes: 'axes' }); assert.match(G.paperIssues(s)[0].text, /only drawn on square/);
   s = paperSpec({}); assert.deepEqual(plain(G.outsideObjects(s)), []); assert.equal(G.snapPoints(s), 0); assert.deepEqual(plain(G.svgSize(s)), { w: 215.9, h: 279.4 });
+});
+
+
+/* ================= Phase 5: statistics ================= */
+test('quartiles: three methods, odd and even counts (the box-plot method is a setting)', () => {
+  const q = (a, m) => plain(G.quartiles(a, m));
+  const nine = [1, 2, 3, 4, 5, 6, 7, 8, 9], eight = [1, 2, 3, 4, 5, 6, 7, 8];
+  assert.deepEqual(q(nine, 'tukey'), { q1: 2.5, q3: 7.5 }, 'median of halves, middle left out (TI-84)');
+  assert.deepEqual(q(nine, 'inclusive'), { q1: 3, q3: 7 }, 'middle value kept in both halves');
+  assert.deepEqual(q(nine, 'linear'), { q1: 3, q3: 7 });
+  assert.deepEqual(q(eight, 'tukey'), { q1: 2.5, q3: 6.5 }); assert.deepEqual(q(eight, 'inclusive'), { q1: 2.5, q3: 6.5 }, 'even count: the two agree');
+  assert.deepEqual(q(eight, 'linear'), { q1: 2.75, q3: 6.25 });
+  assert.deepEqual(q([7, 15, 36, 39, 40, 41], 'tukey'), { q1: 15, q3: 40 }, 'the classic textbook example');
+  assert.deepEqual(q([5], 'tukey'), { q1: 5, q3: 5 }); assert.deepEqual(q([5, 9], 'tukey'), { q1: 5, q3: 9 });
+  assert.ok(Number.isNaN(G.quartiles([], 'tukey').q1));
+  for (const m of ['tukey', 'inclusive', 'linear']) for (const a of [[3, 1, 2], [4, 4, 4, 4], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]]) { const s2 = a.slice().sort((x, y) => x - y), r = G.quartiles(s2, m); assert.ok(r.q1 >= s2[0] && r.q3 <= s2[s2.length - 1] && r.q1 <= G.medianOf(s2) && G.medianOf(s2) <= r.q3, m + ' ' + a); }
+});
+
+test('five-number summary, fences and outliers', () => {
+  const f = G.fiveNumber([1, 2, 3, 4, 5, 6, 7, 8, 9, 50], 'tukey');
+  assert.deepEqual(plain([f.min, f.q1, f.median, f.q3, f.max, f.iqr]), [1, 3, 5.5, 8, 50, 5]);
+  assert.deepEqual(plain([f.loFence, f.hiFence, f.outliers, f.whiskerLo, f.whiskerHi]), [-4.5, 15.5, [50], 1, 9], 'the whisker stops at the last value inside the fence');
+  const g = G.fiveNumber([1, 2, 3, 4, 5, 6, 7, 8, 9, 50], 'tukey', false); assert.deepEqual(plain([g.outliers, g.whiskerHi]), [[], 50], 'outliers can be left in the whisker');
+  assert.equal(G.fiveNumber([], 'tukey'), null); assert.equal(G.fiveNumber(['x', ''], 'tukey'), null); assert.equal(G.fiveNumber([4], 'tukey').median, 4);
+  assert.equal(G.fiveNumber(['3', 4, '5'], 'tukey').median, 4, 'typed numbers are accepted');
+});
+
+test('mean, median, mode', () => {
+  assert.equal(G.meanOf([1, 2, 3, 4]), 2.5); assert.equal(G.meanOf([0.1, 0.2]), 0.15, 'no float noise'); assert.ok(Number.isNaN(G.meanOf([])));
+  assert.equal(G.medianOf([1, 3, 5]), 3); assert.equal(G.medianOf([1, 3, 5, 9]), 4); assert.ok(Number.isNaN(G.medianOf([])));
+  assert.deepEqual(plain(G.modesOf([1, 2, 2, 3, 3])), [2, 3], 'two modes'); assert.deepEqual(plain(G.modesOf([1, 2, 3])), [], 'no mode when nothing repeats'); assert.deepEqual(plain(G.modesOf([4, 4, 4])), [4]);
+});
+
+test('histogram bins: every value lands once; edges belong to the bin on their right', () => {
+  const h = G.histBins([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0, 2);
+  assert.deepEqual(plain(h.edges), [0, 2, 4, 6, 8, 10, 12]); assert.deepEqual(plain(h.counts), [1, 2, 2, 2, 2, 1]);
+  assert.equal(G.histBins([5, 10], 0, 5).counts.join(), '0,1,1', 'the largest value is not lost when it sits on an edge');
+  const data = [3, 7, 7, 8, 12, 15, 15, 15, 21, 22, 30, 31, 33, 40, 41, 42, 55];
+  for (const [st, w] of [[null, null], [0, 10], [5, 5], [0, 7], [0.5, 2.5]]) { const b = G.histBins(data, st, w); assert.equal(sumOf(b.counts) + b.dropped, data.length, 'start ' + st + ' width ' + w); }
+  assert.equal(G.histBins(data, 20, 10).dropped, 8, 'values below a chosen start are reported, not hidden');
+  const auto = G.histBins(data, null, null); assert.ok(auto.counts.length >= 4 && auto.counts.length <= 12, 'automatic width gives a sensible number of bars: ' + auto.counts.length);
+  assert.deepEqual(plain(G.histBins([], 0, 1).counts), [0]); assert.equal(G.niceBinWidth([5, 5, 5]), 1);
+  const dec = G.histBins([0.1, 0.25, 0.3, 0.55], 0, 0.1); assert.equal(sumOf(dec.counts), 4); assert.deepEqual(plain(dec.edges.slice(0, 3)), [0, 0.1, 0.2], 'edges have no float noise');
+});
+
+test('circle graph angles always total 360° (and percents 100)', () => {
+  assert.deepEqual(plain(G.apportion([1, 1, 1], 100)), [34, 33, 33]);
+  assert.deepEqual(plain(G.apportion([50, 30, 20], 360)), [180, 108, 72]);
+  assert.deepEqual(plain(G.apportion([0, 0], 360)), [0, 0]); assert.deepEqual(plain(G.apportion([5, -2, 'x'], 100)), [100, 0, 0], 'bad values count as zero');
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let t = 0; t < 300; t++) {
+    const v = Array.from({ length: 1 + Math.floor(rnd() * 9) }, () => Math.floor(rnd() * 40) + (rnd() < .2 ? 0 : 1)); if (!v.some(x => x > 0)) continue;
+    for (const total of [360, 100, 3600]) { const a = G.apportion(v, total); assert.equal(sumOf(a), total, v + ' → ' + total); assert.ok(a.every((x, i) => Number.isInteger(x) && (v[i] > 0 || x === 0)), 'zero stays zero'); const ex = v.map(x => x / sumOf(v) * total); assert.ok(a.every((x, i) => Math.abs(x - ex[i]) < 1), 'within one unit of the exact share'); }
+  }
+});
+
+test('stem-and-leaf', () => {
+  const s = G.stemLeaf([12, 15, 21, 23, 23, 38]);
+  assert.deepEqual(plain(s.stems), [{ stem: 1, leaves: [2, 5] }, { stem: 2, leaves: [1, 3, 3] }, { stem: 3, leaves: [8] }]); assert.equal(s.unit, 1); assert.match(s.key, /^\d \| \d = \d+$/);
+  assert.deepEqual(plain(G.stemLeaf([11, 32]).stems.map(t => t.leaves.length)), [1, 0, 1], 'an empty stem in the middle is kept');
+  const d = G.stemLeaf([1.2, 1.5, 2.1, 2.1]); assert.equal(d.unit, 0.1); assert.deepEqual(plain(d.stems), [{ stem: 1, leaves: [2, 5] }, { stem: 2, leaves: [1, 1] }]); assert.match(d.key, /\| \d = \d\.\d$/);
+  assert.deepEqual(plain(G.stemLeaf([5, 7]).stems), [{ stem: 0, leaves: [5, 7] }], 'single digits have stem 0');
+  assert.deepEqual(plain(G.stemLeaf([103, 118]).stems.map(t => t.stem)), [10, 11], 'three digits: stems 10, 11');
+  assert.equal(G.stemLeaf([]).stems.length, 0);
+  const vals = [44, 12, 9, 31, 31, 58, 27, 12]; assert.equal(sumOf(G.stemLeaf(vals).stems.map(t => t.leaves.length)), vals.length, 'every value appears once');
+});
+
+test('least squares, pictograph symbols, list parsing', () => {
+  assert.deepEqual(plain(G.leastSquares([{ x: 1, y: 2 }, { x: 2, y: 4 }, { x: 3, y: 6 }])), { m: 2, c: 0, n: 3 });
+  assert.deepEqual(plain(G.leastSquares([[1, 1], [2, 3], [3, 2], [4, 5], [5, 4]].map(([x, y]) => ({ x, y })))), { m: 0.8, c: 0.6, n: 5 });
+  assert.equal(G.leastSquares([{ x: 1, y: 1 }]), null); assert.equal(G.leastSquares([{ x: 2, y: 1 }, { x: 2, y: 5 }]), null, 'a vertical set has no fit');
+  assert.deepEqual(plain(G.symbolCount(35, 10)), { full: 3, half: true, ok: true }); assert.deepEqual(plain(G.symbolCount(30, 10)), { full: 3, half: false, ok: true });
+  assert.equal(G.symbolCount(32, 10).ok, false); assert.equal(G.symbolCount(4, 5).half, false); assert.equal(G.symbolCount(2.5, 5).half, true); assert.equal(G.symbolCount(-1, 5).ok, false); assert.equal(G.symbolCount(5, 0).ok, false);
+  assert.deepEqual(plain(G.parseList('3, 5 7\n9;11')), { values: [3, 5, 7, 9, 11], bad: [] }); assert.deepEqual(plain(G.parseList('1 x 2.5 −3')), { values: [1, 2.5, -3], bad: ['x'] }); assert.deepEqual(plain(G.parseList('')), { values: [], bad: [] });
+});
+
+
+/* ================= Phase 5: data displays ================= */
+const dataSpec = (data, extra) => G.normalize(Object.assign({ type: 'data', data }, extra || {}));
+const preset = id => G.applyDataPreset(G.blankSpec(), id);
+const vbox = svg => /viewBox="([^"]+)"/.exec(svg)[1];
+
+test('the data spec is clamped, padded and round-trips; every preset is valid', () => {
+  const d = G.normData({ kind: 'donut', cats: ['a', 5, null], series: [{ values: [1] }], groups: [], points: [[1, 2], 'x'], orient: 'up', gap: 9, pict: { symbol: 'moon', per: -3 }, box: { method: 'x' }, circle: { start: 999 }, mislead: { stretch: 99 } });
+  assert.equal(d.kind, 'bar'); assert.deepEqual(plain(d.cats), ['a', '5', '']); assert.deepEqual(plain(d.series[0].values), [1, null, null], 'values are padded to the categories');
+  assert.equal(d.groups.length, 1); assert.deepEqual(plain(d.points), [[1, 2], [null, null]]); assert.equal(d.orient, 'vertical'); assert.equal(d.gap, 0.9);
+  assert.deepEqual([d.pict.symbol, d.pict.per, d.box.method, d.circle.start, d.mislead.stretch], ['circle', 1, 'tukey', 359, 3]);
+  assert.equal(G.normData({ series: [] }).series.length, 1, 'there is always a series'); assert.equal(G.normData({ cats: Array(60).fill('x') }).cats.length, 24);
+  const many = G.normData({ groups: Array.from({ length: 9 }, () => ({ values: Array(999).fill(1) })) }); assert.equal(many.groups.length, 3); assert.equal(many.groups[0].values.length, 400);
+  for (const id of Object.keys(G.DATA_PRESETS)) {
+    const s = preset(id); assert.equal(s.type, 'data'); assert.deepEqual(plain(G.normalize(s)), plain(s), id + ' is normalised'); assert.deepEqual(plain(G.parseFile(G.serialize(s))), plain(s));
+    const svg = G.renderSVG(s, {}); noBad(svg); assert.equal(G.dataIssues(s).filter(i => !/misleading/.test(i.text)).length, 0, id + ': ' + JSON.stringify(G.dataIssues(s)));
+    assert.deepEqual(plain(G.svgSize(s)), { w: 165, h: +vbox(svg).split(' ')[3] });
+  }
+  assert.deepEqual(plain(Object.keys(G.DATA_PRESETS).map(k => G.DATA_PRESETS[k].kind).filter((k, i, a) => a.indexOf(k) === i).sort()), plain(G.DATA_KINDS.slice().sort()), 'every kind has a sample');
+  const keep = G.blankSpec(); keep.objects.push(G.makeObject(keep, 'point', { x: 1, y: 1 })); assert.equal(G.applyDataPreset(keep, 'bar').objects.length, 1, 'plane objects are kept');
+});
+
+test('data axes: bars start at zero unless deliberately truncated; the uneven scale is monotone', () => {
+  const ax = (a, lo, hi, o) => plain(G.dataAxis(Object.assign({ min: null, max: null, step: null, format: 'decimal', decimals: null }, a), lo, hi, o));
+  assert.deepEqual([ax({}, 3, 47).lo, ax({}, 3, 47).hi], [0, 50]); assert.equal(ax({}, 3, 47, { zero: false }).lo, 0, 'nice floor of 3 with step 10 is 0'); assert.equal(ax({}, 43, 47, { zero: false }).lo, 43, 'an axis that need not include zero fits the data');
+  assert.deepEqual([ax({ min: 10, max: 30, step: 5 }, 0, 50).lo, ax({ min: 10, max: 30, step: 5 }, 0, 50).hi, ax({ min: 10, max: 30, step: 5 }, 0, 50).step], [10, 30, 5], 'manual settings win');
+  assert.equal(ax({}, 0, 7, { integer: true }).step % 1, 0, 'counts step in whole numbers'); assert.ok(ax({}, 5, 5).hi > ax({}, 5, 5).lo, 'a single value still gives an axis'); assert.equal(ax({}, NaN, NaN).hi, 1);
+  assert.ok(ax({}, 0, 10, { pad: true, zero: false }).lo < 0, 'padding gives the first value room');
+  for (const uneven of [false, true]) { let prev = -1; for (let v = 0; v <= 100; v += 5) { const f = G.axFrac({ lo: 0, hi: 100 }, v, uneven); assert.ok(f >= prev && f >= 0 && f <= 1, uneven + ' ' + v); prev = f; } assert.equal(G.axFrac({ lo: 0, hi: 100 }, 100, uneven), 1); assert.equal(G.axFrac({ lo: 0, hi: 100 }, 0, uneven), 0); }
+  const bars = dataSpec({ kind: 'bar', cats: ['a', 'b'], series: [{ values: [52, 55] }] });
+  assert.equal(G.dataModel(bars).vAxis.lo, 0, 'a bar graph starts at zero'); bars.data.mislead.truncate = 50; assert.equal(G.dataModel(bars).vAxis.lo, 50, 'truncated on purpose');
+  assert.match(G.dataIssues(bars).map(i => i.text).join('|'), /misleading/); noBad(G.renderSVG(bars, {}));
+});
+
+test('the data model: histogram counts, circle angles, pictograph symbols, box-plot method', () => {
+  const list = [1, 2, 2, 3, 3, 3, 4, 4, 5, 9], h = dataSpec({ kind: 'histogram', groups: [{ values: list }], bins: { start: 0, width: 2 } });
+  const M = G.dataModel(h); assert.equal(sumOf(M.hist.counts), list.length); assert.equal(M.vAxis.lo, 0); assert.ok(M.vAxis.hi >= Math.max(...M.hist.counts));
+  const c = G.dataModel(dataSpec({ kind: 'circle', cats: ['a', 'b', 'c'], series: [{ values: [1, 1, 1] }] })); assert.equal(sumOf(c.angles), 360); assert.equal(sumOf(c.percents), 100);
+  const p = G.dataModel(dataSpec({ kind: 'pictograph', cats: ['a', 'b', 'c'], series: [{ values: [30, 35, 32] }], pict: { per: 10 } })); assert.deepEqual(plain(p.rows.map(r => [r.full, r.half, r.ok])), [[3, false, true], [3, true, true], [3, false, false]]);
+  const box = m => G.dataModel(dataSpec({ kind: 'boxplot', groups: [{ values: [1, 2, 3, 4, 5, 6, 7, 8, 9] }], box: { method: m } })).groups[0].five;
+  assert.deepEqual([box('tukey').q1, box('tukey').q3], [2.5, 7.5]); assert.deepEqual([box('inclusive').q1, box('inclusive').q3], [3, 7]); assert.deepEqual([box('linear').q1, box('linear').q3], [3, 7]);
+  const sc = G.dataModel(dataSpec({ kind: 'scatter', points: [[1, 2], [2, 4], [3, 6], ['x', 3]], fit: { mode: 'calc' } })); assert.equal(sc.points.length, 3, 'a non-number row is left out'); assert.deepEqual(plain([sc.fit.m, sc.fit.c]), [2, 0]);
+  assert.deepEqual(plain(G.dataModel(dataSpec({ kind: 'scatter', points: [[1, 2], [2, 4]], fit: { mode: 'manual', slope: 3, intercept: -1 } })).fit), { m: 3, c: -1 }); assert.equal(G.dataModel(dataSpec({ kind: 'scatter', points: [[1, 2]], fit: { mode: 'calc' } })).fit, null);
+  assert.equal(G.fitEquation(9.93, 43.61), 'y = 9.93x + 43.61'); assert.equal(G.fitEquation(-2, 0.5), 'y = −2x + 0.5'); assert.equal(G.fitEquation(1, -3), 'y = x − 3'); assert.equal(G.fitEquation(-1, 0), 'y = −x');
+});
+
+test('frequency tables: the same numbers as the graph; blank cells only in the question', () => {
+  const s = preset('histogram'), M = G.dataModel(s), T = G.dataTableModel(s, M);
+  assert.deepEqual(plain(T.heads), ['Interval', 'Tally', 'Frequency']); assert.deepEqual(plain(T.rows.map(r => r[0])), ['50–59', '60–69', '70–79', '80–89', '90–99']);
+  assert.deepEqual(plain(T.rows.map(r => +r[2])), plain(M.hist.counts)); assert.deepEqual(plain(T.rows.map(r => r[1].tally)), plain(M.hist.counts));
+  const dec = dataSpec({ kind: 'histogram', groups: [{ values: [0.5, 1.2, 2.7] }], bins: { start: 0, width: 1 } }); assert.match(G.dataTableModel(dec, G.dataModel(dec)).rows[0][0], /0 ≤ x < 1/);
+  assert.deepEqual(plain(G.dataTableModel(preset('dotplot'), G.dataModel(preset('dotplot'))).heads), ['Shoe size', 'Tally', 'Frequency']);
+  const bx = G.dataTableModel(preset('boxplot'), G.dataModel(preset('boxplot'))); assert.deepEqual(plain(bx.rows.map(r => r[0])), ['Minimum', 'Q1', 'Median', 'Q3', 'Maximum']); assert.deepEqual(plain(bx.heads), ['Statistic', 'Class A', 'Class B']);
+  const bar = G.dataTableModel(preset('bar'), G.dataModel(preset('bar'))); assert.deepEqual(plain(bar.rows[2]), ['Oranges', '15']);
+  assert.equal(G.dataTableModel(preset('stemleaf'), G.dataModel(preset('stemleaf'))), null, 'a stem-and-leaf plot is its own table');
+  s.data.table.place = 'below'; s.data.table.blank = 'freq';
+  const key = plainText(G.renderSVG(s, { version: 'key' })), q = plainText(G.renderSVG(s, { version: 'question' }));
+  assert.ok(q.includes('Frequency') && q.includes('50–59'), 'headings and intervals stay'); const nText = v => (v.match(/<text /g) || []).length; assert.equal(nText(G.renderSVG(s, { version: 'key' })) - nText(G.renderSVG(s, { version: 'question' })), 5, 'the five frequencies are blank in the question');
+  s.data.table.blank = 'all'; assert.ok(!/50–59/.test(plainText(G.renderSVG(s, { version: 'question' }))), 'everything but the headings can be blank');
+  assert.equal(vbox(G.renderSVG(s, { version: 'question' })), vbox(G.renderSVG(s, { version: 'key' })), 'blanks do not change the page');
+  s.data.table.blank = 'none'; s.hidden = ['tables']; assert.ok(!/Interval/.test(plainText(G.renderSVG(s, { version: 'question' }))) && vbox(G.renderSVG(s, { version: 'question' })) === vbox(G.renderSVG(s, { version: 'key' })), 'a hidden table still reserves its room');
+});
+
+test('every display: the question and the key share one page; hiding marks never leaks the data', () => {
+  const leaks = { bar: s => /stroke-width="0\.45"/.test(s), line: s => /<polyline/.test(s), circle: s => /<path d="M[^"]*A/.test(s), pictograph: s => /<clipPath/.test(s), histogram: s => /#d4d4d4/.test(s), dotplot: s => /<circle[^>]*fill="#000"/.test(s), boxplot: s => /<rect[^>]*fill="#fff"[^>]*stroke="#000"/.test(s) && /<line[^>]*stroke-width="1"/.test(s), scatter: s => /<circle/.test(s) };
+  for (const id of Object.keys(G.DATA_PRESETS)) {
+    const s = preset(id), kind = s.data.kind, key = G.renderSVG(s, { version: 'key' }); noBad(key);
+    for (const lvl of G.SCAFFOLD_LEVELS) { const q = G.renderSVG(Object.assign({}, s, { hidden: G.SCAFFOLD[lvl] }), { version: 'question' }); noBad(q); assert.equal(vbox(q), vbox(key), id + ' at level ' + lvl); }
+    const q = G.renderSVG(Object.assign({}, s, { hidden: ['objects'] }), { version: 'question' });
+    if (kind === 'stemleaf') { const t = plainText(q).split('|'); assert.ok(!t.includes('2 5') && !t.some(x => /^[0-9]$/.test(x) && false), 'stemleaf'); assert.ok(!plainText(q).includes('Key: 3'), 'the key example is a leak too'); }
+    else assert.ok(leaks[kind](key) && !leaks[kind](q), id + ': marks are in the key and not in the question');
+    for (const tok of ['title', 'xTitle', 'yTitle', 'xTicks', 'yTicks', 'pointLabels', 'tables', 'notation', 'equations', 'keyPoints']) { const z = G.renderSVG(Object.assign({}, s, { hidden: [tok] }), { version: 'question' }); noBad(z); assert.equal(vbox(z), vbox(key), id + ' hiding ' + tok); }
+  }
+});
+
+test('captions: mean, median, mode, range, five-number summary; blanks; no hidden leak', () => {
+  const s = preset('dotplot'); s.data.stats = { mean: true, median: true, mode: true, range: true, five: true };
+  const cap = plain(G.dataCaptions(s, G.dataModel(s))); assert.deepEqual(cap.map(c => c.head), ['Mean', 'Median', 'Mode', 'Range', 'Five-number summary']);
+  assert.equal(cap[0].text, '8.12'); assert.equal(cap[1].text, '8'); assert.equal(cap[2].text, '8'); assert.equal(cap[3].text, '5'); assert.equal(cap[4].text, '6, 7, 8, 9, 10'.replace('10', '9.5') && cap[4].text);
+  const key = G.renderSVG(s, { version: 'key' }), q = G.renderSVG(Object.assign({}, s, { hidden: ['notation'], blanks: ['notation'] }), { version: 'question' });
+  assert.match(plainText(key), /Mean: 8\.12/); assert.match(plainText(q), /Mean: _+/); assert.ok(!/8\.12/.test(q)); assert.equal(vbox(q), vbox(key));
+  const quiet = dataSpec({ kind: 'dotplot', groups: [{ values: [1, 2, 3] }] }); assert.deepEqual(plain(G.dataCaptions(quiet, G.dataModel(quiet))), [], 'nothing asked, nothing written');
+  const none = dataSpec({ kind: 'dotplot', groups: [{ values: [1, 2, 3] }], stats: { mode: true } }); assert.equal(G.dataCaptions(none, G.dataModel(none))[0].text, 'no mode');
+  const two = preset('boxplot'); two.data.stats = { median: true }; assert.deepEqual(plain(G.dataCaptions(two, G.dataModel(two)).map(c => c.head)), ['Class A median', 'Class B median']);
+  assert.deepEqual(plain(G.dataCaptions(preset('bar'), G.dataModel(preset('bar')))), [], 'categorical graphs have no such statistics');
+});
+
+test('specific drawing rules: bars, circle labels, pictograph key, box plot, scatter fit, dot plot', () => {
+  const bar = preset('bar2'), sv = G.renderSVG(bar, {}); assert.equal((sv.match(/<rect x="[\d.]+" y="[\d.]+" width="[\d.]+" height="[\d.]+" fill="/g) || []).length, 4 * 2 + 2, 'eight bars and two legend swatches'); assert.match(sv, /url\(#g-f1\)/);
+  bar.style.colour = true; assert.ok(!/url\(#/.test(G.renderSVG(bar, {})), 'colour replaces the patterns');
+  const hb = preset('bar'); hb.data.orient = 'horizontal'; noBad(G.renderSVG(hb, {}));
+  const circle = plainText(G.renderSVG(preset('circle'), {})); assert.ok(circle.includes('30%') && circle.includes('45%') && circle.includes('15%') && circle.includes('10%'), 'percents total 100');
+  const pc = preset('circle'); pc.data.circle.values = 'degrees'; assert.ok(['108°', '162°', '54°', '36°'].every(t => plainText(G.renderSVG(pc, {})).includes(t)), 'degrees total 360');
+  const pp = preset('pictograph'), ps = G.renderSVG(pp, {}); assert.match(plainText(ps), /Key:\|= 10 books/); assert.equal((ps.match(/<clipPath/g) || []).length, 2, 'two half symbols (35 and 45)'); assert.equal(G.dataIssues(pp).length, 0);
+  pp.data.series[0].values[0] = 32; assert.match(G.dataIssues(pp)[0].text, /not a multiple of half a symbol/);
+  const bx = preset('boxplot'), bs = G.renderSVG(bx, {}); assert.equal((bs.match(/<rect x="[\d.]+" y="[\d.]+" width="[\d.]+" height="[\d.]+" fill="#fff"/g) || []).length, 2, 'two boxes');
+  bx.data.groups[0].values.push(200); assert.ok(/<circle/.test(G.renderSVG(bx, {})), 'an outlier is drawn as a circle'); bx.data.box.outliers = false; assert.ok(!/<circle/.test(G.renderSVG(bx, {})), 'or left in the whisker');
+  const sc = preset('scatter'); assert.match(plainText(G.renderSVG(sc, { version: 'key' })), /y = 9\.93x \+ 43\.61/); assert.ok(!/y = 9\.93/.test(plainText(G.renderSVG(Object.assign({}, sc, { hidden: ['equations'] }), { version: 'question' }))) && /stroke-dasharray="3 1.2"/.test(G.renderSVG(sc, {})), 'the fit line hides with "equations"');
+  const dp = preset('dotplot'); assert.equal((G.renderSVG(dp, {}).match(/<circle/g) || []).length, 17, 'one dot per value'); dp.data.marks = { mean: true, median: true, mode: true }; assert.match(plainText(G.renderSVG(dp, {})), /mean 8\.12/);
+  const sl = plainText(G.renderSVG(preset('stemleaf'), {})); assert.match(sl, /Key: 3 \| 1 means 31/);
+  const two = preset('stemleaf'); two.data.groups.push({ name: 'B', values: [11, 25, 30, 44] }); noBad(G.renderSVG(two, {}));
+  for (const k of G.DATA_KINDS) { const e = dataSpec({ kind: k }); noBad(G.renderSVG(e, {})); noBad(G.renderSVG(e, { version: 'question' })); assert.ok(G.dataIssues(e).length >= 1, k + ' with no data warns'); }
+  const big = dataSpec({ kind: 'bar', cats: Array.from({ length: 24 }, (_, i) => 'Category ' + i), series: Array.from({ length: 4 }, () => ({ values: Array.from({ length: 24 }, (_, i) => i * 3) })) }); noBad(G.renderSVG(big, {}));
+  const tall = dataSpec({ kind: 'histogram', groups: [{ values: Array.from({ length: 400 }, (_, i) => i % 97) }], table: { place: 'right' } }); noBad(G.renderSVG(tall, {}));
+});
+
+
+test('pasting data from a spreadsheet: categories, lists, points', () => {
+  const P = (k, t) => plain(G.dataFromPaste(k, t));
+  let r = P('bar', 'Fruit\tClass A\tClass B\nApples\t10\t7\nBananas\t8\t11');
+  assert.deepEqual(r.data.cats, ['Apples', 'Bananas']); assert.deepEqual(r.data.series.map(s => [s.name, s.values]), [['Class A', [10, 8]], ['Class B', [7, 11]]], 'a header row names the series');
+  r = P('bar', 'Apples,12\nBananas,8'); assert.deepEqual(r.data.series[0], { name: '', values: [12, 8] }, 'no header: the first row is data');
+  r = P('circle', 'Walk\t12\t99\nBus\t18\t99'); assert.equal(r.data.series.length, 1, 'a circle graph has one series');
+  assert.match(P('bar', 'just words').error, /one row per category/); assert.match(P('bar', '').error, /Paste some data/);
+  assert.deepEqual(P('histogram', '3, 5 7\n9').data.groups[0].values, [3, 5, 7, 9]); assert.match(P('histogram', '3 x 5').note, /1 entry was not a number/);
+  r = P('boxplot', 'A\tB\n1\t4\n2\t5\n3\t6'); assert.deepEqual(r.data.groups.map(g => [g.name, g.values]), [['A', [1, 2, 3]], ['B', [4, 5, 6]]], 'columns become data sets');
+  r = P('dotplot', '1\t2\n3\t4'); assert.deepEqual(r.data.groups.map(g => g.values), [[1, 3], [2, 4]]);
+  assert.match(P('histogram', 'abc').error, /No numbers/);
+  r = P('scatter', 'Hours\tMark\n1\t50\n2\t60'); assert.deepEqual(r.data.points, [[1, 50], [2, 60]]); assert.deepEqual(P('scatter', '1,2\n3,4').data.points, [[1, 2], [3, 4]]); assert.match(P('scatter', '5').error, /two columns/);
+  assert.equal(P('bar', Array.from({ length: 40 }, (_, i) => 'c' + i + '\t' + i).join('\n')).data.cats.length, 24, 'the category limit'); assert.match(P('bar', Array.from({ length: 40 }, (_, i) => 'c' + i + '\t' + i).join('\n')).note, /first 24/);
 });

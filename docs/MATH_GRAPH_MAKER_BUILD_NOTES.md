@@ -45,7 +45,7 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 | Origin label | `0` | Setting: `0`, `O`, none |
 | Prime notation (Phase 4) | A′, A″ | Setting |
 | Angle mode (Phase 10) | Degrees for grades 6–9, radians in trig | Setting; not built yet |
-| Quartile method (Phase 5) | Median of halves, middle value excluded (matches TI-84) | **Unconfirmed** — check against the class textbook before Phase 5 |
+| Quartile method (Phase 5) | Median of halves, middle value excluded (matches TI-84) | **Unconfirmed** — built as a setting (3 methods); check against the class textbook |
 | Graph size | Presets set the *width*; height follows the grid so cells stay square | Custom size can fix both |
 | Auto range | ±10 (or 0–10) minimum, grows to fit objects | Set Min/Max on the Axes tab to override |
 | Saved file identity | `tool: "math-graph-maker"` in every file | A science file opened here fails with a clear message |
@@ -124,12 +124,43 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 - Assumptions to check with the teacher: the paper presets (cm, ¼ inch, 5 mm, 4 mm), three approximations of "standard" isometric paper (dots at
   1 cm along the row, rows √3/2 apart), and the default look of a dilation (dashed rays through the centre).
 
+## Phase 5 notes (data displays)
+- **A fourth type, `data`,** with its own small model (`dataModel`) and renderer (`renderData`). It reuses the axis maths (`niceRange`, `ticks`,
+  `fmtTick`), the label formatter, marker shapes, `linearFit`-style least squares, and the Axes tab (vertical axis = the values, horizontal =
+  categories or the number line). Bars, line, circle, pictograph, histogram, dot plot, stem-and-leaf (also back-to-back), box plot (one to three
+  data sets) and scatter with a calculated or hand-set line of best fit.
+- **Pure statistics first, tested:** mean, median, mode(s) (none when nothing repeats), quartiles by **three selectable methods**, five-number
+  summary with the 1.5 × IQR outliers, histogram bins (`[a, b)`, nothing lost on an edge, automatic width, values below a chosen start are
+  reported), circle-graph angles by largest remainder (always exactly 360°, and percents exactly 100), stem-and-leaf (whole numbers or one
+  decimal, empty stems kept), least squares, pictograph half symbols, list and spreadsheet parsing. Circle-graph totals are property-tested
+  on 300 random data sets.
+- **Quartile method (open decision, still unconfirmed):** the default is the median of each half with the middle value left out (matches the
+  TI-84). "Middle value included" and "interpolated (Excel)" are one click away. The box-plot done-when says quartiles must match the chosen
+  method: they do, and the choice is on the Data tab, not buried. **Please check the default against your textbook.** With an even number of
+  values the first two methods agree.
+- **Question / key uses the same switches as everything else.** The graph itself (bars, dots, sectors, boxes, leaves) hides with "objects";
+  value and percent labels with "point labels"; the frequency table with "tables" (its cells can be blank instead: only the numbers, or
+  everything but the headings); mean / median / mode / five-number lines with "notation" (with an answer line); the best-fit line with
+  "equations"; mean and median markers with "key points". The page is identical either way, and a test checks that no hidden mark leaks
+  into the question SVG for any of the nine kinds. "Print the data list above the graph" gives the classic "make a histogram from this data".
+- **Frequency table** beside or below the graph, with a real tally column (strokes in fives, the fifth struck through, drawn as lines so it needs
+  no font). A table that would squeeze the graph on a narrow page moves underneath by itself.
+- **Bars can be told apart without colour** with six fills (grey, hatching, dots, cross-hatching, dark grey, lines) and lines by dash and marker.
+- **Misleading graphs (critique questions):** start the axis at a chosen value, an uneven (squeezed) scale, a stretched height. They are flagged
+  on the Test tab as "misleading on purpose" so nobody prints one by accident.
+- **Data entry:** typed into a table (categories) or a box (lists) or pasted from a spreadsheet (`dataFromPaste`, tested); ten samples cover
+  every kind. Files stay tidy: numbers are stored as numbers, kept as text only while half-typed.
+- Not built (would be easy next): circle-graph leader lines for crowded sectors, grouped/stacked bars beyond side-by-side, a dual-axis line graph, a
+  cumulative-frequency graph. Widths of long category names are wrapped to two lines, never rotated.
+- Assumptions to check: the sample data, the histogram interval text ("50–59" for whole numbers, "0 ≤ x < 1" otherwise), circle sectors start at 12 o'clock and
+  run clockwise, dot plots are padded by one step each side, whole-symbol pictographs use plain outlined symbols.
+
 ## How Phase 1 is tested
-- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 108 tests after Phase 4): axis maths, number
+- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 123 tests after Phase 5): axis maths, number
   cleanup, label typography, `normalize` idempotence, save/load round trip, stable ids, paste parsing, and a
   render matrix (every layout × scaffold level × style) asserting no `NaN`/`undefined`, an identical page and
   plot rectangle in question and key, and that a hidden title/label never leaks into the question SVG.
-- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 143 checks after Phase 4) drive the real page
+- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 165 checks after Phase 5) drive the real page
   over `file://` in Chromium: no network requests, table entry and paste, click-to-place and drag with snapping,
   scaffold levels, pick-to-hide, export names (`q4-q.png` / `q4-key.png`), PNG stamped 300 DPI with pixel size
   matching the millimetres, the locked scale **measured by the browser** (ten 10 mm squares = 100 mm),
@@ -172,7 +203,7 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 - [x] Phase 2: function engine and linear relations (specVersion 2)
 - [x] Phase 3: number lines (specVersion 3)
 - [x] Phase 4: transformations, geometry, paper (specVersion 4)
-- [ ] Phase 5: data displays
+- [x] Phase 5: data displays
 - [ ] Phase 6: test-making toolkit
 - [ ] Phase 7: workflow and comfort
 - [ ] Phases 8–12: waiting on the stream decision

@@ -177,8 +177,8 @@
     <button class="btn small" id="redoBtn" type="button" title="Redo (Ctrl+Y)">↷ Redo</button>
     <div class="spacer"></div>
     <label class="check" title="Export PNG/SVG without a white background"><input type="checkbox" id="transparent"> Transparent</label>
-    <button class="btn" id="pairBtn" data-types="plane,numberline" type="button" title="Download the question and the answer key together, with matching file names (e.g. q4-q.png and q4-key.png)">Export question + key</button>
-    <select id="pairFmt" data-types="plane,numberline" aria-label="Format for the question + key pair"><option value="png">PNG</option><option value="svg">SVG</option></select>
+    <button class="btn" id="pairBtn" data-types="plane,numberline,data" type="button" title="Download the question and the answer key together, with matching file names (e.g. q4-q.png and q4-key.png)">Export question + key</button>
+    <select id="pairFmt" data-types="plane,numberline,data" aria-label="Format for the question + key pair"><option value="png">PNG</option><option value="svg">SVG</option></select>
     <span class="sep"></span>
     <button class="btn" id="svgBtn" type="button">Export SVG</button>
     <button class="btn primary" id="pngBtn" type="button">Export PNG · 300 DPI</button>
@@ -189,12 +189,13 @@
       <nav class="tabs" id="tabs" role="tablist">
         <button class="tab active" data-tab="graph" role="tab">Graph</button>
         <button class="tab" data-tab="paper" data-types="paper" role="tab" hidden>Paper</button>
+        <button class="tab" data-tab="data" data-types="data" role="tab" hidden>Data</button>
         <button class="tab" data-tab="objects" data-types="plane" role="tab">Shapes</button>
         <button class="tab" data-tab="functions" data-types="plane" role="tab">Equations</button>
         <button class="tab" data-tab="geometry" data-types="plane" role="tab">Geometry</button>
         <button class="tab" data-tab="line" data-types="numberline" role="tab" hidden>Number line</button>
-        <button class="tab" data-tab="axes" data-types="plane,numberline" role="tab">Axes</button>
-        <button class="tab" data-tab="test" data-types="plane,numberline" role="tab">Test</button>
+        <button class="tab" data-tab="axes" data-types="plane,numberline,data" role="tab">Axes</button>
+        <button class="tab" data-tab="test" data-types="plane,numberline,data" role="tab">Test</button>
         <button class="tab" data-tab="style" role="tab">Style</button>
       </nav>
       <div class="tabbody">
@@ -203,7 +204,8 @@
         <section class="pane" data-pane="graph">
           <div>
             <h3 class="section-title">What are you making?</h3>
-            <div class="seg" data-seg="type"><button type="button" data-v="plane">Coordinate plane</button><button type="button" data-v="numberline">Number line</button><button type="button" data-v="paper">Graph paper</button></div>
+            <div class="seg" data-seg="type"><button type="button" data-v="plane">Coordinate plane</button><button type="button" data-v="numberline">Number line</button><button type="button" data-v="paper">Graph paper</button><button type="button" data-v="data">Data display</button></div>
+            <p class="hint" style="margin-top:6px" data-types="data" hidden>Bar, line, circle, picto-, histogram, dot, stem-and-leaf, box and scatter graphs from a list of data. Enter it on the Data tab.</p>
             <p class="hint" style="margin-top:6px" data-types="paper" hidden>Blank grid, dot and isometric paper for a whole page, or several small grids per page. Set it up on the Paper tab.</p>
             <p class="hint" style="margin-top:6px" data-types="numberline">Set up the line on the Number line tab. Your plane objects are kept, and come back if you switch again.</p>
           </div>
@@ -225,7 +227,7 @@
             <p class="hint" style="margin-top:8px">Grid squares are always square: a square is one step between numbered gridlines. Set a different range on the Axes tab.</p>
             <label class="check" style="margin-top:10px"><input type="checkbox" data-bind="quadrantLabels"> Label the quadrants (I, II, III, IV)</label>
           </div>
-          <div data-types="plane,numberline">
+          <div data-types="plane,numberline,data">
             <h3 class="section-title">Printed size</h3>
             <select id="sizePreset" aria-label="Size preset"></select>
             <div class="row" style="margin-top:8px">
@@ -241,6 +243,9 @@
             <p class="hint" id="scaleHint" style="margin-top:8px">The page grows to fit the grid, so the size above is ignored. Paste the PNG into Word at 100% (it is stamped 300 DPI) and a ruler will measure true.</p>
           </div>
         </section>
+
+        <!-- DATA -->
+        <section class="pane" data-pane="data" hidden id="dataPane"></section>
 
         <!-- PAPER -->
         <section class="pane" data-pane="paper" hidden id="paperPane">
@@ -307,11 +312,11 @@
 
     <section class="stage">
       <div class="stage-bar">
-        <div class="seg" id="viewSeg" data-types="plane,numberline" role="group" aria-label="Preview version">
+        <div class="seg" id="viewSeg" data-types="plane,numberline,data" role="group" aria-label="Preview version">
           <button type="button" data-view="key" class="active">Answer key</button>
           <button type="button" data-view="question">Question</button>
         </div>
-        <span class="hint" id="viewHint" data-types="plane,numberline"></span>
+        <span class="hint" id="viewHint" data-types="plane,numberline,data"></span>
         <span class="sep"></span>
         <label class="check" data-types="plane" title="Answer key view: click empty space to add a point, drag a point or corner to move it"><input type="checkbox" id="editTool"> Click to add points · drag to move</label>
         <label class="check" id="snapWrap" hidden><input type="checkbox" id="snapTool" checked> Snap to gridlines</label>
@@ -355,12 +360,12 @@
      kinds instead of growing one big function.
    Helpers marked "(from science)" are copied from tools/science-graph-maker.
    ========================================================================== */
-const SPEC_VERSION = 4;                                     // 2: equations, tables and related objects; 3: number lines; 4: transformations, geometry and paper (an older tool would silently drop what it does not know)
+const SPEC_VERSION = 4;                                     // 2: equations, tables and related objects; 3: number lines; 4: transformations, geometry, paper and data displays (an older tool would silently drop what it does not know)
 const TOOL = 'math-graph-maker';
 
 /* ---------- constants ---------- */
-const TYPES = ['plane', 'numberline', 'paper'];
-const TYPE_NAMES = { plane: 'Coordinate plane', numberline: 'Number line', paper: 'Graph paper' };
+const TYPES = ['plane', 'numberline', 'paper', 'data'];
+const TYPE_NAMES = { plane: 'Coordinate plane', numberline: 'Number line', paper: 'Graph paper', data: 'Data display' };
 const SIZES = {                                             // real units: millimetres. Presets set the width; the height follows the grid.
   full:    { w: 165, name: 'Full width' },
   half:    { w: 82,  name: 'Half width' },
@@ -1418,6 +1423,7 @@ OBJECT_KINDS.vlt = {
 function readability(spec) {
   if (isNL(spec)) return readabilityLine(spec);
   if (spec.type === 'paper') return paperIssues(spec);
+  if (spec.type === 'data') return dataIssues(spec);
   const objs = resolveObjects(spec), A = analyse(spec, objs), issues = [];
   const win = { xlo: A.ax.lo, xhi: A.ax.hi, ylo: A.ay.lo, yhi: A.ay.hi };
   const onG = (v, ax) => { const k = (v - ax.lo) / gridStepFor(ax, spec); return Math.abs(k - Math.round(k)) < 1e-6; };
@@ -1477,7 +1483,7 @@ function readability(spec) {
 const plainMarkup = s => flatRuns(labelRuns(s)).map(r => r.t).join('');
 /* Move every point and corner that is off the drawn grid onto the nearest gridline. Returns how many values moved. */
 function snapPoints(spec) {
-  if (isNL(spec) || spec.type === 'paper') return 0;
+  if (isNL(spec) || spec.type === 'paper' || spec.type === 'data') return 0;
   const A = analyse(spec);
   let n = 0;
   const snap = (v, ax) => { const y = parseNum(v); if (!isFin(y)) return v; const s = snapValue(y, ax, spec); if (s !== y) n++; return s; };
@@ -1585,6 +1591,7 @@ function normalize(raw) {
     quadrantLabels: vBool(r.quadrantLabels, false),
     line: { orient: vPick(ln.orient, ORIENTS, 'horizontal'), connect: vBool(ln.connect, false), rows: lineRows },
     paper: normPaper(r.paper),
+    data: normData(r.data),
     objects, hidden, blanks,
     scale: { lock: vBool(sc.lock, false), mm: clamp(vNum(sc.mm) ?? 10, 1, 50) },
     style: { colour: vBool(style.colour, false), photocopySafe: vBool(style.photocopySafe, false), largePrint: vBool(style.largePrint, false) }
@@ -1747,6 +1754,7 @@ const cellsFor = mm => clamp(Math.floor((mm - 20) / 3.5), 3, 60);          // mo
 function analyse(spec, objs) {
   if (isNL(spec)) return analyseLine(spec, objs);
   if (spec.type === 'paper') return { size: pageMM(spec.paper), ax: null, ay: null };
+  if (spec.type === 'data') return { size: sizeMM(spec.size), ax: null, ay: null };
   objs = objs || resolveObjects(spec);
   const size = sizeMM(spec.size), mode = spec.quadrants === 1 ? 'one' : 'four', ext = extentsOf(objs);
   return { size, mode,
@@ -1762,7 +1770,7 @@ const insidePlane = (x, y, A) => x >= A.ax.lo - 1e-9 && x <= A.ax.hi + 1e-9 && y
 /* Objects with any vertex outside the plane (they are clipped; the editor warns). */
 function outsideObjects(spec) {
   if (isNL(spec)) return outsideLine(spec);
-  if (spec.type === 'paper') return [];
+  if (spec.type === 'paper' || spec.type === 'data') return [];
   const objs = resolveObjects(spec), A = analyse(spec, objs), out = [];
   objs.forEach(o => { if (OBJECT_KINDS[o.kind].bounds(o).some(p => !insidePlane(p.x, p.y, A))) out.push({ id: o.id, name: objName(o) }); });
   return out;
@@ -1873,6 +1881,7 @@ function renderSVG(spec, o) {
   o = Object.assign({ version: 'key', ghost: false, hits: false, background: 'white', px: null, id: 'g', xmlHeader: false }, o);
   if (isNL(spec)) return renderNumberLine(spec, o);
   if (spec.type === 'paper') return renderPaper(spec, o);
+  if (spec.type === 'data') return renderData(spec, o);
   const objs = resolveObjects(spec), A = analyse(spec, objs), { ax, ay, size } = A;
   const K = makeKit(spec, o);
   const { S, FS, FT, PAD, TICK, lw, hid, txt } = K;
@@ -3046,6 +3055,659 @@ function paperIssues(spec) {
   return out;
 }
 
+/* ==========================================================================
+   Phase 5: data displays. Pure statistics first (tested on their own), then the data model, then the renderer.
+   ========================================================================== */
+const DATA_KINDS = ['bar', 'line', 'circle', 'pictograph', 'histogram', 'dotplot', 'stemleaf', 'boxplot', 'scatter'];
+const DATA_NAMES = { bar: 'Bar graph', line: 'Line graph', circle: 'Circle graph', pictograph: 'Pictograph', histogram: 'Histogram', dotplot: 'Dot plot', stemleaf: 'Stem-and-leaf plot', boxplot: 'Box-and-whisker plot', scatter: 'Scatter plot' };
+const CAT_KINDS = ['bar', 'line', 'circle', 'pictograph'], LIST_KINDS = ['histogram', 'dotplot', 'stemleaf', 'boxplot'];
+const QUARTILE_METHODS = { tukey: 'Median of each half (middle value left out)', inclusive: 'Median of each half (middle value included)', linear: 'Interpolated (Excel QUARTILE, R type 7)' };
+const SYMBOLS = ['circle', 'square', 'star', 'triangle', 'heart'];
+const MAX_CATS = 24, MAX_SERIES = 4, MAX_LIST = 400, MAX_GROUPS = 3, MAX_POINTS = 200;
+
+const sumOf = a => a.reduce((x, y) => x + y, 0);
+const finite = a => a.map(parseNum).filter(isFin);
+const meanOf = a => a.length ? clean(sumOf(a) / a.length) : NaN;
+function medianOf(sorted) {                                              // sorted ascending
+  const n = sorted.length;
+  return !n ? NaN : n % 2 ? sorted[(n - 1) / 2] : clean((sorted[n / 2 - 1] + sorted[n / 2]) / 2);
+}
+/* Every value that occurs most often; none at all when every value occurs once (no mode). */
+function modesOf(values) {
+  const c = new Map();
+  values.forEach(v => c.set(v, (c.get(v) || 0) + 1));
+  const top = Math.max(0, ...c.values());
+  return top < 2 ? [] : [...c].filter(([, k]) => k === top).map(([v]) => v).sort((a, b) => a - b);
+}
+/* Q1 and Q3 by one of three methods (textbooks disagree; the default matches the TI-84). */
+function quartiles(sorted, method) {
+  const n = sorted.length;
+  if (!n) return { q1: NaN, q3: NaN };
+  if (n === 1) return { q1: sorted[0], q3: sorted[0] };
+  if (method === 'linear') {
+    const at = p => { const h = (n - 1) * p, lo = Math.floor(h); return clean(sorted[lo] + (h - lo) * ((sorted[Math.min(lo + 1, n - 1)]) - sorted[lo])); };
+    return { q1: at(.25), q3: at(.75) };
+  }
+  const half = Math.floor(n / 2), lower = sorted.slice(0, method === 'inclusive' ? Math.ceil(n / 2) : half), upper = sorted.slice(method === 'inclusive' ? half : Math.ceil(n / 2));
+  return { q1: medianOf(lower), q3: medianOf(upper) };
+}
+/* min, Q1, median, Q3, max, plus the 1.5 × IQR fences, the outliers and where the whiskers really end. */
+function fiveNumber(values, method, outliers) {
+  const s = finite(values).sort((a, b) => a - b), n = s.length;
+  if (!n) return null;
+  const { q1, q3 } = quartiles(s, method), iqr = clean(q3 - q1), lo = q1 - 1.5 * iqr, hi = q3 + 1.5 * iqr;
+  const inside = outliers === false ? s : s.filter(v => v >= lo - 1e-9 && v <= hi + 1e-9);
+  return { n, min: s[0], q1, median: medianOf(s), q3, max: s[n - 1], iqr, loFence: clean(lo), hiFence: clean(hi),
+           whiskerLo: inside[0], whiskerHi: inside[inside.length - 1], outliers: outliers === false ? [] : s.filter(v => v < lo - 1e-9 || v > hi + 1e-9) };
+}
+/* A whole number of bars, whole intervals: a width that gives 5 to 10 bins for this data. */
+function niceBinWidth(values) {
+  const s = finite(values).sort((a, b) => a - b);
+  if (s.length < 2 || s[s.length - 1] === s[0]) return 1;
+  const range = s[s.length - 1] - s[0], target = clamp(Math.ceil(1 + Math.log2(s.length)), 5, 10);
+  return niceStep(range / target);
+}
+/* Intervals [a, b): a value on an edge goes in the bin to its right. start / width null = automatic. */
+function histBins(values, start, width) {
+  const s = finite(values).sort((a, b) => a - b);
+  if (!s.length) return { edges: [0, 1], counts: [0], width: 1, start: 0, dropped: 0, n: 0 };
+  const w = width > 0 ? width : niceBinWidth(s), st = isFin(start) ? start : clean(Math.floor(s[0] / w + 1e-9) * w);
+  const nb = Math.max(1, Math.floor((s[s.length - 1] - st) / w + 1e-9) + 1), edges = Array.from({ length: nb + 1 }, (_, i) => clean(st + i * w)), counts = Array(nb).fill(0);
+  let dropped = 0;
+  s.forEach(v => { const i = Math.floor((v - st) / w + 1e-9); if (i < 0 || i >= nb) dropped++; else counts[i]++; });
+  return { edges, counts, width: w, start: st, dropped, n: s.length };
+}
+/* Whole numbers that add up to exactly `total`, as close to the exact shares as possible (largest remainder). */
+function apportion(values, total) {
+  const v = values.map(x => isFin(x) && x > 0 ? x : 0), sum = sumOf(v);
+  if (!sum) return v.map(() => 0);
+  const exact = v.map(x => x / sum * total), out = exact.map(Math.floor);
+  let left = total - sumOf(out);
+  exact.map((e, i) => [e - Math.floor(e), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).forEach(([, i]) => { if (left > 0 && v[i] > 0) { out[i]++; left--; } });
+  return out;
+}
+/* Stems and leaves. Whole numbers: the tens and the ones digit; one decimal place: the whole part and the tenths digit. */
+function stemLeaf(values) {
+  const s = finite(values).sort((a, b) => a - b);
+  if (!s.length) return { stems: [], unit: 1, key: '', negative: false };
+  const unit = s.every(v => Math.abs(v * 10 - Math.round(v * 10)) < 1e-9) && !s.every(v => Math.abs(v - Math.round(v)) < 1e-9) ? .1 : 1;
+  const parts = s.map(v => { const t = Math.round(Math.abs(v) / unit); return { stem: Math.floor(t / 10), leaf: t % 10 }; });
+  const lo = parts[0].stem, hi = Math.max(...parts.map(p => p.stem)), stems = [];
+  for (let st = Math.min(lo, ...parts.map(p => p.stem)); st <= hi; st++) stems.push({ stem: st, leaves: parts.filter(p => p.stem === st).map(p => p.leaf) });
+  const ex = parts[Math.floor(parts.length / 2)];
+  return { stems, unit, negative: s.some(v => v < 0), key: ex.stem + ' | ' + ex.leaf + ' = ' + fmtNum(clean(unit === 1 ? ex.stem * 10 + ex.leaf : ex.stem + ex.leaf / 10)) };
+}
+/* Least squares y = m x + c through the points. */
+function leastSquares(points) {
+  const p = points.filter(q => isFin(q.x) && isFin(q.y)), n = p.length;
+  if (n < 2) return null;
+  const mx = sumOf(p.map(q => q.x)) / n, my = sumOf(p.map(q => q.y)) / n, sxx = sumOf(p.map(q => (q.x - mx) ** 2)), sxy = sumOf(p.map(q => (q.x - mx) * (q.y - my)));
+  if (sxx < 1e-12) return null;
+  const m = sxy / sxx, c = my - m * mx;
+  return { m: clean(m), c: clean(c), n };
+}
+/* How a pictograph draws a value: whole symbols and maybe a half. ok = false when it is not a multiple of half a symbol. */
+function symbolCount(v, per) {
+  if (!isFin(v) || !(per > 0) || v < 0) return { full: 0, half: false, ok: false };
+  const u = v / per, full = Math.floor(u + 1e-9), rest = u - full;
+  return { full, half: Math.abs(rest - .5) < 1e-9, ok: rest < 1e-9 || Math.abs(rest - .5) < 1e-9 || Math.abs(rest - 1) < 1e-9 };
+}
+/* Parse a list typed or pasted as text: numbers separated by commas, spaces or new lines (a decimal comma is not guessed at). */
+function parseList(text) {
+  const items = String(text).split(/[\s,;]+/).filter(Boolean), out = [], bad = [];
+  items.forEach(t => { const n = parseNum(t); if (isFin(n)) out.push(n); else bad.push(t); });
+  return { values: out, bad };
+}
+
+/* ---------- the data spec ---------- */
+const arr = v => Array.isArray(v) ? v : [];
+const objOf = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+function normData(r) {
+  r = objOf(r);
+  const str = c => typeof c === 'string' ? c : typeof c === 'number' && isFin(c) ? String(c) : '';
+  const cats = arr(r.cats).slice(0, MAX_CATS).map(str);
+  let series = arr(r.series).slice(0, MAX_SERIES).map(sr => { sr = objOf(sr); return { name: vStr(sr.name, ''), values: cats.map((_, i) => cellClean(arr(sr.values)[i])) }; });
+  if (!series.length) series = [{ name: '', values: cats.map(() => null) }];
+  let groups = arr(r.groups).slice(0, MAX_GROUPS).map(g => { g = objOf(g); return { name: vStr(g.name, ''), values: arr(g.values).slice(0, MAX_LIST).map(cellClean) }; });
+  if (!groups.length) groups = [{ name: '', values: [] }];
+  const points = arr(r.points).slice(0, MAX_POINTS).map(p => Array.isArray(p) ? [cellClean(p[0]), cellClean(p[1])] : [null, null]);
+  const ci = objOf(r.circle), pi = objOf(r.pict), bi = objOf(r.bins), bx = objOf(r.box), ft = objOf(r.fit), mk = objOf(r.marks), st = objOf(r.stats), tb = objOf(r.table), ml = objOf(r.mislead);
+  const num = (v, a, b, d) => { const n = vNum(v); return n === null ? d : clamp(n, a, b); };
+  return {
+    kind: vPick(r.kind, DATA_KINDS, 'bar'), cats, series, groups, points,
+    orient: vPick(r.orient, ['vertical', 'horizontal'], 'vertical'), valueLabels: vBool(r.valueLabels, false), legend: vBool(r.legend, true), patterns: vBool(r.patterns, true), gap: num(r.gap, 0, .9, .35),
+    circle: { values: vPick(ci.values, ['percent', 'degrees', 'value', 'none'], 'percent'), names: vPick(ci.names, ['beside', 'legend', 'none'], 'beside'), centre: vBool(ci.centre, true), protractor: vBool(ci.protractor, false), start: num(ci.start, 0, 359, 0) },
+    pict: { symbol: vPick(pi.symbol, SYMBOLS, 'circle'), per: (vNum(pi.per) > 0 ? vNum(pi.per) : 1) },
+    bins: { start: vNum(bi.start), width: vNum(bi.width) > 0 ? vNum(bi.width) : null },
+    box: { method: vPick(bx.method, Object.keys(QUARTILE_METHODS), 'tukey'), outliers: vBool(bx.outliers, true), mean: vBool(bx.mean, false) },
+    fit: { mode: vPick(ft.mode, ['none', 'calc', 'manual'], 'none'), slope: vNum(ft.slope), intercept: vNum(ft.intercept), label: vBool(ft.label, true) },
+    marks: { mean: vBool(mk.mean, false), median: vBool(mk.median, false), mode: vBool(mk.mode, false) },
+    stats: { mean: vBool(st.mean, false), median: vBool(st.median, false), mode: vBool(st.mode, false), range: vBool(st.range, false), five: vBool(st.five, false) },
+    table: { place: vPick(tb.place, ['none', 'right', 'below'], 'none'), blank: vPick(tb.blank, ['none', 'freq', 'all'], 'none'), tally: vBool(tb.tally, true) },
+    raw: vBool(r.raw, false), aspect: num(r.aspect, .3, 1.6, .62),
+    mislead: { truncate: vNum(ml.truncate), uneven: vBool(ml.uneven, false), stretch: num(ml.stretch, .4, 3, 1) }
+  };
+}
+
+/* ---------- axes for data (no ±10 rule: they fit the data) ---------- */
+function dataAxis(a, lo, hi, o) {
+  o = Object.assign({ zero: true, target: 6, integer: false, pad: false }, o);
+  if (!isFin(lo) || !isFin(hi)) { lo = 0; hi = 1; }
+  let dLo = o.zero ? Math.min(0, lo) : lo, dHi = hi;
+  if (!(dHi > dLo)) dHi = dLo + 1;
+  const nr = niceRange(dLo, dHi, o.target);
+  const step = a.step > 0 ? a.step : o.integer ? Math.max(1, Math.round(nr.step)) : nr.step;
+  let l = a.min !== null ? a.min : clean(Math.floor(dLo / step + 1e-9) * step), h = a.max !== null ? a.max : clean(Math.ceil(dHi / step - 1e-9) * step);
+  if (o.pad && a.min === null && l >= lo - 1e-9) l = clean(l - step);
+  if (o.pad && a.max === null && h <= hi + 1e-9) h = clean(h + step);
+  if (!(h > l)) h = clean(l + step);
+  return { lo: l, hi: h, step, minor: 1, fmt: { format: a.format, decimals: a.decimals } };
+}
+/* Where a value sits along an axis, 0 to 1. `uneven` squeezes the top of the scale (a misleading option). */
+function axFrac(ax, v, uneven) {
+  const t = (v - ax.lo) / (ax.hi - ax.lo);
+  return uneven ? (t <= .4 ? t * 1.6 : .64 + (t - .4) * .6) : t;
+}
+
+/* ---------- the model: everything the renderer, the table and the captions need, computed once ---------- */
+function dataModel(spec) {
+  const D = spec.data, M = { kind: D.kind };
+  const trunc = D.mislead.truncate;
+  if (CAT_KINDS.includes(D.kind)) {
+    const vals = D.series.map(sr => sr.values.map(parseNum));
+    const all = vals.flat().filter(isFin);
+    M.cats = D.cats; M.series = D.series.map((sr, j) => ({ name: sr.name, vals: vals[j] })); M.max = all.length ? Math.max(...all) : 0; M.min = all.length ? Math.min(...all) : 0;
+    if (D.kind === 'bar' || D.kind === 'line') {
+      const zero = !isFin(trunc) && (D.kind === 'bar' || (M.min >= 0 && M.min < .5 * M.max));       // bars start at zero unless the graph is deliberately truncated
+      M.vAxis = dataAxis(spec.y, isFin(trunc) ? trunc : M.min, Math.max(M.max, M.min + 1e-9), { zero, target: 6, integer: all.every(v => Number.isInteger(v)) && M.max <= 20 });
+    }
+    if (D.kind === 'circle') { const v = vals[0].map(x => isFin(x) && x > 0 ? x : 0); M.total = sumOf(v); M.angles = apportion(v, 360); M.percents = apportion(v, 100); M.values = v; }
+    if (D.kind === 'pictograph') M.rows = vals[0].map(v => Object.assign({ v }, symbolCount(v, D.pict.per)));
+  }
+  if (LIST_KINDS.includes(D.kind)) {
+    M.groups = D.groups.map(g => {
+      const v = finite(g.values).sort((a, b) => a - b);
+      return { name: g.name, values: v, n: v.length, mean: meanOf(v), median: medianOf(v), modes: modesOf(v), min: v[0], max: v[v.length - 1], five: fiveNumber(g.values, D.box.method, D.box.outliers) };
+    });
+    const g0 = M.groups[0];
+    if (D.kind === 'histogram') { M.hist = histBins(g0.values, D.bins.start, D.bins.width); const mc = Math.max(0, ...M.hist.counts); M.vAxis = dataAxis(spec.y, 0, mc, { zero: true, target: 6, integer: true }); M.hist.edgesAxis = { lo: M.hist.edges[0], hi: M.hist.edges[M.hist.edges.length - 1] }; }
+    if (D.kind === 'dotplot') {
+      const c = new Map(); g0.values.forEach(v => c.set(v, (c.get(v) || 0) + 1));
+      M.dots = [...c].map(([v, n]) => ({ v, n })).sort((a, b) => a.v - b.v);
+      const ints = g0.values.every(v => Number.isInteger(v));
+      M.xAxis = dataAxis(spec.x, g0.min, g0.max, { zero: false, target: 10, integer: ints, pad: true });
+      M.maxStack = Math.max(1, ...M.dots.map(d => d.n));
+    }
+    if (D.kind === 'stemleaf') M.stem = D.groups.slice(0, 2).map(g => stemLeaf(g.values));
+    if (D.kind === 'boxplot') {
+      const all = M.groups.flatMap(g => g.values);
+      M.xAxis = dataAxis(spec.x, all.length ? Math.min(...all) : 0, all.length ? Math.max(...all) : 1, { zero: false, target: 8, integer: all.every(v => Number.isInteger(v)) && (all.length ? Math.max(...all) - Math.min(...all) : 0) <= 40, pad: true });
+    }
+  }
+  if (D.kind === 'scatter') {
+    M.points = D.points.map(p => ({ x: parseNum(p[0]), y: parseNum(p[1]) })).filter(p => isFin(p.x) && isFin(p.y));
+    const xs = M.points.map(p => p.x), ys = M.points.map(p => p.y);
+    M.xAxis = dataAxis(spec.x, xs.length ? Math.min(...xs) : 0, xs.length ? Math.max(...xs) : 1, { zero: xs.length > 0 && Math.min(...xs) >= 0 && Math.min(...xs) < .35 * Math.max(...xs), target: 8, pad: true });
+    M.yAxis = dataAxis(spec.y, ys.length ? Math.min(...ys) : 0, ys.length ? Math.max(...ys) : 1, { zero: ys.length > 0 && Math.min(...ys) >= 0 && Math.min(...ys) < .35 * Math.max(...ys), target: 6, pad: true });
+    M.fit = D.fit.mode === 'calc' ? leastSquares(M.points) : D.fit.mode === 'manual' && isFin(D.fit.slope) && isFin(D.fit.intercept) ? { m: D.fit.slope, c: D.fit.intercept } : null;
+  }
+  return M;
+}
+
+/* y = 9.93x + 43.61 (decimals, never fractions: a fit is only approximate). */
+const fitEquation = (m, c) => 'y = ' + (Math.abs(m) === 1 ? (m < 0 ? MINUS : '') : approx(m)) + 'x' + (Math.abs(c) < 5e-3 ? '' : (c < 0 ? ' ' + MINUS + ' ' : ' + ') + approx(Math.abs(c)));
+/* ---------- frequency table, captions, legend: derived from the model ---------- */
+const tallyN = n => ({ tally: n });
+function dataTableModel(spec, M) {
+  const D = spec.data, fv = v => isFin(v) ? fmtNum(v) : '';
+  let heads = [], rows = [], roles = [];
+  if (D.kind === 'bar' || D.kind === 'line' || D.kind === 'pictograph') {
+    heads = [spec.x.label || 'Category', ...M.series.map((s, j) => s.name || (M.series.length > 1 ? 'Series ' + (j + 1) : spec.y.label || 'Value'))];
+    rows = M.cats.map((c, i) => [c, ...M.series.map(s => fv(s.vals[i]))]); roles = heads.map((_, k) => k ? 'value' : 'label');
+  } else if (D.kind === 'circle') {
+    heads = ['Category', 'Value']; rows = M.cats.map((c, i) => [c, fv(M.series[0].vals[i])]); roles = ['label', 'value'];
+  } else if (D.kind === 'histogram') {
+    const h = M.hist, ints = M.groups[0].values.every(Number.isInteger) && Number.isInteger(h.width);
+    heads = ['Interval', ...(D.table.tally ? ['Tally'] : []), 'Frequency']; roles = heads.map((_, k) => k ? 'value' : 'label');
+    rows = h.counts.map((n, i) => [ints ? fmtNum(h.edges[i]) + '–' + fmtNum(h.edges[i + 1] - 1) : fmtNum(h.edges[i]) + ' ≤ x < ' + fmtNum(h.edges[i + 1]), ...(D.table.tally ? [tallyN(n)] : []), String(n)]);
+  } else if (D.kind === 'dotplot') {
+    heads = [spec.x.label || 'Value', ...(D.table.tally ? ['Tally'] : []), 'Frequency']; roles = heads.map((_, k) => k ? 'value' : 'label');
+    rows = M.dots.map(d => [fmtNum(d.v), ...(D.table.tally ? [tallyN(d.n)] : []), String(d.n)]);
+  } else if (D.kind === 'boxplot') {
+    heads = ['Statistic', ...M.groups.map((g, j) => g.name || (M.groups.length > 1 ? 'Data ' + (j + 1) : 'Value'))]; roles = heads.map((_, k) => k ? 'value' : 'label');
+    rows = [['Minimum', 'min'], ['Q1', 'q1'], ['Median', 'median'], ['Q3', 'q3'], ['Maximum', 'max']].map(([t, k]) => [t, ...M.groups.map(g => g.five ? fv(g.five[k]) : '')]);
+  } else if (D.kind === 'scatter') {
+    heads = [spec.x.label || 'x', spec.y.label || 'y']; rows = M.points.map(p => [fmtNum(p.x), fmtNum(p.y)]); roles = ['label', 'value'];
+  } else return null;
+  return { heads, rows, roles };
+}
+function dataTableLayout(T, K) {
+  const S = K.S, FS = K.FS, pad = 2.2 * S, rowH = 6.2 * S;
+  const colW = T.heads.map((h, c) => Math.max(9 * S, K.w(h, FS, true) + 2 * pad, ...T.rows.map(r => { const v = r[c]; return v && v.tally !== undefined ? Math.ceil(Math.max(1, v.tally) / 5) * 4.6 * S + 2 * pad : K.w(String(v), FS) + 2 * pad; })));
+  return { colW, rowH, w: sumOf(colW), ht: (T.rows.length + 1) * rowH };
+}
+function paintDataTable(T, K, x, y, blankMode) {
+  const L = dataTableLayout(T, K), FS = K.FS, S = K.S, out = [];
+  const line = (x1, y1, x2, y2, w) => `<line x1="${f3(x1)}" y1="${f3(y1)}" x2="${f3(x2)}" y2="${f3(y2)}" stroke="#000" stroke-width="${K.lw(w)}"/>`;
+  const blank = c => K.isQ && (blankMode === 'all' ? true : blankMode === 'freq' && T.roles[c] === 'value');
+  out.push(`<rect x="${f3(x)}" y="${f3(y)}" width="${f3(L.w)}" height="${f3(L.ht)}" fill="#fff" stroke="#000" stroke-width="${K.lw(.4)}"/>`);
+  for (let r = 1; r <= T.rows.length; r++) out.push(line(x, y + r * L.rowH, x + L.w, y + r * L.rowH, r === 1 ? .55 : .25));
+  let cx = x;
+  T.heads.forEach((h, c) => {
+    if (c) out.push(line(cx, y, cx, y + L.ht, .3));
+    out.push(K.txt(cx + L.colW[c] / 2, y + L.rowH / 2 + FS * .35, h, { bold: true }));
+    T.rows.forEach((r, i) => {
+      const v = r[c], cy = y + (i + 1) * L.rowH;
+      if (blank(c) || v === '' || v === undefined) return;
+      if (v.tally !== undefined) {                                       // tally marks: strokes in fives, the fifth struck through
+        const groups = Math.ceil(v.tally / 5), gw = 4.6 * S, x0 = cx + (L.colW[c] - groups * gw) / 2 + .6 * S;
+        for (let g = 0; g < groups; g++) {
+          const n = Math.min(5, v.tally - g * 5), gx = x0 + g * gw;
+          for (let k = 0; k < Math.min(n, 4); k++) out.push(line(gx + k * .9 * S, cy + 1.2 * S, gx + k * .9 * S, cy + L.rowH - 1.2 * S, .4));
+          if (n === 5) out.push(line(gx - .5 * S, cy + L.rowH - 1.6 * S, gx + 3.9 * S, cy + 1.6 * S, .4));
+        }
+      } else out.push(K.txt(cx + L.colW[c] / 2, cy + L.rowH / 2 + FS * .35, String(v)));
+    });
+    cx += L.colW[c];
+  });
+  return out.join('');
+}
+/* Lines written beneath the graph: mean, median, mode, range, the five-number summary. */
+function dataCaptions(spec, M) {
+  const D = spec.data, out = [], st = D.stats;
+  if (!M.groups) return out;
+  const many = M.groups.length > 1, show = (g, j) => {
+    const nm = many && g.name ? g.name + ': ' : '', pre = t => (many && g.name ? g.name + ' ' + t.toLowerCase() : t);
+    if (!g.n) return;
+    if (st.mean) out.push({ head: pre('Mean'), text: approx(g.mean) });
+    if (st.median) out.push({ head: pre('Median'), text: fmtNum(g.median) });
+    if (st.mode) out.push({ head: pre('Mode'), text: g.modes.length ? g.modes.map(fmtNum).join(', ') : 'no mode' });
+    if (st.range) out.push({ head: pre('Range'), text: fmtNum(clean(g.max - g.min)) });
+    if (st.five && g.five) out.push({ head: many && g.name ? g.name + ' five-number summary' : 'Five-number summary', text: [g.five.min, g.five.q1, g.five.median, g.five.q3, g.five.max].map(fmtNum).join(', ') });
+  };
+  (D.kind === 'boxplot' ? M.groups : M.groups.slice(0, 1)).forEach(show);
+  return out;
+}
+function dataLegend(spec, M) {
+  const D = spec.data;
+  if (!D.legend) return [];
+  if ((D.kind === 'bar' || D.kind === 'line') && (M.series.length > 1 || M.series[0].name)) return M.series.map((s, j) => ({ name: s.name || 'Series ' + (j + 1), idx: j }));
+  if (D.kind === 'circle' && D.circle.names === 'legend') return M.cats.map((c, i) => ({ name: c, idx: i }));
+  return [];
+}
+
+/* ---------- the renderer ---------- */
+function symbolSVG(kind, cx, cy, r, fill, K, clipId) {
+  const st = `fill="${fill}" stroke="#000" stroke-width="${K.lw(.35)}" stroke-linejoin="round"`, c = clipId ? ` clip-path="url(#${clipId})"` : '';
+  let body;
+  if (kind === 'square') body = `<rect x="${f3(cx - r * .9)}" y="${f3(cy - r * .9)}" width="${f3(r * 1.8)}" height="${f3(r * 1.8)}" ${st}/>`;
+  else if (kind === 'triangle') body = `<polygon points="${f3(cx)},${f3(cy - r)} ${f3(cx + r * 1.05)},${f3(cy + r * .85)} ${f3(cx - r * 1.05)},${f3(cy + r * .85)}" ${st}/>`;
+  else if (kind === 'star') { const P = []; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r * 1.05; P.push(f3(cx + rr * Math.cos(a)) + ',' + f3(cy + rr * Math.sin(a))); } body = `<polygon points="${P.join(' ')}" ${st}/>`; }
+  else if (kind === 'heart') body = `<path d="M${f3(cx)},${f3(cy + r * .9)}C${f3(cx - r * 1.6)},${f3(cy - r * .1)} ${f3(cx - r * .7)},${f3(cy - r * 1.1)} ${f3(cx)},${f3(cy - r * .35)}C${f3(cx + r * .7)},${f3(cy - r * 1.1)} ${f3(cx + r * 1.6)},${f3(cy - r * .1)} ${f3(cx)},${f3(cy + r * .9)}Z" ${st}/>`;
+  else body = `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(r)}" ${st}/>`;
+  return c ? `<g${c}>${body}</g>` : body;
+}
+function renderData(spec, o) {
+  const K = makeKit(spec, o), D = spec.data, M = dataModel(spec), { S, FS, FT, PAD, lw, hid, txt } = K, TICK = K.TICK;
+  const size = sizeMM(spec.size), W = size.w, kind = D.kind, defs = [], out = [], colour = spec.style.colour, gap = 3 * S;
+  const marks = !hid.has('objects'), pointLabels = !hid.has('pointLabels'), vLabels = D.valueLabels && pointLabels;
+  const made = new Set();
+  const patDef = (k, id) => {
+    const base = `<pattern id="${id}" patternUnits="userSpaceOnUse" width="1.7" height="1.7"`;
+    return k === 1 ? `${base} patternTransform="rotate(45)"><rect width="1.7" height="1.7" fill="#fff"/><line x1=".85" y1="0" x2=".85" y2="1.7" stroke="#000" stroke-opacity=".75" stroke-width=".3"/></pattern>`
+      : k === 2 ? `${base}><rect width="1.7" height="1.7" fill="#fff"/><circle cx=".85" cy=".85" r=".34" fill="#000"/></pattern>`
+      : k === 3 ? `${base} patternTransform="rotate(45)"><rect width="1.7" height="1.7" fill="#fff"/><path d="M.85,0V1.7M0,.85H1.7" stroke="#000" stroke-opacity=".75" stroke-width=".28"/></pattern>`
+      : `${base}><rect width="1.7" height="1.7" fill="#fff"/><line x1="0" y1=".85" x2="1.7" y2=".85" stroke="#000" stroke-opacity=".75" stroke-width=".3"/></pattern>`;
+  };
+  const fillOf = i => {                                              // colour: the palette; black and white: solid grey, then hatching, dots, cross-hatching, dark grey, lines
+    if (colour) return PALETTE[i % PALETTE.length];
+    if (!D.patterns) return '#d4d4d4';
+    const k = i % 6;
+    if (k === 0) return '#d4d4d4'; if (k === 4) return '#777';
+    const id = o.id + '-f' + k;
+    if (!made.has(k)) { made.add(k); defs.push(patDef(k === 5 ? 4 : k, id)); }
+    return `url(#${id})`;
+  };
+  const cap = dataCaptions(spec, M), capLH = FS * 1.5, capH = cap.length ? cap.length * capLH + 1.5 * S : 0;
+  const rawLines = [];
+  if (D.raw) {
+    const fmtL = l => l.map(v => fmtNum(v)).join(', ');
+    if (M.groups) M.groups.forEach((g, j) => { if (g.n) rawLines.push(...wrapText((g.name ? g.name + ': ' : M.groups.length > 1 ? 'Data ' + (j + 1) + ': ' : 'Data: ') + fmtL(D.groups[j].values.map(parseNum).filter(isFin)), W - 2 * PAD, FT, false, 6)); });
+    else if (M.points) rawLines.push(...wrapText('Data (x, y): ' + M.points.map(p => '(' + fmtNum(p.x) + ', ' + fmtNum(p.y) + ')').join('  '), W - 2 * PAD, FT, false, 6));
+    else if (M.cats) M.cats.forEach((c, i) => { });
+  }
+  const rawH = rawLines.length ? rawLines.length * FT * 1.35 + 2 * S : 0;
+  const T = D.table.place !== 'none' ? dataTableModel(spec, M) : null, TL = T ? dataTableLayout(T, K) : null;
+  const place = !T ? 'none' : D.table.place === 'right' && W - TL.w < 100 * S ? 'below' : D.table.place;           // a table that would squeeze the graph goes underneath instead
+  const rightW = T && place === 'right' ? TL.w + gap : 0, belowH = T && place === 'below' ? TL.ht + gap : 0;
+  const legend = dataLegend(spec, M), legW = legend.length ? Math.max(...legend.map(l => K.w(l.name, FT))) + 9 * S + gap : 0;
+  const titleSp = K.titleInfo(W).sp, xTitleSp = FS * 1.35 + 1.4;
+  const horiz = kind === 'bar' && D.orient === 'horizontal';
+  const vAx = M.vAxis, uneven = D.mislead.uneven;
+  const wrapCat = (s, w) => wrapText(s, Math.max(4, w), FT, false, 2);
+
+  /* ----- margins ----- */
+  const xT = spec.x.label || spec.x.unit ? xTitleSp : 0, yT = spec.y.label || spec.y.unit ? xTitleSp : 0;
+  let L = PAD, R = W - PAD - rightW - legW;
+  const T0 = PAD + titleSp + rawH + FT * .6;
+  const vTicks = vAx ? ticks(vAx).map(v => fmtTick(v, vAx)) : [];
+  const yTickW = vTicks.length ? Math.max(...vTicks.map(s => K.w(s, FT))) : 0;
+  if (kind === 'bar' && !horiz || kind === 'line' || kind === 'histogram') L = PAD + yT + yTickW + TICK + 1.6;
+  else if (horiz) L = PAD + xT + Math.max(...M.cats.map(c => K.w(c, FT)), 4) + TICK + 1.6;
+  else if (kind === 'scatter') { const yv = ticks(M.yAxis).map(v => fmtTick(v, M.yAxis)); L = PAD + yT + Math.max(...yv.map(s => K.w(s, FT))) + TICK + 1.6; }
+  else if (kind === 'boxplot') L = PAD + (M.groups.some(g => g.name) ? Math.max(...M.groups.map(g => K.w(g.name, FT))) + 3 * S : 2 * S) + 2;
+  else if (kind === 'pictograph') L = PAD + Math.max(...M.cats.map(c => K.w(c, FT)), 6) + 3 * S;
+  const halfLast = 2 * S;
+  R = Math.max(R, L + 30 * S);
+  const pw = R - L;
+  /* height of the plot by kind */
+  let ph;
+  const aspectH = pw * D.aspect * D.mislead.stretch;
+  let dotD = 0;
+  if (kind === 'dotplot') { const xa = M.xAxis, mm = pw / (xa.hi - xa.lo), gapMin = M.dots.length > 1 ? Math.min(...M.dots.slice(1).map((d, i) => d.v - M.dots[i].v)) : xa.step; dotD = Math.min(.9 * gapMin * mm, 4.4 * S); ph = Math.max(22 * S, M.maxStack * dotD * 1.1 + 5 * S); }
+  else if (kind === 'boxplot') ph = M.groups.length * 17 * S + 5 * S;
+  else if (kind === 'circle') ph = Math.min(pw, 88 * S);
+  else if (kind === 'pictograph') ph = Math.max(1, M.cats.length) * 8 * S + 9 * S;
+  else if (kind === 'stemleaf') ph = (Math.max(1, ...M.stem.map(s => s.stems.length)) + 2.6) * FS * 1.7;
+  else ph = Math.max(aspectH, 34 * S);
+  const catLines = (kind === 'bar' && !horiz || kind === 'line') && M.cats.length ? M.cats.map(c => wrapCat(c, pw / M.cats.length - 1)) : [];
+  const xTickSp = kind === 'circle' || kind === 'stemleaf' || kind === 'pictograph' ? 0 : (catLines.length ? Math.max(1, ...catLines.map(l => l.length)) * FT * 1.15 : FT * 1.15) + TICK + 1.4;
+  const xTitleH = kind === 'circle' || kind === 'stemleaf' || kind === 'pictograph' || kind === 'boxplot' && !spec.x.label ? 0 : xT || (horiz ? yT : 0);
+  const keyH = kind === 'pictograph' ? FS * 2 + 2 * S : 0;
+  const Bm = xTickSp + (horiz ? yT : xT) + belowH + capH + keyH + PAD;
+  let H = T0 + ph + Bm;
+  if (T && place === 'right') H = Math.max(H, T0 + TL.ht + capH + PAD);                // a tall table beside the graph makes the page taller
+  if (size.h) { H = size.h; ph = Math.max(15 * S, H - T0 - Bm); }
+  const x0 = L, x1 = R, y0 = T0, y1 = T0 + ph;
+  if (o.geom) Object.assign(o.geom, { W, H, cell: pw / Math.max(1, M.cats ? M.cats.length : 10) });
+
+  /* ----- value axis: gridlines, baseline, ticks (vertical value axis) ----- */
+  const yv = v => y1 - axFrac(vAx, v, uneven) * ph;
+  const drawValueAxisV = ax => {
+    const f = v => y1 - axFrac(ax, v, uneven) * ph;
+    ticks(ax).forEach(v => {
+      if (spec.grid.major) out.push(`<line x1="${f3(x0)}" y1="${f3(f(v))}" x2="${f3(x1)}" y2="${f3(f(v))}" stroke="${spec.style.photocopySafe ? '#555' : '#c4c4c4'}" stroke-width="${lw(.22)}"/>`);
+      out.push(`<line x1="${f3(x0 - TICK)}" y1="${f3(f(v))}" x2="${f3(x0)}" y2="${f3(f(v))}" stroke="#000" stroke-width="${lw(.35)}"/>`);
+      if (!hid.has('yTicks')) out.push(txt(x0 - TICK - 1.1, f(v) + FT * .35, fmtTick(v, ax), { fs: FT, anchor: 'end' }));
+    });
+  };
+  const drawFrame = () => out.push(`<path d="M${f3(x0)},${f3(y0)}V${f3(y1)}H${f3(x1)}" stroke="#000" stroke-width="${lw(.5)}" fill="none"/>`);
+
+  /* ----- kinds ----- */
+  const shapes = [], labels = [];
+  const catX = i => x0 + (i + .5) * pw / M.cats.length;
+  const catLabelsBottom = () => M.cats.forEach((c, i) => { if (hid.has('xTicks')) return; (catLines[i] || [c]).forEach((ln, k) => labels.push(txt(catX(i), y1 + TICK + 1.2 + FT * .85 + k * FT * 1.15, ln, { fs: FT }))); });
+  if (kind === 'bar') {
+    const n = Math.max(1, M.cats.length), m = M.series.length;
+    if (!horiz) {
+      drawValueAxisV(vAx); drawFrame();
+      const cw = pw / n, gw = cw * (1 - D.gap), bw = gw / m, base = vAx.lo <= 0 && vAx.hi >= 0 ? 0 : vAx.lo;
+      if (marks) M.series.forEach((sr, j) => sr.vals.forEach((v, i) => {
+        if (!isFin(v)) return;
+        const bx = x0 + i * cw + (cw - gw) / 2 + j * bw, top = yv(clamp(v, vAx.lo, vAx.hi)), b = yv(base);
+        shapes.push(`<rect x="${f3(bx)}" y="${f3(Math.min(top, b))}" width="${f3(bw)}" height="${f3(Math.abs(b - top))}" fill="${fillOf(j)}" stroke="#000" stroke-width="${lw(.45)}"/>`);
+        if (vLabels) labels.push(txt(bx + bw / 2, (v >= base ? top - 1.1 : top + FT * 1.1), fmtNum(v), { fs: FT }));
+      }));
+      catLabelsBottom();
+    } else {                                                          // horizontal: categories down the side, values along the bottom
+      const ch = ph / n, gh = ch * (1 - D.gap), bh = gh / m, xv = v => x0 + axFrac(vAx, v, uneven) * pw, base = vAx.lo <= 0 && vAx.hi >= 0 ? 0 : vAx.lo;
+      ticks(vAx).forEach(v => {
+        if (spec.grid.major) out.push(`<line x1="${f3(xv(v))}" y1="${f3(y0)}" x2="${f3(xv(v))}" y2="${f3(y1)}" stroke="${spec.style.photocopySafe ? '#555' : '#c4c4c4'}" stroke-width="${lw(.22)}"/>`);
+        out.push(`<line x1="${f3(xv(v))}" y1="${f3(y1)}" x2="${f3(xv(v))}" y2="${f3(y1 + TICK)}" stroke="#000" stroke-width="${lw(.35)}"/>`);
+        if (!hid.has('xTicks')) labels.push(txt(xv(v), y1 + TICK + 1.2 + FT * .85, fmtTick(v, vAx), { fs: FT }));
+      });
+      drawFrame();
+      M.cats.forEach((c, i) => { if (!hid.has('yTicks')) labels.push(txt(x0 - TICK - 1.1, y0 + (i + .5) * ch + FT * .35, c, { fs: FT, anchor: 'end' })); });
+      if (marks) M.series.forEach((sr, j) => sr.vals.forEach((v, i) => {
+        if (!isFin(v)) return;
+        const by = y0 + i * ch + (ch - gh) / 2 + j * bh, e = xv(clamp(v, vAx.lo, vAx.hi)), b = xv(base);
+        shapes.push(`<rect x="${f3(Math.min(e, b))}" y="${f3(by)}" width="${f3(Math.abs(e - b))}" height="${f3(bh)}" fill="${fillOf(j)}" stroke="#000" stroke-width="${lw(.45)}"/>`);
+        if (vLabels) labels.push(txt(e + 1.1, by + bh / 2 + FT * .35, fmtNum(v), { fs: FT, anchor: 'start' }));
+      }));
+    }
+  } else if (kind === 'line') {
+    drawValueAxisV(vAx); drawFrame();
+    M.cats.forEach((c, i) => out.push(`<line x1="${f3(catX(i))}" y1="${f3(y1)}" x2="${f3(catX(i))}" y2="${f3(y1 + TICK)}" stroke="#000" stroke-width="${lw(.35)}"/>`));
+    if (marks) M.series.forEach((sr, j) => {
+      const pts = sr.vals.map((v, i) => isFin(v) ? [catX(i), yv(clamp(v, vAx.lo, vAx.hi)), v] : null), dash = DASHES[Object.keys(DASHES)[j % 4]];
+      const col = colour ? PALETTE[j % PALETTE.length] : '#000';
+      let run = [];
+      const flush = () => { if (run.length > 1) shapes.push(`<polyline points="${run.map(p => f3(p[0]) + ',' + f3(p[1])).join(' ')}" fill="none" stroke="${col}" stroke-width="${lw(.6)}" stroke-linejoin="round"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`); run = []; };
+      pts.forEach(p => { if (p) run.push(p); else flush(); }); flush();
+      pts.forEach(p => { if (!p) return; shapes.push(markerSVG(MARKERS[j % MARKERS.length], p[0], p[1], 1.5 * S, col, S, false)); if (vLabels) labels.push(txt(p[0], p[1] - 2.6 * S, fmtNum(p[2]), { fs: FT, halo: true })); });
+    });
+    catLabelsBottom();
+  } else if (kind === 'histogram') {
+    const h = M.hist, xa = { lo: h.edges[0], hi: h.edges[h.edges.length - 1] }, xv = v => x0 + (v - xa.lo) / (xa.hi - xa.lo) * pw;
+    drawValueAxisV(vAx); drawFrame();
+    if (marks) h.counts.forEach((n, i) => {
+      if (!n) return;
+      shapes.push(`<rect x="${f3(xv(h.edges[i]))}" y="${f3(yv(n))}" width="${f3(xv(h.edges[i + 1]) - xv(h.edges[i]))}" height="${f3(yv(0) - yv(n))}" fill="${fillOf(0)}" stroke="#000" stroke-width="${lw(.5)}"/>`);
+      if (vLabels) labels.push(txt((xv(h.edges[i]) + xv(h.edges[i + 1])) / 2, yv(n) - 1.1, String(n), { fs: FT }));
+    });
+    const every = Math.max(1, Math.ceil((Math.max(...h.edges.map(e => K.w(fmtNum(e), FT))) + 1.6) / (pw / (h.edges.length - 1))));
+    h.edges.forEach((e, i) => { out.push(`<line x1="${f3(xv(e))}" y1="${f3(y1)}" x2="${f3(xv(e))}" y2="${f3(y1 + TICK)}" stroke="#000" stroke-width="${lw(.35)}"/>`); if (!(i % every) && !hid.has('xTicks')) labels.push(txt(xv(e), y1 + TICK + 1.2 + FT * .85, fmtNum(e), { fs: FT })); });
+    M.xMap = xv;
+  } else if (kind === 'dotplot' || kind === 'boxplot' || kind === 'scatter') {
+    const xa = M.xAxis, xv = v => x0 + axFrac(xa, v) * pw;
+    M.xMap = xv;
+    if (kind === 'scatter') {
+      const ya = M.yAxis, yy = v => y1 - axFrac(ya, v) * ph;
+      ticks(ya).forEach(v => { if (spec.grid.major) out.push(`<line x1="${f3(x0)}" y1="${f3(yy(v))}" x2="${f3(x1)}" y2="${f3(yy(v))}" stroke="#c4c4c4" stroke-width="${lw(.22)}"/>`); out.push(`<line x1="${f3(x0 - TICK)}" y1="${f3(yy(v))}" x2="${f3(x0)}" y2="${f3(yy(v))}" stroke="#000" stroke-width="${lw(.35)}"/>`); if (!hid.has('yTicks')) labels.push(txt(x0 - TICK - 1.1, yy(v) + FT * .35, fmtTick(v, ya), { fs: FT, anchor: 'end' })); });
+      ticks(xa).forEach(v => { if (spec.grid.major) out.push(`<line x1="${f3(xv(v))}" y1="${f3(y0)}" x2="${f3(xv(v))}" y2="${f3(y1)}" stroke="#c4c4c4" stroke-width="${lw(.22)}"/>`); });
+      M.yMap = yy;
+    }
+    drawFrame();
+    const every = Math.max(1, Math.ceil((Math.max(...ticks(xa).map(v => K.w(fmtTick(v, xa), FT))) + 1.8) / (pw * xa.step / (xa.hi - xa.lo))));
+    ticks(xa).forEach((v, i) => { out.push(`<line x1="${f3(xv(v))}" y1="${f3(y1)}" x2="${f3(xv(v))}" y2="${f3(y1 + TICK)}" stroke="#000" stroke-width="${lw(.35)}"/>`); if (!(i % every) && !hid.has('xTicks')) labels.push(txt(xv(v), y1 + TICK + 1.2 + FT * .85, fmtTick(v, xa), { fs: FT })); });
+    if (kind === 'dotplot' && marks) M.dots.forEach(d => { for (let k = 0; k < d.n; k++) shapes.push(`<circle cx="${f3(xv(d.v))}" cy="${f3(y1 - dotD * (k + .5) * 1.1 - .5 * S)}" r="${f3(dotD / 2)}" fill="#000"/>`); });
+    if (kind === 'boxplot' && marks) M.groups.forEach((g, j) => {
+      const f = g.five, cy = y0 + 2.5 * S + (j + .5) * 17 * S, bh = 9 * S;
+      if (!f) return;
+      const lo = xv(f.whiskerLo), hi = xv(f.whiskerHi), a = xv(f.q1), b = xv(f.q3), m = xv(f.median), st = `stroke="#000" stroke-width="${lw(.55)}"`;
+      shapes.push(`<path d="M${f3(lo)},${f3(cy)}H${f3(a)}M${f3(b)},${f3(cy)}H${f3(hi)}M${f3(lo)},${f3(cy - bh * .3)}V${f3(cy + bh * .3)}M${f3(hi)},${f3(cy - bh * .3)}V${f3(cy + bh * .3)}" ${st} fill="none"/>`);
+      shapes.push(`<rect x="${f3(a)}" y="${f3(cy - bh / 2)}" width="${f3(Math.max(.01, b - a))}" height="${f3(bh)}" fill="${colour ? fillOf(j) : '#fff'}" ${st}/><line x1="${f3(m)}" y1="${f3(cy - bh / 2)}" x2="${f3(m)}" y2="${f3(cy + bh / 2)}" stroke="#000" stroke-width="${lw(1)}"/>`);
+      f.outliers.forEach(v => shapes.push(markerSVG('circle', xv(v), cy, 1.2 * S, '#000', S, true)));
+      if (D.box.mean && isFin(g.mean)) shapes.push(markerSVG('cross', xv(g.mean), cy, 1.5 * S, '#000', S, false));
+      if (vLabels) [['min', f.whiskerLo], ['q1', f.q1], ['median', f.median], ['q3', f.q3], ['max', f.whiskerHi]].forEach(([k, v]) => labels.push(txt(xv(v), cy + bh / 2 + FT * 1.15 + (k === 'median' ? 0 : 0), fmtNum(v), { fs: FT * .95, halo: true })));
+    });
+    if (kind === 'boxplot') M.groups.forEach((g, j) => { if (g.name && !hid.has('yTicks')) labels.push(txt(x0 - 2, y0 + 2.5 * S + (j + .5) * 17 * S + FT * .35, g.name, { fs: FT, anchor: 'end' })); });
+    if (kind === 'scatter' && marks) {
+      M.points.forEach(p => shapes.push(markerSVG('circle', xv(p.x), M.yMap(p.y), 1.4 * S, '#000', S, false)));
+    }
+    if (kind === 'scatter' && M.fit && !hid.has('equations')) {
+      const f = M.fit, xs = [xa.lo, xa.hi], ys = xs.map(x => f.m * x + f.c), ya = M.yAxis;
+      const t = clipSeg([xs[0], ys[0]], [xs[1], ys[1]], xa.lo, xa.hi, ya.lo, ya.hi);
+      if (t) {
+        const P = [0, 1].map(k => [xs[0] + (xs[1] - xs[0]) * t[k], ys[0] + (ys[1] - ys[0]) * t[k]]);
+        shapes.push(`<line x1="${f3(xv(P[0][0]))}" y1="${f3(M.yMap(P[0][1]))}" x2="${f3(xv(P[1][0]))}" y2="${f3(M.yMap(P[1][1]))}" stroke="#000" stroke-width="${lw(.6)}" stroke-dasharray="3 1.2"/>`);
+        if (D.fit.label) labels.push(f.m >= 0 ? txt(x0 + 2 * S, y0 + FS * 1.2, fitEquation(f.m, f.c), { fs: FS, anchor: 'start', halo: true }) : txt(x1 - 2 * S, y0 + FS * 1.2, fitEquation(f.m, f.c), { fs: FS, anchor: 'end', halo: true }));
+      }
+    }
+  } else if (kind === 'circle') {
+    const cx = (x0 + x1) / 2 - (D.circle.names === 'beside' ? 0 : 0), cy = (y0 + y1) / 2, lm = D.circle.names === 'beside' ? Math.max(0, ...M.cats.map(c => K.w(c, FT))) + 4 * S : 6 * S, Rr = Math.max(8 * S, Math.min((pw - 2 * lm) / 2, ph / 2 - 4 * S));
+    const start = D.circle.start * Math.PI / 180, ang = i => start + sumOf(M.angles.slice(0, i)) * Math.PI / 180;
+    const P = (a, r) => [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+    const nz = M.angles.map((a, i) => [a, i]).filter(([a]) => a > 0);
+    if (M.total > 0 && marks) {
+      nz.forEach(([a, i]) => {
+        const a0 = ang(i), a1 = ang(i + 1), p0 = P(a0, Rr), p1 = P(a1, Rr), fill = fillOf(i);
+        shapes.push(nz.length === 1 ? `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(Rr)}" fill="${fill}" stroke="#000" stroke-width="${lw(.5)}"/>` : `<path d="M${f3(cx)},${f3(cy)}L${f3(p0[0])},${f3(p0[1])}A${f3(Rr)},${f3(Rr)} 0 ${a > 180 ? 1 : 0} 1 ${f3(p1[0])},${f3(p1[1])}Z" fill="${fill}" stroke="#000" stroke-width="${lw(.5)}" stroke-linejoin="round"/>`);
+        const mid = (a0 + a1) / 2, vt = D.circle.values === 'percent' ? M.percents[i] + '%' : D.circle.values === 'degrees' ? a + '°' : D.circle.values === 'value' ? fmtNum(M.values[i]) : '';
+        const inside = a >= 28 && vt, [ix, iy] = P(mid, Rr * .66);
+        if (pointLabels && inside) labels.push(txt(ix, iy + FT * .35, vt, { fs: FT, bold: true, halo: true }));
+        if (pointLabels && (D.circle.names === 'beside' || (!inside && vt))) {
+          const [ox, oy] = P(mid, Rr + 2.4 * S), side = Math.sin(mid) > .15 ? 'start' : Math.sin(mid) < -.15 ? 'end' : 'middle', text = (D.circle.names === 'beside' ? M.cats[i] : '') + (!inside && vt ? (D.circle.names === 'beside' && M.cats[i] ? ' ' : '') + vt : '');
+          if (text) labels.push(txt(ox, oy + (Math.cos(mid) > .3 ? -0.4 : Math.cos(mid) < -.3 ? FT * .95 : FT * .35), text, { fs: FT, anchor: side, halo: true }));
+        }
+      });
+    }
+    if (D.circle.centre || D.circle.protractor) {
+      shapes.push(`<path d="M${f3(cx - 1.6 * S)},${f3(cy)}H${f3(cx + 1.6 * S)}M${f3(cx)},${f3(cy - 1.6 * S)}V${f3(cy + 1.6 * S)}" stroke="#000" stroke-width="${lw(.5)}"/>`);
+      if (!marks || !M.total) shapes.push(`<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(Rr)}" fill="none" stroke="#000" stroke-width="${lw(.5)}"/>`);
+    }
+    if (D.circle.protractor) { const a = P(start, Rr), b = P(start, Rr + 3 * S); shapes.push(`<line x1="${f3(cx)}" y1="${f3(cy)}" x2="${f3(b[0])}" y2="${f3(b[1])}" stroke="#000" stroke-width="${lw(.7)}"/>`); }
+    else if (!marks && !D.circle.centre) shapes.push(`<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(Rr)}" fill="none" stroke="#000" stroke-width="${lw(.5)}"/>`);
+    M.circleR = Rr;
+  } else if (kind === 'pictograph') {
+    const n = Math.max(1, M.cats.length), rowH = 8 * S, maxSym = Math.max(1, ...M.rows.map(r => r.full + (r.half ? 1 : 0))), sz = Math.min(3.3 * S, pw / (maxSym + .6) / 2 * .92), pitch = Math.min(2 * sz * 1.18, pw / (maxSym + .3));
+    M.cats.forEach((c, i) => {
+      const cy = y0 + 2 * S + (i + .5) * rowH;
+      if (!hid.has('xTicks')) labels.push(txt(x0 - 2.2 * S, cy + FT * .35, c, { fs: FT, anchor: 'end' }));
+      out.push(`<line x1="${f3(x0)}" y1="${f3(cy + rowH / 2)}" x2="${f3(x1)}" y2="${f3(cy + rowH / 2)}" stroke="#c4c4c4" stroke-width="${lw(.22)}"/>`);
+      const r = M.rows[i];
+      if (!marks || !r) return;
+      for (let k = 0; k < r.full; k++) shapes.push(symbolSVG(D.pict.symbol, x0 + pitch * (k + .5) + .5 * S, cy, sz, fillOf(0) === '#d4d4d4' ? '#fff' : '#fff', K));
+      if (r.half) { const cx = x0 + pitch * (r.full + .5) + .5 * S, id = o.id + '-half' + i; defs.push(`<clipPath id="${id}"><rect x="${f3(cx - sz * 1.2)}" y="${f3(cy - sz * 1.2)}" width="${f3(sz * 1.2)}" height="${f3(sz * 2.4)}"/></clipPath>`); shapes.push(symbolSVG(D.pict.symbol, cx, cy, sz, '#fff', K, id)); }
+      if (vLabels) labels.push(txt(x0 + pitch * (r.full + (r.half ? 1 : 0)) + 2 * S, cy + FT * .35, fmtNum(r.v), { fs: FT, anchor: 'start' }));
+    });
+    const ky = y1 + FS * 1.3, unit = spec.y.unit || spec.y.label;
+    labels.push(txt(x0, ky, 'Key:', { fs: FS, anchor: 'start', bold: true }));
+    shapes.push(symbolSVG(D.pict.symbol, x0 + K.w('Key:', FS, true) + 4 * S, ky - FS * .3, 2.1 * S, '#fff', K));
+    labels.push(txt(x0 + K.w('Key:', FS, true) + 7.4 * S, ky, '= ' + fmtNum(D.pict.per) + (unit ? ' ' + unit : ''), { fs: FS, anchor: 'start' }));
+    M.pictKeyY = ky;
+  } else if (kind === 'stemleaf') {
+    const two = M.stem.length === 2 && M.stem[1].stems.length, lists = two ? M.stem : [M.stem[0]], rowH = FS * 1.7;
+    const stems = new Map(); lists.forEach(s => s.stems.forEach(t => stems.set(t.stem, 1)));
+    const lo = Math.min(...stems.keys()), hi = Math.max(...stems.keys()), cx = (x0 + x1) / 2, sw = K.w('00', FS) + 3 * S;
+    const pitch = FS * .75, ty = y0 + rowH;
+    if (Number.isFinite(lo)) {
+      labels.push(txt(two ? cx : cx + sw * .1, y0 + rowH * .6, two ? 'Stem' : 'Stem | Leaf', { fs: FS, bold: true, anchor: two ? 'middle' : 'middle' }));
+      if (two) { labels.push(txt(cx - sw, y0 + rowH * .6, lists[0].name || 'Leaves', { fs: FS, bold: true, anchor: 'end' })); labels.push(txt(cx + sw, y0 + rowH * .6, lists[1].name || 'Leaves', { fs: FS, bold: true, anchor: 'start' })); }
+      shapes.push(`<line x1="${f3(cx)}" y1="${f3(y0 + rowH * .95)}" x2="${f3(cx)}" y2="${f3(ty + (hi - lo + 1) * rowH)}" stroke="#000" stroke-width="${lw(.5)}"/>` + (two ? `<line x1="${f3(cx + sw * .0)}" y1="0" x2="${f3(cx)}" y2="0" stroke="none"/>` : ''));
+      const gapx = two ? 0 : 0, sx = two ? cx : cx - sw * .55;
+      for (let st = lo; st <= hi; st++) {
+        const row = ty + (st - lo) * rowH, cy = row + rowH * .68;
+        labels.push(txt(two ? cx : cx - 2 * S, cy, String(st), { fs: FS, anchor: two ? 'middle' : 'end' }));
+        lists.forEach((s, side) => {
+          const leaves = (s.stems.find(t => t.stem === st) || { leaves: [] }).leaves;
+          if (!marks) return;
+          leaves.forEach((lf, k) => { const dx = 2.6 * S + k * pitch; labels.push(txt(side === 0 && two ? cx - sw * .6 - k * pitch - 1.2 * S : cx + 2.6 * S + k * pitch - (two ? -sw * .0 : 0) + (two ? sw * .5 : 0), cy, String(lf), { fs: FS, anchor: 'middle' })); });
+        });
+      }
+      if (marks && !hid.has('notation')) labels.push(txt(cx, ty + (hi - lo + 1) * rowH + rowH * .9, 'Key: ' + M.stem[0].key.replace(/ = /, ' means '), { fs: FT }));
+    }
+  }
+  if ((kind === 'dotplot' || kind === 'histogram') && M.xMap && !hid.has('keyPoints')) {         /* mean / median / mode markers on a numeric axis */
+    const g = M.groups[0], xv = M.xMap, mk = [];
+    if (D.marks.mean && g.n) mk.push(['mean ' + approx(g.mean), g.mean, '4 1.6']);
+    if (D.marks.median && g.n) mk.push(['median ' + fmtNum(g.median), g.median, '1 1']);
+    mk.forEach(([t, v, dash], k) => { const X = xv(v); shapes.push(`<line x1="${f3(X)}" y1="${f3(y0 + 3 * S)}" x2="${f3(X)}" y2="${f3(y1)}" stroke="#000" stroke-width="${lw(.45)}" stroke-dasharray="${dash}"/>`); labels.push(txt(X, y0 + 2.4 * S - k * FT * 1.1, t, { fs: FT, halo: true })); });
+    if (D.marks.mode && g.modes.length) g.modes.forEach(v => shapes.push(`<polygon points="${f3(xv(v))},${f3(y1 - .3)} ${f3(xv(v) - 1.3 * S)},${f3(y1 + 2.6 * S)} ${f3(xv(v) + 1.3 * S)},${f3(y1 + 2.6 * S)}" fill="#000"/>`));
+  }
+  const body = [];
+  if (kind === 'stemleaf' && M.stem[0].negative) labels.push(txt((x0 + x1) / 2, y1 - 1, 'Negative values are shown without their sign', { fs: FT, halo: true }));
+  /* ----- assemble ----- */
+  body.push(...out, ...shapes, ...labels);
+  body.push(...K.titleSVG(W, W / 2));
+  rawLines.forEach((ln, i) => body.push(txt(PAD, PAD + titleSp + FT * 1.1 + i * FT * 1.35, ln, { fs: FT, anchor: 'start', plain: true })));
+  /* axis titles */
+  const xt = K.axisText(spec.x, 'xTitle', pw), yt = K.axisText(spec.y, 'yTitle', ph);
+  const under = y1 + xTickSp + FS * .9 + 1;
+  if (kind === 'bar' && !horiz || kind === 'line' || kind === 'histogram') { if (xt) body.push(txt((x0 + x1) / 2, under, xt)); if (yt) body.push(txt(PAD + FS * .6, (y0 + y1) / 2, yt, { rot: -90 })); }
+  else if (horiz) { if (yt) body.push(txt((x0 + x1) / 2, under, yt)); if (xt) body.push(txt(PAD + FS * .6, (y0 + y1) / 2, xt, { rot: -90 })); }
+  else if (kind === 'dotplot' || kind === 'boxplot') { if (xt) body.push(txt((x0 + x1) / 2, under, xt)); }
+  else if (kind === 'scatter') { if (xt) body.push(txt((x0 + x1) / 2, under, xt)); if (yt) body.push(txt(PAD + FS * .6, (y0 + y1) / 2, yt, { rot: -90 })); }
+  /* legend */
+  legend.forEach((l, i) => {
+    const lx = R + gap + (T && place === 'right' ? 0 : 0), ly = y0 + 2 * S + i * FT * 1.9;
+    if (kind === 'line') { const col = colour ? PALETTE[l.idx % PALETTE.length] : '#000', dash = DASHES[Object.keys(DASHES)[l.idx % 4]]; body.push(`<line x1="${f3(lx)}" y1="${f3(ly)}" x2="${f3(lx + 6 * S)}" y2="${f3(ly)}" stroke="${col}" stroke-width="${lw(.6)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>` + markerSVG(MARKERS[l.idx % MARKERS.length], lx + 3 * S, ly, 1.5 * S, col, S, false)); }
+    else body.push(`<rect x="${f3(lx)}" y="${f3(ly - FT * .55)}" width="${f3(6 * S)}" height="${f3(FT * 1.1)}" fill="${fillOf(l.idx)}" stroke="#000" stroke-width="${lw(.4)}"/>`);
+    body.push(txt(lx + 7.5 * S, ly + FT * .35, l.name, { fs: FT, anchor: 'start' }));
+  });
+  /* table */
+  if (T) {
+    const tx = place === 'right' ? W - PAD - TL.w : clamp((x0 + x1) / 2 - TL.w / 2, PAD, Math.max(PAD, W - PAD - TL.w)), ty = place === 'right' ? y0 : y1 + xTickSp + (kind === 'bar' || kind === 'line' || kind === 'histogram' || kind === 'scatter' ? xT : xT) + keyH + gap;
+    if (!hid.has('tables')) body.push(paintDataTable(T, K, tx, ty, D.table.blank));
+  }
+  /* captions */
+  cap.forEach((l, i) => {
+    const y = H - PAD - capH + (i + 1) * capLH - FS * .32, text = l.head + ': ' + l.text;
+    if (!hid.has('notation')) body.push(txt(W / 2, y, text, { fs: FS }));
+    else if (K.blk.has('notation')) body.push(txt(W / 2, y, l.head + ': ' + K.under(20), { fs: FS }));
+  });
+  return K.shell(W, H, defs.join(''), body.join(''));
+}
+
+/* Data pasted from a spreadsheet (tab-separated) or typed as comma-separated lines, turned into the fields for this kind of display. */
+function dataFromPaste(kind, text) {
+  text = String(text).replace(/\r\n?/g, '\n').trim();
+  if (!text) return { error: 'Paste some data first.' };
+  const delim = text.includes('\t') ? '\t' : /,/.test(text) && /\n/.test(text) ? ',' : null;
+  const rows = delim ? parseTSV(text, delim).map(r => r.map(c => c.trim())).filter(r => r.some(Boolean)) : null, isNum = c => isFin(parseNum(c));
+  if (CAT_KINDS.includes(kind)) {
+    if (!rows || rows.every(r => r.length < 2)) return { error: 'Paste one row per category: a name, then a number, separated by tabs (from a spreadsheet) or commas.' };
+    const hdr = rows.length > 1 && rows[0].length > 1 && rows[0].slice(1).every(c => !isNum(c)), body = hdr ? rows.slice(1) : rows;
+    const n = kind === 'bar' || kind === 'line' ? clamp(Math.max(...body.map(r => r.length - 1)), 1, MAX_SERIES) : 1;
+    return { data: { cats: body.slice(0, MAX_CATS).map(r => r[0]), series: Array.from({ length: n }, (_, j) => ({ name: hdr ? rows[0][j + 1] || '' : '', values: body.slice(0, MAX_CATS).map(r => cellFromText(r[j + 1] === undefined ? '' : r[j + 1])) })) }, note: body.length > MAX_CATS ? 'Only the first ' + MAX_CATS + ' rows were used.' : '' };
+  }
+  if (kind === 'scatter') {
+    if (!rows || rows.every(r => r.length < 2)) return { error: 'Paste two columns, x then y, separated by tabs (from a spreadsheet) or commas.' };
+    const body = rows.length > 1 && !isNum(rows[0][0]) && !isNum(rows[0][1]) ? rows.slice(1) : rows;
+    return { data: { points: body.slice(0, MAX_POINTS).map(r => [cellFromText(r[0]), cellFromText(r[1] === undefined ? '' : r[1])]) } };
+  }
+  if (rows && rows.every(r => r.length > 1) && rows[0].length > 1) {                         // several columns: one data set each
+    const hdr = !rows[0].every(isNum), body = hdr ? rows.slice(1) : rows, n = Math.min(MAX_GROUPS, rows[0].length);
+    return { data: { groups: Array.from({ length: n }, (_, j) => ({ name: hdr ? rows[0][j] : '', values: body.map(r => r[j]).filter(c => c !== undefined && c !== '').map(cellFromText).slice(0, MAX_LIST) })) } };
+  }
+  const p = parseList(text);
+  return p.values.length ? { data: { groups: [{ name: '', values: p.values.slice(0, MAX_LIST) }] }, note: p.bad.length ? p.bad.length + ' entr' + (p.bad.length === 1 ? 'y was' : 'ies were') + ' not a number and skipped.' : '' } : { error: 'No numbers found.' };
+}
+
+/* ---------- sample data, and what could trip a reader up ---------- */
+const DATA_PRESETS = {
+  bar:        { name: 'Bar graph: favourite fruit', kind: 'bar', title: 'Favourite fruit', x: 'Fruit', y: 'Number of students', cats: ['Apples', 'Bananas', 'Oranges', 'Grapes'], series: [{ name: '', values: [12, 8, 15, 5] }], valueLabels: true },
+  bar2:       { name: 'Double bar graph: two classes', kind: 'bar', title: 'Pets in two classes', x: 'Pet', y: 'Number of students', cats: ['Dog', 'Cat', 'Fish', 'Bird'], series: [{ name: 'Class A', values: [10, 8, 3, 2] }, { name: 'Class B', values: [7, 11, 4, 1] }] },
+  line:       { name: 'Line graph: temperature by month', kind: 'line', title: 'Average temperature', x: 'Month', y: 'Temperature (°C)', cats: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'], series: [{ name: '', values: [-8, -5, 1, 8, 14, 19] }] },
+  circle:     { name: 'Circle graph: how students travel', kind: 'circle', title: 'How students get to school', cats: ['Walk', 'Bus', 'Car', 'Bike'], series: [{ name: '', values: [12, 18, 6, 4] }] },
+  pictograph: { name: 'Pictograph: books read', kind: 'pictograph', title: 'Books read in May', y: 'books', cats: ['Ana', 'Ben', 'Cy', 'Dee'], series: [{ name: '', values: [30, 45, 20, 35] }], pict: { symbol: 'square', per: 10 } },
+  histogram:  { name: 'Histogram: test scores', kind: 'histogram', title: 'Test scores', x: 'Score', y: 'Number of students', groups: [{ name: '', values: [52, 61, 64, 67, 70, 72, 73, 75, 75, 78, 79, 81, 83, 84, 85, 88, 90, 92, 95, 58, 66, 77, 86] }], bins: { start: 50, width: 10 }, table: { place: 'right' }, raw: true },
+  dotplot:    { name: 'Dot plot: shoe sizes', kind: 'dotplot', title: 'Shoe sizes in our class', x: 'Shoe size', groups: [{ name: '', values: [6, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 7, 6, 8] }], stats: { mean: true, median: true, mode: true } },
+  stemleaf:   { name: 'Stem-and-leaf plot: ages', kind: 'stemleaf', title: 'Ages of the players', groups: [{ name: '', values: [12, 15, 21, 23, 23, 28, 31, 34, 34, 36, 38, 42, 45] }] },
+  boxplot:    { name: 'Box plot: two classes', kind: 'boxplot', title: 'Marks in two classes', x: 'Mark (%)', groups: [{ name: 'Class A', values: [52, 58, 61, 64, 70, 72, 75, 79, 83, 90] }, { name: 'Class B', values: [45, 60, 66, 68, 71, 74, 77, 80, 92, 98, 99] }], stats: { five: true } },
+  scatter:    { name: 'Scatter plot: study time and mark', kind: 'scatter', title: 'Study time and test mark', x: 'Hours studied', y: 'Mark (%)', points: [[0.5, 48], [1, 55], [1.5, 58], [2, 66], [2.5, 64], [3, 74], [3.5, 78], [4, 85], [4.5, 88]], fit: { mode: 'calc' } }
+};
+function applyDataPreset(spec, id) {
+  const p = DATA_PRESETS[id], s = JSON.parse(JSON.stringify(spec));
+  s.type = 'data'; s.title = p.title;
+  const ax = (a, label) => Object.assign(a, { label: label || '', unit: '', min: null, max: null, step: null });
+  ax(s.x, p.x); ax(s.y, p.y);
+  s.data = normData(Object.assign({}, p, { aspect: .62 }));
+  return normalize(s);
+}
+function dataIssues(spec) {
+  const D = spec.data, M = dataModel(spec), out = [], add = text => out.push({ id: '', text });
+  if (CAT_KINDS.includes(D.kind)) {
+    if (!D.cats.length) add('Add at least one category.');
+    const bad = D.series.flatMap(s => s.values).filter(v => !isBlank(v) && !isFin(parseNum(v))).length;
+    if (bad) add(bad + ' value' + (bad === 1 ? ' is' : 's are') + ' not a number and left off the graph.');
+    if (D.kind === 'circle') {
+      if (M.cats && !M.total) add('A circle graph needs at least one positive value.');
+      if (D.series[0].values.some(v => isFin(parseNum(v)) && parseNum(v) < 0)) add('Circle graph values must be positive.');
+      if (D.cats.length > 8) add('More than 8 sectors are hard to read and to measure with a protractor.');
+    }
+    if (D.kind === 'pictograph' && M.rows) M.rows.forEach((r, i) => { if (isFin(r.v) && !r.ok) add((D.cats[i] || 'Row ' + (i + 1)) + ': ' + fmtNum(r.v) + ' is not a multiple of half a symbol (' + fmtNum(D.pict.per / 2) + '). Change the symbol value.'); });
+    if (D.kind === 'line' && D.cats.length < 2) add('A line graph needs at least two points.');
+  }
+  if (LIST_KINDS.includes(D.kind)) {
+    const bad = D.groups.flatMap(g => g.values).filter(v => !isBlank(v) && !isFin(parseNum(v))).length;
+    if (bad) add(bad + ' entr' + (bad === 1 ? 'y is' : 'ies are') + ' not a number and left out.');
+    if (!M.groups[0].n) add('Enter some data.');
+    if (D.kind === 'histogram' && M.hist.dropped) add(M.hist.dropped + ' value' + (M.hist.dropped === 1 ? ' is' : 's are') + ' below the first interval and not counted.');
+    if (D.kind === 'histogram' && M.groups[0].n && (M.hist.counts.length > 15 || M.hist.counts.length < 3)) add('The interval width gives ' + M.hist.counts.length + ' bars; 5 to 10 read best.');
+    if (D.kind === 'boxplot') M.groups.forEach(g => { if (g.n && g.n < 5) add((g.name || 'A data set') + ' has fewer than 5 values: its quartiles say little.'); });
+    if (D.kind === 'dotplot' && M.maxStack > 15) add('A stack of ' + M.maxStack + ' dots is tall; a histogram may suit this data better.');
+    if (D.kind === 'stemleaf' && M.stem.some(s => s.negative)) add('Negative values are shown without their sign.');
+  }
+  if (D.kind === 'scatter') {
+    if (M.points.length < 2) add('Enter at least two points.');
+    if (D.fit.mode === 'calc' && M.points.length >= 2 && !M.fit) add('These points have no line of best fit (all the same x).');
+    if (D.fit.mode === 'manual' && !M.fit) add('Enter a slope and an intercept for the line.');
+  }
+  if (D.mislead.truncate !== null || D.mislead.uneven || D.mislead.stretch !== 1) add('This graph is set up to be misleading (a critique question): the axis is truncated, uneven or stretched on purpose.');
+  return out;
+}
+
 /* The page size actually drawn (a locked physical scale makes the page follow the grid). */
 function svgSize(spec) {
   const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(renderSVG(spec));
@@ -3098,7 +3760,9 @@ function pngWithDpi(u8, dpi) {
     ['tables', 'Tables of values'], ['aids', 'Mirror lines, centres and arrows'], ['notation', 'Notation, descriptions and mapping rules', true], ['signs', 'Signs (+ and −) on a sign chart'],
     ['results', 'Answers: solutions, hop results, areas, midpoints, Δx and Δy, radius'], ['objects', 'All points, shapes and graphs']
   ];
+  const VIS_NAMES = { data: { pointLabels: 'Value labels (on bars, sectors, points)', objects: 'The graph itself (bars, dots, sectors, boxes, leaves…)', equations: 'Line of best fit and its equation', keyPoints: 'Mean and median markers', tables: 'Frequency table', notation: 'Mean, median, mode, five-number summary (beneath the graph)', xTicks: 'Horizontal axis numbers and labels', yTicks: 'Vertical axis numbers and category labels' } };
   const VIS_FOR = {
+    data: ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'pointLabels', 'equations', 'keyPoints', 'tables', 'notation', 'objects'],
     plane: ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'aids', 'notation', 'results', 'objects'],
     numberline: ['title', 'xTitle', 'units', 'xTicks', 'pointLabels', 'keyPoints', 'notation', 'signs', 'results', 'objects']
   };
@@ -3142,7 +3806,7 @@ function pngWithDpi(u8, dpi) {
 
   function axisCard(k, title) {
     const x = k === 'x';
-    return `<div class="card"${x ? '' : ' data-types="plane"'}><h4>${x ? '<span data-types="plane">X axis</span><span data-types="numberline" hidden>Number line scale</span>' : title}</h4>
+    return `<div class="card"${x ? '' : ' data-types="plane,data"'}><h4>${x ? '<span data-types="plane">X axis</span><span data-types="numberline" hidden>Number line scale</span><span data-types="data" hidden>Horizontal axis</span>' : '<span data-types="plane">Y axis</span><span data-types="data" hidden>Vertical axis (the values)</span>'}</h4>
       <div class="row">
         <div><label class="lab">Label</label><input type="text" data-bind="${k}.label" placeholder="${x ? 'e.g. Time' : 'e.g. Distance'}"></div>
         <div><label class="lab">Unit</label><input type="text" data-bind="${k}.unit" placeholder="e.g. ${x ? 'h' : 'km'}"></div>
@@ -3153,7 +3817,7 @@ function pngWithDpi(u8, dpi) {
         <div><label class="lab">Max</label><input type="number" step="any" data-bind="${k}.max" data-auto="${k}.hi"></div>
         <div><label class="lab">Step</label><input type="number" step="any" min="0" data-bind="${k}.step" data-auto="${k}.step"></div>
       </div>
-      <div class="row">
+      <div class="row" data-types="plane,numberline">
         <div><label class="lab">Minor lines per step</label><input type="number" min="1" max="10" step="1" data-bind="${k}.minorPerMajor"></div>
         <div><label class="lab">Number every…</label><input type="number" min="1" step="1" placeholder="auto" data-bind="${k}.labelEvery"></div>
       </div>
@@ -3168,7 +3832,8 @@ function pngWithDpi(u8, dpi) {
       <div data-types="numberline" hidden><h3 class="section-title">Line</h3>
         <div class="row"><div><label class="lab">Arrows</label><select data-bind="axes.arrows"><option value="both">On both ends</option><option value="end">On the high end only</option><option value="none">None</option></select></div><div></div></div>
         <label class="check" style="margin-top:10px"><input type="checkbox" data-bind="grid.minor"> Short tick marks between the numbers (set how many under “Minor lines per step”)</label></div>
-      <p class="hint">Blank Min / Max / Step use automatic values (shown in grey): at least ±10, growing to fit what you plot, with a step that suits the printed size. Type a number to override any of them. “Number every…” shows a number on every nth gridline.</p>
+      <p class="hint" data-types="data" hidden>Blank Min / Max / Step fit the data (shown in grey). Bars start at zero. For a histogram the horizontal axis follows the intervals: set the start and width on the Data tab. For horizontal bars the values run along the bottom and use the vertical-axis settings.</p>
+      <p class="hint" data-types="plane,numberline">Blank Min / Max / Step use automatic values (shown in grey): at least ±10, growing to fit what you plot, with a step that suits the printed size. Type a number to override any of them. “Number every…” shows a number on every nth gridline.</p>
       <div data-types="plane"><h3 class="section-title">Axes</h3>
         <div class="seg" data-seg="axes.position"><button type="button" data-v="origin">Through the origin</button><button type="button" data-v="edges">Along the edges</button></div>
         <div class="row" style="margin-top:10px">
@@ -3366,6 +4031,70 @@ function pngWithDpi(u8, dpi) {
         <div style="display:grid;gap:10px;margin-top:10px">${rels}${inter}${guides}${vlts}</div></div>`;
   }
 
+
+  /* ---------- the Data tab ---------- */
+  function buildData() {
+    const D = spec.data, k = D.kind, cat = CAT_KINDS.includes(k), list = LIST_KINDS.includes(k);
+    const num = (path, lab, ph) => `<div><label class="lab">${lab}</label><input type="number" step="any" data-bind="${path}"${ph ? ` placeholder="${ph}"` : ''}></div>`;
+    const chk = (path, lab, title) => `<label class="check sm"${title ? ` title="${title}"` : ''}><input type="checkbox" data-bind="${path}"> ${lab}</label>`;
+    const kinds = (list, inner, extra) => `<div data-kinds="${list}" data-kindpath="data.kind"${extra || ''}>${inner}</div>`;
+    const xbtn = (act, i, title) => `<button class="xbtn" type="button" data-act="${act}" data-i="${i}" title="${title}">×</button>`;
+    const multi = k === 'bar' || k === 'line';
+    let entry = '';
+    if (cat) {
+      entry = `<div class="tblwrap"><table class="dt"><thead><tr><th class="ix">#</th><th>${k === 'pictograph' ? 'Row' : 'Category'}</th>` +
+        D.series.map((sr, j) => multi ? `<th><input type="text" data-bind="data.series.${j}.name" placeholder="Series ${j + 1}" aria-label="Series ${j + 1} name"></th>` : '<th>Value</th>').join('') + `<th class="act"></th></tr></thead><tbody>` +
+        D.cats.map((c, i) => `<tr><td class="ix">${i + 1}</td><td><input type="text" data-bind="data.cats.${i}" autocomplete="off" aria-label="Category ${i + 1}"></td>` +
+          D.series.map((sr, j) => `<td><input type="text" data-dcell="data.series.${j}.values.${i}" value="${esc(cellStr(sr.values[i]))}" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="${esc(c || 'Row ' + (i + 1))}, series ${j + 1}" class="${badCell(sr.values[i]) ? 'bad' : ''}"></td>`).join('') +
+          `<td class="act">${xbtn('dDelCat', i, 'Remove this row')}</td></tr>`).join('') + `</tbody></table></div>
+        <div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="dAddCat">+ Row</button>${multi ? `<button class="btn small" type="button" data-act="dAddSeries"${D.series.length >= MAX_SERIES ? ' disabled' : ''}>+ Series</button>${D.series.length > 1 ? `<button class="btn small" type="button" data-act="dDelSeries">− Series</button>` : ''}` : ''}</div>`;
+    } else if (list) {
+      entry = D.groups.map((g, j) => `<div class="card"><div class="row"><div><label class="lab">${D.groups.length > 1 || k === 'boxplot' ? 'Name of data set ' + (j + 1) : 'Name (optional)'}</label><input type="text" data-bind="data.groups.${j}.name" placeholder="e.g. Class ${'AB C'[j] === ' ' ? 'C' : 'AB C'[j]}"></div>${D.groups.length > 1 ? `<div style="flex:none">${xbtn('dDelGroup', j, 'Remove this data set')}</div>` : ''}</div>
+        <label class="lab" style="margin-top:6px">Numbers (separated by commas, spaces or new lines)</label><textarea class="in" rows="4" data-dlist="${j}" spellcheck="false" style="width:100%;font-family:var(--mono)">${esc(g.values.map(cellStr).join(', '))}</textarea>
+        <p class="hint" data-dcount="${j}"></p></div>`).join('') +
+        (k === 'boxplot' && D.groups.length < 3 || k === 'stemleaf' && D.groups.length < 2 ? `<div class="row tight"><button class="btn small" type="button" data-act="dAddGroup">+ Second data set</button></div>` : '');
+    } else {
+      entry = `<div class="tblwrap"><table class="dt"><thead><tr><th class="ix">#</th><th>x</th><th>y</th><th class="act"></th></tr></thead><tbody>` +
+        D.points.map((pt, i) => `<tr><td class="ix">${i + 1}</td>` + [0, 1].map(c => `<td><input type="text" data-dcell="data.points.${i}.${c}" value="${esc(cellStr(pt[c]))}" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Point ${i + 1}, ${c ? 'y' : 'x'}" class="${badCell(pt[c]) ? 'bad' : ''}"></td>`).join('') + `<td class="act">${xbtn('dDelPt', i, 'Remove this point')}</td></tr>`).join('') + `</tbody></table></div>
+        <div class="row tight"><button class="btn small" type="button" data-act="dAddPt">+ Point</button></div>`;
+    }
+    $('#dataPane').innerHTML = `
+      <div><h3 class="section-title">Quick setup</h3><select id="dataPreset"><option value="">Choose a sample…</option>${Object.keys(DATA_PRESETS).map(id => `<option value="${id}">${esc(DATA_PRESETS[id].name)}</option>`).join('')}</select>
+        <p class="hint" style="margin-top:6px">A sample with its titles. It replaces the data below; Undo brings back what you had.</p></div>
+      <div><h3 class="section-title">Kind of graph</h3><select data-bind="data.kind">${optList(DATA_NAMES)}</select></div>
+      <div><h3 class="section-title">Data</h3>${entry}
+        <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">Paste from a spreadsheet…</summary>
+          <textarea class="in" id="dataPaste" rows="4" spellcheck="false" style="width:100%;font-family:var(--mono);margin-top:6px" placeholder="${cat ? 'One row per category: name, then numbers' : k === 'scatter' ? 'Two columns: x, y' : 'Numbers, or one column per data set'}"></textarea>
+          <div class="row tight" style="margin-top:6px"><button class="btn small" type="button" data-act="dPaste">Use this data</button></div></details></div>
+      <div><h3 class="section-title">How it looks</h3><div style="display:grid;gap:8px">
+        ${kinds('bar', `<div class="row"><div><label class="lab">Bars run</label><select data-bind="data.orient"><option value="vertical">Up (vertical)</option><option value="horizontal">Across (horizontal)</option></select></div></div>`)}
+        ${kinds('bar,line,histogram,pictograph', chk('data.valueLabels', 'Write the values on the graph'))}
+        ${kinds('bar,line,circle', chk('data.legend', 'Show the key (which pattern is which)'))}
+        ${kinds('bar,circle', chk('data.patterns', 'Tell them apart with patterns (black and white)', 'Off: every bar is grey. With colour on (Style tab) patterns are not needed.'))}
+        ${kinds('circle', `<div class="row"><div><label class="lab">Sector labels</label><select data-bind="data.circle.values"><option value="percent">Percent</option><option value="degrees">Degrees</option><option value="value">The values</option><option value="none">None</option></select></div>
+          <div><label class="lab">Names</label><select data-bind="data.circle.names"><option value="beside">Beside each sector</option><option value="legend">In a key</option><option value="none">None</option></select></div></div>
+          <div class="row" style="gap:14px;flex-wrap:wrap;align-items:center">${chk('data.circle.centre', 'Mark the centre')}${chk('data.circle.protractor', 'Starting radius for a protractor')}<div style="flex:none;width:96px">${num('data.circle.start', 'Start (°)')}</div></div>`)}
+        ${kinds('pictograph', `<div class="row"><div><label class="lab">Symbol</label><select data-bind="data.pict.symbol">${optList({ circle: 'Circle', square: 'Square', star: 'Star', triangle: 'Triangle', heart: 'Heart' })}</select></div>${num('data.pict.per', 'Each symbol stands for')}</div><p class="hint">Half a symbol is drawn for half the value. The key uses the unit of the vertical axis (Axes tab).</p>`)}
+        ${kinds('histogram', `<div class="row">${num('data.bins.start', 'First interval starts at', 'auto')}${num('data.bins.width', 'Interval width', 'auto')}</div>`)}
+        ${kinds('boxplot', `<div><label class="lab">Quartiles</label><select data-bind="data.box.method">${optList(QUARTILE_METHODS)}</select></div><div class="row" style="gap:14px;flex-wrap:wrap">${chk('data.box.outliers', 'Show outliers separately')}${chk('data.box.mean', 'Mark the mean (×)')}</div><p class="hint">The default is what the TI-84 does. Check it against your textbook.</p>`)}
+        ${kinds('scatter', `<div class="row"><div><label class="lab">Line of best fit</label><select data-bind="data.fit.mode"><option value="none">None</option><option value="calc">Calculated (least squares)</option><option value="manual">Drawn by hand: slope and intercept</option></select></div></div>
+          <div class="row" ${D.fit.mode === 'manual' ? '' : 'hidden'}>${num('data.fit.slope', 'Slope')}${num('data.fit.intercept', 'y-intercept')}</div>${chk('data.fit.label', 'Write its equation')}`)}
+        ${kinds('dotplot,histogram', `<div class="row" style="gap:14px;flex-wrap:wrap">${chk('data.marks.mean', 'Mark the mean')}${chk('data.marks.median', 'Mark the median')}${k === 'dotplot' ? chk('data.marks.mode', 'Mark the mode (▲)') : ''}</div>`)}
+        ${kinds('histogram,dotplot,boxplot,stemleaf,scatter', chk('data.raw', 'Print the data list above the graph', 'Shows the raw numbers in the question too, for “make a graph from this data”.'))}
+        ${kinds('bar,line,histogram,scatter,dotplot,boxplot', chk('grid.major', 'Gridlines'))}
+        ${kinds('bar,line,histogram,scatter', num('data.aspect', 'Height ÷ width of the graph'))}</div></div>
+      ${kinds('histogram,dotplot,boxplot,stemleaf', `<div><h3 class="section-title">Statistics beneath the graph</h3><div class="row" style="gap:14px;flex-wrap:wrap">${['mean', 'median', 'mode', 'range', 'five'].map(t => chk('data.stats.' + t, { mean: 'Mean', median: 'Median', mode: 'Mode', range: 'Range', five: 'Five-number summary' }[t])).join('')}</div><p class="hint" style="margin-top:6px">Hide them in the question with “Notation” on the Test tab; tick “Answer line” there to leave a blank to fill in.</p></div>`)}
+      ${kinds('bar,line,circle,pictograph,histogram,dotplot,boxplot,scatter', `<div><h3 class="section-title">Table beside the graph</h3>
+        <div class="row"><div><label class="lab">Show the table</label><select data-bind="data.table.place"><option value="none">No table</option><option value="right">To the right</option><option value="below">Below</option></select></div>
+          <div><label class="lab">Blank in the question</label><select data-bind="data.table.blank"><option value="none">Nothing</option><option value="freq">The numbers (frequencies)</option><option value="all">Everything but the headings</option></select></div></div>
+        ${kinds('histogram,dotplot', chk('data.table.tally', 'Tally column'))}</div>`)}
+      ${kinds('bar,line,histogram,scatter', `<div><h3 class="section-title">Misleading graph (critique questions)</h3>
+        ${kinds('bar,line', num('data.mislead.truncate', 'Start the vertical axis at', 'blank = honest'))}
+        <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:6px">${kinds('bar,line,histogram', chk('data.mislead.uneven', 'Uneven scale (squeeze the top)'))}</div>
+        ${num('data.mislead.stretch', 'Stretch the height by (1 = honest)')}
+        <p class="hint" style="margin-top:6px">These make the graph tell a story the data does not. They are flagged on the Test tab so nobody prints one by accident.</p></div>`)}`;
+  }
+
   /* ---------- the Number line tab: rows and marks ---------- */
   const OP_NAMES = { lt: 'is less than (<)', le: 'is at most (≤)', gt: 'is greater than (>)', ge: 'is at least (≥)' };
   function buildLine() {
@@ -3419,9 +4148,9 @@ function pngWithDpi(u8, dpi) {
   }
 
   function buildTest() {
-    const rows = VIS_ROWS.filter(r => (VIS_FOR[spec.type] || []).includes(r[0])).map(([tok, name, blankable]) =>
+    const rows = VIS_ROWS.filter(r => (VIS_FOR[spec.type] || []).includes(r[0])).map(([tok, name0, blankable]) => { const name = (VIS_NAMES[spec.type] || {})[tok] || name0; return (
       `<label class="check"><input type="checkbox" data-vis="${tok}"> ${name}</label>` +
-      (blankable && (tok !== 'notation' || spec.type === 'plane') ? `<label class="check sm" data-blankwrap="${tok}"><input type="checkbox" data-blank="${tok}"> Answer line</label>` : '<span></span>')).join('');
+      (blankable && (tok !== 'notation' || spec.type === 'plane' || spec.type === 'data') ? `<label class="check sm" data-blankwrap="${tok}"><input type="checkbox" data-blank="${tok}"> Answer line</label>` : '<span></span>')); }).join('');
     const objs = spec.objects.filter(o => kindOn(o.kind) === spec.type).map(o => `<label class="check"><input type="checkbox" data-vis="${o.id}"> <span data-oname="${o.id}"></span></label>`).join('');
     $('#testPane').innerHTML = `
       <div><h3 class="section-title">Scaffold level <span class="pill" id="levelPill"></span></h3>
@@ -3430,7 +4159,7 @@ function pngWithDpi(u8, dpi) {
       <div><h3 class="section-title">Shown in the question</h3>
         <div class="vis"><span class="head">Item</span><span class="head">If hidden</span>${rows}</div>
         <p class="hint" style="margin-top:8px">“Answer line” draws a blank (e.g. <b>Title: ________</b>) where a hidden label was.</p></div>
-      <div><h3 class="section-title">Individual points and shapes <span class="pill" id="markPill"></span></h3>
+      <div${spec.type === 'data' ? ' hidden' : ''}><h3 class="section-title">Individual points and shapes <span class="pill" id="markPill"></span></h3>
         <div class="objlist">${objs || '<p class="hint">Nothing plotted yet.</p>'}</div>
         <label class="check" style="margin-top:10px"><input type="checkbox" id="pick"> Click a point or shape in the preview to hide it</label>
         <p class="hint" style="margin-top:6px">Hidden ones look faded in the Answer key and are left out of the Question.</p></div>
@@ -3461,14 +4190,14 @@ function pngWithDpi(u8, dpi) {
   }
   function syncControls() {
     fillObjSelects();
-    const auto = computeAxes(spec), active = document.activeElement;
+    const auto = spec.type === 'data' ? dataAutoAxes(spec) : computeAxes(spec), active = document.activeElement;
     $$('[data-bind]').forEach(el => {
       const v = getPath(spec, el.dataset.bind);
       if (el.type === 'checkbox') el.checked = !!v;
       else if (el !== active) el.value = v === null || v === undefined ? '' : String(v);
       if (el.dataset.auto) {
         const [ak, af] = el.dataset.auto.split('.'), a = auto[ak];
-        el.placeholder = a ? String(af === 'step' ? a.step : fmtTick(a[af], a, true).replace('−', '-')) : '';
+        el.placeholder = a ? String(af === 'step' ? a.step : fmtTick(a[af], a, true).replace('−', '-')) : 'auto';
       }
     });
     $$('[data-seg]').forEach(g => $$('button', g).forEach(b => b.classList.toggle('active', String(getPath(spec, g.dataset.seg)) === b.dataset.v)));
@@ -3483,6 +4212,7 @@ function pngWithDpi(u8, dpi) {
     $$('[data-tblank]').forEach(el => { const [i, c, k] = el.dataset.tblank.split(':'); el.checked = spec.objects[+i].blank.includes(c + ':' + k); });
     if ($('[data-ycell]')) { const R = resolveObjects(spec); $$('[data-ycell]').forEach(el => { const [i, k] = el.dataset.ycell.split(':'), r = R.res(spec.objects[+i].id); el.textContent = r && r.model && r.model.rows[+k] ? r.model.rows[+k].ytext : ''; }); }
     $$('[data-lnames]').forEach(el => { const o = spec.objects.find(x => x.id === el.dataset.lnames); el.textContent = o ? o.labels.filter(Boolean).join('') || 'no names' : ''; });
+    if ($('[data-dcount]')) { const M = dataModel(spec); $$('[data-dcount]').forEach(el => { const g = M.groups && M.groups[+el.dataset.dcount]; el.textContent = g ? g.n + ' number' + (g.n === 1 ? '' : 's') + (g.n ? ' · mean ' + approx(g.mean) + ' · median ' + fmtNum(g.median) : '') : ''; }); }
     $$('[data-oname]').forEach(el => { const o = spec.objects.find(x => x.id === el.dataset.oname); el.textContent = o ? objName(o, spec.objects) : ''; });
     const locked = spec.scale.lock, { w, h } = state.size || { w: 0, h: 0 }, sz = sizeMM(spec.size);
     $('#sizePreset').value = spec.size.preset;
@@ -3524,12 +4254,16 @@ function pngWithDpi(u8, dpi) {
     el.setAttribute('width', Math.round(state.size.w * 7.5)); el.setAttribute('height', Math.round(state.size.h * 7.5));
     $('#preview').classList.toggle('pick', pick);
     $('#preview').classList.toggle('edit', edit);
-    $('#caption').textContent = spec.type === 'paper' ? 'Prints at real size: ' + PAGES[spec.paper.page].name + (spec.paper.orient === 'landscape' ? ', landscape' : '') + '.' : state.view === 'key' ? 'Answer key: everything is shown.' : 'Question version: scaffold level “' + levelName() + '”.';
+    $('#caption').textContent = spec.type === 'data' ? (state.view === 'key' ? 'Answer key: everything is shown.' : 'Question version: scaffold level “' + levelName() + '”.') : spec.type === 'paper' ? 'Prints at real size: ' + PAGES[spec.paper.page].name + (spec.paper.orient === 'landscape' ? ', landscape' : '') + '.' : state.view === 'key' ? 'Answer key: everything is shown.' : 'Question version: scaffold level “' + levelName() + '”.';
     $('#viewHint').textContent = state.view === 'key' ? 'Editing the answer key; switch to Question to see what students get.' : 'This is what students get.';
     $$('#viewSeg button').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
   }
   function renderStatus() {
     const { w, h } = state.size, bad = countBad(), out = state.outside.length, iss = state.issues.length, dot = '<span class="dotline"></span>';
+    if (spec.type === 'data') {
+      $('#status').innerHTML = `<span><b>${+w.toFixed(1)} × ${+h.toFixed(1)}</b> mm</span>${dot}<span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span>${dot}<span>${DATA_NAMES[spec.data.kind]}</span>` + (iss ? `${dot}<span class="warn">${iss} note${iss === 1 ? '' : 's'} (Test tab)</span>` : '');
+      return;
+    }
     if (spec.type === 'paper') {
       const L = paperLayout(spec), pn = L.panels[0];
       $('#status').innerHTML = `<span><b>${+w.toFixed(1)} × ${+h.toFixed(1)}</b> mm</span>${dot}<span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span>${dot}<span>${L.panels.length} grid${L.panels.length === 1 ? '' : 's'}${spec.paper.lattice === 'square' ? ', <b>' + pn.n + ' × ' + pn.m + '</b> squares each' : ''}</span>` +
@@ -3544,8 +4278,9 @@ function pngWithDpi(u8, dpi) {
       (bad ? `${dot}<span class="warn">${bad} cell${bad === 1 ? ' isn’t a number and is' : 's aren’t numbers and are'} left off the graph</span>` : '');
   }
   function refresh() { state.outside = outsideObjects(spec); state.issues = readability(spec); renderPreview(); syncControls(); renderStatus(); }
+  function dataAutoAxes(sp) { const M = dataModel(sp); return { x: M.xAxis || null, y: M.vAxis || M.yAxis || null }; }
   function buildPaperPresets() { $('#paperPreset').innerHTML = '<option value="">Choose a setup…</option>' + Object.keys(PAPER_PRESETS).map(k => `<option value="${k}">${esc(PAPER_PRESETS[k].name)}</option>`).join(''); }
-  function rebuildStructure() { buildObjects(); buildTransforms(); buildGeometry(); buildFunctions(); buildLine(); buildTest(); refresh(); }
+  function rebuildStructure() { buildData(); buildObjects(); buildTransforms(); buildGeometry(); buildFunctions(); buildLine(); buildTest(); refresh(); }
 
   /* ---------- actions ---------- */
   function showQuestion() { if (state.view !== 'question') { state.view = 'question'; state.pick = false; state.edit = false; const p = $('#pick'); if (p) p.checked = false; } }
@@ -3676,7 +4411,7 @@ function pngWithDpi(u8, dpi) {
       else v = t.value;
       setPath(spec, t.dataset.bind, v);
       spec = normalize(spec);
-      commit(t.dataset.bind, t.tagName === 'SELECT' && /^objects\.\d+\.(of|what|at)(\.\d)?$/.test(t.dataset.bind));       // pickers that change what other controls offer rebuild the tab
+      commit(t.dataset.bind, t.tagName === 'SELECT' && (/^objects\.\d+\.(of|what|at)(\.\d)?$/.test(t.dataset.bind) || /^data\.(kind|fit\.mode)$/.test(t.dataset.bind)));       // pickers that change what other controls offer rebuild the tab
     } else if (t.dataset.cell) {                                    // a cell of the points table, a shape's vertex table or a table of values
       const o = spec.objects[+t.dataset.oi], f = (t.dataset.cell === 't' ? TABLE_COLS : POINT_COLS)[+t.dataset.c], r = +t.dataset.r;
       if (t.dataset.cell === 'p') { if (f === 'label') o.label = t.value; else o[f] = cellFromText(t.value); }
@@ -3691,6 +4426,12 @@ function pngWithDpi(u8, dpi) {
       else if (kind === 'values') spec.objects[+i].values = items.map(cellFromText).slice(0, MAX_CRIT);
       else if (kind === 'signs') spec.objects[+i].signs = items.slice(0, MAX_CRIT + 1);
       commit('list:' + t.dataset.list);
+    } else if (t.id === 'dataPreset') {
+      if (t.value) { spec = applyDataPreset(spec, t.value); t.value = ''; commit(null, true); toast('Sample data loaded. Undo brings back what you had.', 'ok'); }
+    } else if (t.dataset.dcell) {                                      // a number in the data tables
+      setPath(spec, t.dataset.dcell, cellFromText(t.value)); spec = normalize(spec); t.classList.toggle('bad', badCell(cellFromText(t.value))); commit('dc:' + t.dataset.dcell);
+    } else if (t.dataset.dlist !== undefined) {                        // a whole list of numbers in one box
+      spec.data.groups[+t.dataset.dlist].values = t.value.split(/[\s,;]+/).filter(Boolean).slice(0, MAX_LIST).map(cellFromText); spec = normalize(spec); commit('dl:' + t.dataset.dlist);
     } else if (t.id === 'paperPreset') {
       if (t.value) { spec = applyPaperPreset(spec, t.value); t.value = ''; commit(null, true); toast('Paper set up. Undo brings back what you had.', 'ok'); }
     } else if (t.id === 'linePreset') {
@@ -3736,6 +4477,19 @@ function pngWithDpi(u8, dpi) {
     else if (a === 'addPoint') addPoint();
     else if (a === 'addShape') addShape(b.dataset.kind);
     else if (a === 'addTransform') addTransform();
+    else if (a === 'dAddCat') { spec.data.cats.push(''); spec.data.series.forEach(sr => sr.values.push(null)); spec = normalize(spec); commit(null, true); const c = $$('#dataPane input[data-bind^="data.cats."]').pop(); if (c) c.focus(); }
+    else if (a === 'dDelCat') { const i = +b.dataset.i; spec.data.cats.splice(i, 1); spec.data.series.forEach(sr => sr.values.splice(i, 1)); commit(null, true); }
+    else if (a === 'dAddSeries') { spec.data.series.push({ name: '', values: spec.data.cats.map(() => null) }); commit(null, true); }
+    else if (a === 'dDelSeries') { spec.data.series.pop(); commit(null, true); }
+    else if (a === 'dAddGroup') { spec.data.groups.push({ name: '', values: [] }); commit(null, true); }
+    else if (a === 'dDelGroup') { spec.data.groups.splice(+b.dataset.i, 1); commit(null, true); }
+    else if (a === 'dAddPt') { spec.data.points.push([null, null]); spec = normalize(spec); commit(null, true); const c = $$('#dataPane input[data-dcell^="data.points."]').slice(-2)[0]; if (c) c.focus(); }
+    else if (a === 'dDelPt') { spec.data.points.splice(+b.dataset.i, 1); commit(null, true); }
+    else if (a === 'dPaste') {
+      const r = dataFromPaste(spec.data.kind, $('#dataPaste').value);
+      if (r.error) return toast(r.error, 'err');
+      Object.assign(spec.data, r.data); spec = normalize(spec); commit(null, true); toast('Data replaced. ' + (r.note || 'Undo brings back the old data.'), 'ok');
+    }
     else if (a === 'addSymmetry') addGeom('symmetry', ['polygon', 'path', 'transform'], { count: true, order: true, lines: true }, 'Add a polygon first.');
     else if (a === 'addAreacount') addGeom('areacount', ['polygon', 'transform'], {}, 'Add a polygon first.');
     else if (a === 'addPythag') addGeom('pythag', ['polygon', 'transform'], { equation: true }, 'Add a triangle first (a polygon with three corners).');
