@@ -24,7 +24,9 @@ const G = vm.runInNewContext(core + `;({ SPEC_VERSION, TOOL, SCAFFOLD, SCAFFOLD_
   polyArea, polyPerimeter, pointInPoly, cellsInside, symmetryOf, rightAngles, equalGroups, distanceText, circleEq, sideSquares, pythagText, shapeOf,
   normPaper, paperLayout, applyPaperPreset, PAPER_PRESETS, PAGES, pageMM, paperIssues,
   medianOf, modesOf, quartiles, fiveNumber, niceBinWidth, histBins, apportion, stemLeaf, leastSquares, symbolCount, parseList, meanOf,
-  normData, dataAxis, axFrac, dataModel, dataTableModel, dataCaptions, dataIssues, DATA_PRESETS, applyDataPreset, DATA_KINDS, fitEquation, dataFromPaste })`, {});
+  normData, dataAxis, axFrac, dataModel, dataTableModel, dataCaptions, dataIssues, DATA_PRESETS, applyDataPreset, DATA_KINDS, fitEquation, dataFromPaste,
+  linExpr, DISTRACTORS, MC_RULE_IDS, normMc, freezeAxes, mcPlan, mulberry, shuffled,
+  applySketch, applyExamStyle, extractLook, applyLook, variantSpec, perturbSpec })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -142,7 +144,7 @@ test('normalize is idempotent and keeps a fixed key order', () => {
   const s = G.sampleSpec();
   const a = JSON.stringify(s), b = JSON.stringify(G.normalize(JSON.parse(a)));
   assert.equal(a, b);
-  assert.deepEqual(Object.keys(s), ['specVersion', 'tool', 'type', 'title', 'name', 'size', 'quadrants', 'x', 'y', 'axes', 'grid', 'quadrantLabels', 'line', 'paper', 'data', 'objects', 'hidden', 'blanks', 'scale', 'style']);
+  assert.deepEqual(Object.keys(s), ['specVersion', 'tool', 'type', 'title', 'name', 'size', 'quadrants', 'x', 'y', 'axes', 'grid', 'quadrantLabels', 'windowCaption', 'line', 'paper', 'data', 'mc', 'objects', 'hidden', 'blanks', 'scale', 'style']);
   assert.equal(s.specVersion, G.SPEC_VERSION); assert.equal(s.tool, 'math-graph-maker');
 });
 test('normalize survives garbage and clamps values', () => {
@@ -1624,4 +1626,130 @@ test('pasting data from a spreadsheet: categories, lists, points', () => {
   assert.match(P('histogram', 'abc').error, /No numbers/);
   r = P('scatter', 'Hours\tMark\n1\t50\n2\t60'); assert.deepEqual(r.data.points, [[1, 50], [2, 60]]); assert.deepEqual(P('scatter', '1,2\n3,4').data.points, [[1, 2], [3, 4]]); assert.match(P('scatter', '5').error, /two columns/);
   assert.equal(P('bar', Array.from({ length: 40 }, (_, i) => 'c' + i + '\t' + i).join('\n')).data.cats.length, 24, 'the category limit'); assert.match(P('bar', Array.from({ length: 40 }, (_, i) => 'c' + i + '\t' + i).join('\n')).note, /first 24/);
+});
+
+
+/* ================= Phase 6A: multiple choice ================= */
+const mcBase = (expr, extra) => { const s = G.blankSpec(); s.title = 'Which graph shows ' + expr + '?'; s.objects.push(G.makeObject(s, 'function', { expr, label: 'none' })); s.mc.on = true; return Object.assign(G.normalize(s), extra || {}); };
+const exprsOf = spec => plain(spec.objects.filter(o => o.kind === 'function').map(o => o.expr));
+
+test('linExpr writes a line as text', () => {
+  assert.equal(G.linExpr(2, -1), 'y = 2x - 1'); assert.equal(G.linExpr(1, 0), 'y = x'); assert.equal(G.linExpr(-1, 3), 'y = -x + 3'); assert.equal(G.linExpr(0.5, 1), 'y = x/2 + 1'); assert.equal(G.linExpr(-0.25, 0), 'y = -x/4');
+  assert.equal(G.linExpr(0, 4), 'y = 4'); assert.equal(G.linExpr(0, 0), 'y = 0'); assert.equal(G.linExpr(1.5, -2), 'y = 1.5x - 2');
+  for (const [m, c] of [[2, -1], [0.5, 1], [-3, 0], [1.5, 2.5], [-1, -1]]) { const eq = G.parseEquation(G.linExpr(m, c)); assert.ok(eq.ok && Math.abs(eq.linear.m - m) < 1e-9 && Math.abs(eq.linear.c - c) < 1e-9, G.linExpr(m, c) + ' reads back as the same line'); }
+});
+
+test('distractor rules: each copies one mistake, never touches the original, says when it does not apply', () => {
+  const s = mcBase('y = 2x - 1'), before = JSON.stringify(s), rnd = G.mulberry(1), make = id => G.DISTRACTORS[id].make(s, rnd);
+  assert.deepEqual(exprsOf(make('slopeSign')), ['y = -2x - 1']); assert.deepEqual(exprsOf(make('riseRun')), ['y = x/2 - 1']); assert.deepEqual(exprsOf(make('wrongAxis')), ['y = 2x + 2'], 'the y-intercept −1 plotted on the x-axis: y = 2(x + 1)');
+  assert.deepEqual(exprsOf(make('interceptSign')), ['y = 2x + 1']); assert.equal(JSON.stringify(s), before, 'the original graph is untouched');
+  assert.equal(make('reflectAxis'), null); assert.equal(make('rotateDir'), null); assert.equal(make('openClosed'), null); assert.equal(make('ineqReversed'), null, 'rules that do not fit this graph say so');
+  const flat = mcBase('y = 3'); assert.equal(G.DISTRACTORS.slopeSign.make(flat, rnd), null, 'a horizontal line has no slope to flip'); assert.equal(G.DISTRACTORS.riseRun.make(mcBase('y = x + 2'), rnd), null, 'slope 1 is its own reciprocal');
+  const nonlin = mcBase('y = x^2'); assert.equal(G.DISTRACTORS.slopeSign.make(nonlin, rnd), null); assert.equal(G.DISTRACTORS.slopeSign.make(mcBase('x = 4'), rnd), null);
+  const tr = G.blankSpec(); tr.objects.push(G.makeObject(tr, 'polygon', { vertices: [[1, 1], [4, 1], [1, 3]] })); tr.objects.push(G.makeObject(tr, 'transform', { of: 'pg1', how: 'reflect', mirror: 'yaxis' })); tr.objects.push(G.makeObject(tr, 'transform', { of: 'pg1', how: 'rotate', angle: 90, dir: 'cw', center: { x: 0, y: 0 } })); tr.objects.push(G.makeObject(tr, 'transform', { of: 'pg1', how: 'translate', dx: 3, dy: -2 }));
+  const t = id => plain(G.DISTRACTORS[id].make(tr, rnd).objects);
+  assert.equal(t('reflectAxis')[1].mirror, 'xaxis'); assert.equal(t('reflectAxis')[2].dir, 'cw', 'only reflections change'); assert.equal(t('rotateDir')[2].dir, 'ccw'); assert.equal(t('translateSign')[3].dx, -3);
+  const rot180 = G.blankSpec(); rot180.objects.push(G.makeObject(rot180, 'polygon', { vertices: [[1, 1], [2, 1], [1, 2]] }), G.makeObject(rot180, 'transform', { of: 'pg1', how: 'rotate', angle: 180 })); assert.equal(G.DISTRACTORS.rotateDir.make(rot180, rnd), null, 'a half turn has no direction');
+  const nl = G.blankSpec(); nl.type = 'numberline'; nl.objects.push(G.makeObject(nl, 'inequality', { a: { op: 'ge', at: -3 } })); nl.objects.push(G.makeObject(nl, 'nlpoint', { at: 2, closed: true }));
+  const q = id => plain(G.DISTRACTORS[id].make(nl, rnd).objects);
+  assert.equal(q('ineqReversed')[0].a.op, 'le'); assert.equal(q('openClosed')[0].a.op, 'gt'); assert.equal(q('openClosed')[1].closed, false);
+  const pts = G.blankSpec(); pts.objects.push(G.makeObject(pts, 'point', { x: 1, y: 1, style: 'filled' })); assert.equal(G.DISTRACTORS.openClosed.make(pts, rnd).objects[0].style, 'open');
+});
+
+test('mcPlan: four different choices, one right, on one scale; the same seed gives the same question', () => {
+  const s = mcBase('y = 2x - 1'), P = G.mcPlan(s);
+  assert.equal(P.options.length, 4); assert.equal(P.options.filter(o => o.correct).length, 1); assert.equal(P.options[P.answer].correct, true);
+  assert.equal(new Set(P.options.map(o => JSON.stringify(o.spec.objects))).size, 4, 'all four graphs differ');
+  assert.equal(P.options.filter(o => !o.correct && G.MC_RULE_IDS.includes(o.rule)).length, 3, 'three real student mistakes, not filler: ' + P.options.map(o => o.rule));
+  const sc = o => JSON.stringify([o.spec.x, o.spec.y]); assert.equal(new Set(P.options.map(sc)).size, 1, 'one scale for every graph'); assert.equal(P.options[0].spec.x.min, -10); assert.equal(P.options[0].spec.y.max, 10);
+  assert.deepEqual(plain(G.mcPlan(s).options.map(o => o.rule)), plain(P.options.map(o => o.rule)), 'repeatable');
+  const seeds = Array.from({ length: 80 }, (_, i) => { const t = mcBase('y = 2x - 1'); t.mc.seed = i + 1; return G.mcPlan(t).answer; });
+  for (const pos of [0, 1, 2, 3]) assert.ok(seeds.filter(a => a === pos).length >= 8, 'the answer lands in position ' + pos + ' often enough: ' + seeds.filter(a => a === pos).length + ' of 80');
+  const order = seed => { const t = mcBase('y = 2x - 1'); t.mc.seed = seed; return G.mcPlan(t).options.map(o => o.rule).join(); }; assert.notEqual(order(1), order(2), 'a new seed shuffles');
+  const only = mcBase('y = 2x - 1'); only.mc.rules = ['slopeSign']; const R = G.mcPlan(only).options.map(o => o.rule); assert.ok(R.includes('slopeSign') && R.length === 4, 'a chosen rule is used; fallbacks fill the rest: ' + R);
+  const frozen = G.freezeAxes(s); assert.equal(frozen.mc.on, false); assert.equal(frozen.x.step, G.analyse(s).ax.step); assert.equal(s.x.min, null, 'freezing copies');
+  const blank = G.blankSpec(); blank.mc.on = true; assert.match(G.mcPlan(G.normalize(blank)).error, /Add a line/); assert.equal(G.mcPlan(G.normalize(blank)).options.length, 0);
+  assert.deepEqual(plain(G.normMc({ layout: 'x', seed: -4, rules: ['slopeSign', 'nope', 'slopeSign'], letters: 'zz' })), { on: false, layout: '2x2', seed: 1, rules: ['slopeSign'], letters: 'ABCD', mark: true });
+  const many = new Set(G.shuffled([1, 2, 3, 4, 5, 6], G.mulberry(9))); assert.equal(many.size, 6, 'a shuffle keeps every item');
+});
+
+test('multiple-choice pages: question and key share a page; the key carries the answer letter', () => {
+  const vb = svg => /viewBox="([^"]+)"/.exec(svg)[1];
+  for (const layout of ['2x2', '1x4', '4x1']) for (const letters of ['ABCD', 'abcd', '1234']) {
+    const s = mcBase('y = 2x - 1'); s.mc.layout = layout; s.mc.letters = letters;
+    const q = G.renderSVG(s, { version: 'question' }), k = G.renderSVG(s, { version: 'key' }); noBad(q); noBad(k);
+    assert.equal(vb(q), vb(k), layout + ' ' + letters + ': same page'); const L = G.mcPlan(s).letters[G.mcPlan(s).answer];
+    assert.ok(!/Answer:/.test(plainText(q)), 'the question never gives the answer'); assert.ok(plainText(k).includes('Answer: ' + L), 'the key names ' + L);
+    for (const ch of letters) assert.ok(plainText(q).split('|').includes(ch), 'letter ' + ch + ' is on the page');
+    const ids = [...q.matchAll(/ id="([^"]+)"/g)].map(m => m[1]); assert.equal(new Set(ids).size, ids.length, 'no clip id is used twice');
+  }
+  const s = mcBase('y = 2x - 1'), k = G.renderSVG(s, { version: 'key' }); assert.equal(countM(k, /<svg /g), 5, 'four graphs inside one page'); assert.match(plainText(G.renderSVG(s, {})), /Which graph shows/);
+  s.mc.mark = false; assert.ok(!/rx="2"/.test(G.renderSVG(s, { version: 'key' })), 'the highlight can be turned off'); assert.match(plainText(G.renderSVG(s, { version: 'key' })), /Answer:/, 'the letter stays');
+  const blank = G.blankSpec(); blank.mc.on = true; noBad(G.renderSVG(G.normalize(blank), {})); assert.equal(countM(G.renderSVG(G.normalize(blank), {}), /<svg /g), 1, 'nothing to vary: the plain graph is drawn instead');
+  const nl = G.blankSpec(); nl.type = 'numberline'; nl.title = 'Which number line shows x ≥ −3?'; nl.objects.push(G.makeObject(nl, 'inequality', { a: { op: 'ge', at: -3 } })); nl.mc.on = true; nl.mc.layout = '4x1';
+  const nk = G.renderSVG(G.normalize(nl), { version: 'key' }); noBad(nk); assert.equal(countM(nk, /<svg /g), 5); assert.deepEqual(plain(G.mcPlan(G.normalize(nl)).options.filter(o => !o.correct).map(o => o.rule).sort()), ['ineqReversed', 'openClosed', 'shiftMarks'], 'reversed, open dot, and a moved mark fills the third place');
+  const tr = G.blankSpec(); tr.title = 'Which shows the reflection in the y-axis?'; tr.objects.push(G.makeObject(tr, 'polygon', { vertices: [[1, 1], [4, 1], [1, 3]], labels: ['A', 'B', 'C'] })); tr.objects.push(G.makeObject(tr, 'transform', { of: 'pg1', how: 'reflect', mirror: 'yaxis' })); tr.mc.on = true;
+  const tp = G.mcPlan(G.normalize(tr)); assert.equal(tp.options.length, 4); assert.ok(tp.options.some(o => o.rule === 'reflectAxis')); noBad(G.renderSVG(G.normalize(tr), { version: 'key' }));
+  assert.deepEqual(plain(G.svgSize(mcBase('y = 2x - 1'))), { w: 165, h: +vb(G.renderSVG(mcBase('y = 2x - 1'), {})).split(' ')[3] }, 'the export size is the whole page');
+});
+
+
+/* ================= Phase 6B/6C: sketch, look, variants, annotations ================= */
+test('sketch question: blank grid with the given points; the key draws the graph and labels where it crosses the axes', () => {
+  const s = G.blankSpec(); s.title = 'Sketch the line'; s.objects.push(G.makeObject(s, 'function', { expr: 'y = 2x - 3', label: 'equation' })); s.objects.push(G.makeObject(s, 'point', { x: 0, y: -3, label: 'A' }));
+  const k = G.applySketch(s); assert.deepEqual(plain(k.hidden), ['fn1']); assert.equal(k.objects[0].intercepts, 'labelled'); assert.equal(s.hidden.length, 0, 'the original is untouched');
+  const key = G.renderSVG(k, { version: 'key' }), q = G.renderSVG(k, { version: 'question' });
+  assert.match(plainText(key), /\(1\.5, 0\)/); assert.ok(/data-obj="fn1"/.test(key) && !/data-obj="fn1"/.test(q) && /data-obj="pt1"/.test(q), 'the line is hidden, the given point stays');
+  assert.ok(!/2x/.test(plainText(q)) && /2x/.test(plainText(key)), 'the equation label does not leak'); assert.equal(vbox(q), vbox(key)); noBad(q);
+  assert.deepEqual(plain(G.applySketch(k).hidden), ['fn1'], 'applying it twice changes nothing');
+  const tokens = G.blankSpec(); tokens.hidden = ['title']; assert.deepEqual(plain(G.applySketch(tokens).hidden), ['title'], 'element tokens are kept');
+});
+
+test('exam look, window caption, and a look shared across a test', () => {
+  const s = G.blankSpec(); s.grid.minor = true; const e = G.applyExamStyle(s); assert.deepEqual(plain(e.grid), { major: false, minor: false, highlight5: false });
+  assert.ok(!/<path d="[^"]*" stroke="#8c8c8c"/.test(G.renderSVG(e, {})) && /<path d="[^"]*" stroke="#000"/.test(G.renderSVG(e, {})), 'no gridlines, the axes and their ticks remain');
+  const w = G.blankSpec(); w.windowCaption = true; w.x.min = -10; w.x.max = 10; w.x.step = 1; w.y.min = -5; w.y.max = 5; w.y.step = 1; const svg = G.renderSVG(w, {}); assert.match(plainText(svg), /Window: x: \[−10, 10, 1\], y: \[−5, 5, 1\]/);
+  const hid = G.renderSVG(Object.assign({}, w, { hidden: ['notation'] }), { version: 'question' }); assert.match(plainText(hid), /Window:/, 'the window is given information, not an answer'); assert.equal(vbox(hid), vbox(G.renderSVG(w, { version: 'key' })));
+  assert.ok(!/Window:/.test(plainText(G.renderSVG(G.blankSpec(), {}))), 'off by default');
+  const a = G.blankSpec(); a.title = 'Q1'; a.grid.minor = true; a.axes.arrows = 'end'; a.size = { preset: 'half' }; a.style.largePrint = true; a.x.label = 'time'; a.x.min = 2; a.x.max = 8; a.x.minorPerMajor = 4; a.windowCaption = true;
+  const look = G.extractLook(G.normalize(a)); assert.deepEqual(plain(look.size), { preset: 'half' }); assert.equal(look.x.minorPerMajor, 4); assert.ok(!('label' in look.x) && !('min' in look.x), 'a look holds no content');
+  const b = G.blankSpec(); b.title = 'Q2'; b.x.label = 'distance'; b.x.min = 0; b.x.max = 9; b.objects.push(G.makeObject(b, 'point', { x: 1, y: 1 })); const r = G.applyLook(b, look);
+  assert.deepEqual(plain([r.title, r.x.label, r.x.min, r.x.max, r.objects.length]), ['Q2', 'distance', 0, 9, 1], 'content stays'); assert.deepEqual(plain([r.grid.minor, r.axes.arrows, r.size, r.style.largePrint, r.x.minorPerMajor, r.windowCaption]), [true, 'end', { preset: 'half' }, true, 4, true], 'the look comes across');
+  assert.deepEqual(plain(G.extractLook(r)), plain(look), 'extract then apply then extract is stable'); assert.deepEqual(plain(G.applyLook(r, look)), plain(r), 'idempotent');
+  assert.deepEqual(plain(G.applyLook(b, {})), plain(G.normalize(b)), 'an empty look changes nothing'); assert.deepEqual(plain(G.applyLook(b, { size: { preset: 'nope' }, grid: 5 })).size, { preset: 'full' }, 'bad look values are cleaned by normalize');
+});
+
+test('variants: same kind of question, different numbers, still readable, repeatable', () => {
+  const lineQ = () => { const s = G.blankSpec(); s.objects.push(G.makeObject(s, 'function', { expr: 'y = 2x - 1', label: 'equation' })); return G.normalize(s); };
+  const base = lineQ(), seen = new Set();
+  for (let seed = 1; seed <= 30; seed++) {
+    const v = G.variantSpec(base, seed); assert.ok(v, 'seed ' + seed); assert.notEqual(v.objects[0].expr, base.objects[0].expr);
+    const eq = G.parseEquation(v.objects[0].expr); assert.ok(eq.ok && Number.isInteger(eq.linear.c) && (Number.isInteger(eq.linear.m) || Number.isInteger(1 / eq.linear.m)), v.objects[0].expr + ' has tidy numbers');
+    assert.equal(G.readability(v).length, 0); assert.equal(G.outsideObjects(v).length, 0); seen.add(v.objects[0].expr);
+    assert.equal(G.variantSpec(base, seed).objects[0].expr, v.objects[0].expr, 'repeatable');
+  }
+  assert.ok(seen.size >= 15, 'the seeds give plenty of different questions: ' + seen.size); assert.equal(base.objects[0].expr, 'y = 2x - 1', 'the original is untouched');
+  const shape = G.blankSpec(); shape.objects.push(G.makeObject(shape, 'polygon', { vertices: [[1, 1], [4, 1], [1, 3]], labels: ['A', 'B', 'C'] })); shape.objects.push(G.makeObject(shape, 'transform', { of: 'pg1', how: 'translate', dx: 3, dy: -2 }));
+  for (let seed = 1; seed <= 20; seed++) { const v = G.variantSpec(G.normalize(shape), seed); assert.ok(v && G.readability(v).length === 0 && G.outsideObjects(v).length === 0, 'shape variant ' + seed); }
+  const nl = G.blankSpec(); nl.type = 'numberline'; nl.objects.push(G.makeObject(nl, 'inequality', { a: { op: 'ge', at: -3 } })); nl.objects.push(G.makeObject(nl, 'hops', { start: 2, steps: [5, -8] }));
+  for (let seed = 1; seed <= 15; seed++) { const v = G.variantSpec(G.normalize(nl), seed); assert.ok(v, 'number line variant ' + seed); assert.ok(G.parseNum(v.objects[0].a.at) !== -3); assert.ok(v.objects[1].steps[0] > 0 && v.objects[1].steps[1] < 0, 'hop directions are kept'); }
+  assert.equal(G.variantSpec(G.blankSpec(), 1), null, 'nothing to vary');
+  const many = G.blankSpec(); many.objects.push(G.makeObject(many, 'function', { expr: 'y = x^2' })); assert.equal(G.variantSpec(G.normalize(many), 1), null, 'a curve is left alone rather than mangled');
+  for (const kind of ['reflect', 'rotate', 'dilate']) { const t = G.blankSpec(); t.objects.push(G.makeObject(t, 'polygon', { vertices: [[1, 1], [2, 1], [1, 2]] })); t.objects.push(G.makeObject(t, 'transform', { of: 'pg1', how: kind, mirror: 'vertical', at: 5, angle: 90, k: 2, center: { x: 0, y: 0 } })); assert.ok(G.variantSpec(G.normalize(t), 3), kind); }
+});
+
+test('annotations: arrows, notes and lettered regions', () => {
+  const s = G.blankSpec(); s.objects.push(G.makeObject(s, 'arrow', { from: { x: -6, y: 5 }, to: { x: -2, y: 2 }, label: 'steeper' }));
+  s.objects.push(G.makeObject(s, 'note', { text: 'y-intercept\nhere', at: { x: -5, y: -4 }, box: true, leader: { x: 0, y: 0 } })); s.objects.push(G.makeObject(s, 'note', { text: 'Start', at: { x: 3, y: -5 } }));
+  s.objects.push(G.makeObject(s, 'region', { vertices: [[1, 1], [6, 1], [6, 6]], label: 'A', fill: 'light' }));
+  const key = G.renderSVG(s, {}); noBad(key); const t = plainText(key); assert.ok(['steeper', 'y-intercept', 'here', 'Start', 'A'].every(w => t.includes(w)), t);
+  assert.equal(countM(key, /<circle /g), 1, 'one lettered circle'); assert.ok(/<rect x="[\d.]+" y="[\d.]+" width="[\d.]+" height="[\d.]+" rx=/.test(key), 'the boxed note');
+  const q = G.renderSVG(Object.assign({}, s, { hidden: ['ar1', 'rn1'] }), { version: 'question' }); assert.ok(!/steeper/.test(plainText(q)) && /Start/.test(plainText(q)), 'each annotation hides by name'); assert.equal(vbox(q), vbox(key));
+  const big = G.blankSpec(); big.objects.push(G.makeObject(big, 'arrow', { from: { x: 0, y: 0 }, to: { x: 30, y: 25 } })); const A = G.analyse(big); assert.ok(A.ax.hi >= 30 && A.ay.hi >= 25, 'the window grows to show the arrow');
+  const bad = G.blankSpec(); bad.objects.push(G.makeObject(bad, 'arrow', {}), G.makeObject(bad, 'note', {}), G.makeObject(bad, 'region', { vertices: [[0, 0], [1, 1]] }));
+  bad.objects = [G.makeObject(bad, 'arrow', {})]; const b2 = G.blankSpec(); b2.objects.push(G.makeObject(b2, 'note', { text: '' })); const b3 = G.blankSpec(); b3.objects.push(G.makeObject(b3, 'region', { vertices: [[0, 0], [1, 1]] }));
+  assert.match(G.readability(G.normalize(bad))[0].text, /start and an end/); assert.match(G.readability(G.normalize(b2))[0].text, /type the text/); assert.match(G.readability(G.normalize(b3))[0].text, /three corners/); for (const x of [bad, b2, b3]) noBad(G.renderSVG(G.normalize(x), {}));
+  assert.equal(G.objName(s.objects[0]), 'Arrow steeper'); assert.equal(G.objName(s.objects[1]), 'Note “y-intercept”'); assert.equal(G.objName(s.objects[3]), 'Region A');
+  const n = G.normalize(s); assert.deepEqual(plain(G.normalize(n)), plain(n)); assert.deepEqual(plain(G.parseFile(G.serialize(n))), plain(n));
+  assert.equal(G.normalize({ objects: [{ kind: 'note', text: 'x'.repeat(500) }] }).objects[0].text.length, 200);
 });

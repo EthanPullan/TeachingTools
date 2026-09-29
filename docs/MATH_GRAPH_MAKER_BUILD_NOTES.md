@@ -155,12 +155,37 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 - Assumptions to check: the sample data, the histogram interval text ("50–59" for whole numbers, "0 ≤ x < 1" otherwise), circle sectors start at 12 o'clock and
   run clockwise, dot plots are padded by one step each side, whole-symbol pictographs use plain outlined symbols.
 
+## Phase 6 notes (test-making toolkit)
+- **Multiple choice is a layout over an ordinary graph, not a new type.** Tick "Multiple choice" on the Test tab and the same spec draws four
+  graphs (2 × 2, four across, or four down), lettered, on **one frozen scale** (`freezeAxes` fixes the axes the correct graph would have used, so a
+  wrong graph can never look right because the axes moved). The correct graph is shuffled by a seed kept in the file (same seed, same question;
+  "Shuffle" picks a new one). The key frames the right graph and writes "Answer: C"; the question reserves the same room so both pages match.
+  It works for plane graphs, transformations and number lines.
+- **Distractors are rules, one per real student mistake** (`DISTRACTORS`): slope sign flipped, rise and run swapped, intercept placed on the
+  wrong axis, intercept sign flipped, reflection in the wrong line, rotation in the wrong direction, translation in the wrong direction, open and
+  closed dots swapped, inequality reversed. A rule returns nothing when it does not fit (a horizontal line has no slope to flip; a half turn has no
+  direction), never touches the original, and duplicates are dropped. If fewer than three rules fit, simple "off by a bit" graphs fill in (marked
+  as fillers in the summary). Teachers can switch mistakes off. **Later phases add rules to this table** (vertex shifted the wrong way, roots
+  with the wrong sign, …); nothing else needs to change.
+- **Sketch the graph**: one button hides the line or curve (given points stay) and makes the key label its intercepts. **Exam look**: ticks
+  on the axes, no gridlines. **Calculator window**: `x: [−10, 10, 1], y: [−10, 10, 1]` beneath the graph (given information, so it does not hide
+  with the answers). **The exam look is my guess** at "tick marks without gridlines"; it needs a few released diploma items to compare with.
+- **Variants** (`variantSpec`): the same question with different whole-number values (line slopes and intercepts, shape positions,
+  translation vectors, mirror lines, inequality bounds, hop sizes…), retried until the result is readable and inside the window, repeatable by
+  seed. Curves are left alone rather than mangled. "Export versions A, B, C" writes a question and key for each (`name-a-q`, `name-a-key`, …).
+- **A look for the whole test**: size, scale, axes, gridlines, number format and print options are saved in this browser (`localStorage`, only
+  as a convenience) and applied to another graph without touching its content. Photocopy-safe and large print already existed.
+- **Annotations**: arrows with words, text notes (optionally boxed, with a leader to a point) and lettered regions (A, B, C…, with a light or
+  hatched fill) for "which section…" questions. Each hides by name.
+- Known limits: four across at full width makes small graphs (use a wider custom size or the 2 × 2 layout); a wrong graph may fall partly outside the shared
+  window (it is clipped, as a student would see); the rules cover the seven mistakes the blueprint lists plus two extras.
+
 ## How Phase 1 is tested
-- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 123 tests after Phase 5): axis maths, number
+- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 131 tests after Phase 6): axis maths, number
   cleanup, label typography, `normalize` idempotence, save/load round trip, stable ids, paste parsing, and a
   render matrix (every layout × scaffold level × style) asserting no `NaN`/`undefined`, an identical page and
   plot rectangle in question and key, and that a hidden title/label never leaks into the question SVG.
-- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 165 checks after Phase 5) drive the real page
+- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 183 checks after Phase 6) drive the real page
   over `file://` in Chromium: no network requests, table entry and paste, click-to-place and drag with snapping,
   scaffold levels, pick-to-hide, export names (`q4-q.png` / `q4-key.png`), PNG stamped 300 DPI with pixel size
   matching the millimetres, the locked scale **measured by the browser** (ten 10 mm squares = 100 mm),
@@ -204,6 +229,6 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 - [x] Phase 3: number lines (specVersion 3)
 - [x] Phase 4: transformations, geometry, paper (specVersion 4)
 - [x] Phase 5: data displays
-- [ ] Phase 6: test-making toolkit
+- [x] Phase 6: test-making toolkit
 - [ ] Phase 7: workflow and comfort
 - [ ] Phases 8–12: waiting on the stream decision

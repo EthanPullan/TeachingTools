@@ -360,7 +360,7 @@
      kinds instead of growing one big function.
    Helpers marked "(from science)" are copied from tools/science-graph-maker.
    ========================================================================== */
-const SPEC_VERSION = 4;                                     // 2: equations, tables and related objects; 3: number lines; 4: transformations, geometry, paper and data displays (an older tool would silently drop what it does not know)
+const SPEC_VERSION = 4;                                     // 2: equations, tables and related objects; 3: number lines; 4: transformations, geometry, paper, data displays and multiple choice (an older tool would silently drop what it does not know)
 const TOOL = 'math-graph-maker';
 
 /* ---------- constants ---------- */
@@ -1013,7 +1013,10 @@ function removeObject(spec, id) {
 }
 const vertsOf = o => o.vertices.map((v, k) => ({ x: parseNum(v[0]), y: parseNum(v[1]), label: o.labels[k] || '', k })).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
 const ofName = (o, all, depth) => { const src = all && o.of && (depth || 0) < 8 ? all.find(x => x.id === o.of) : null; return src ? objName(src, all, (depth || 0) + 1) : o.of || '…'; };
-const objName = (o, all, depth) => ['symmetry', 'areacount', 'pythag', 'mark'].includes(o.kind) ? OBJECT_KINDS[o.kind].name + ' of ' + ofName(o, all, depth)
+const objName = (o, all, depth) => o.kind === 'arrow' ? 'Arrow' + (o.label ? ' ' + o.label : '')
+  : o.kind === 'note' ? 'Note “' + o.text.split('\n')[0].slice(0, 24) + '”'
+  : o.kind === 'region' ? 'Region ' + (o.label || '')
+  : ['symmetry', 'areacount', 'pythag', 'mark'].includes(o.kind) ? OBJECT_KINDS[o.kind].name + ' of ' + ofName(o, all, depth)
   : o.kind === 'measure' ? 'Distance and midpoint' + (o.of[0] && o.of[1] ? ' ' + o.of.join('–') : '')
   : o.kind === 'circle' ? 'Circle' + (!isBlank(o.r) ? ', radius ' + o.r : '')
   : o.kind === 'transform' ? HOW_NAMES[o.how] + ' of ' + ofName(o, all, depth)
@@ -1589,9 +1592,11 @@ function normalize(raw) {
             letters: vBool(ax.letters, true), originLabel: vPick(ax.originLabel, ORIGIN_LABELS, '0') },
     grid: { major: vBool(grid.major, true), minor: vBool(grid.minor, false), highlight5: vBool(grid.highlight5, false) },
     quadrantLabels: vBool(r.quadrantLabels, false),
+    windowCaption: vBool(r.windowCaption, false),
     line: { orient: vPick(ln.orient, ORIENTS, 'horizontal'), connect: vBool(ln.connect, false), rows: lineRows },
     paper: normPaper(r.paper),
     data: normData(r.data),
+    mc: normMc(r.mc),
     objects, hidden, blanks,
     scale: { lock: vBool(sc.lock, false), mm: clamp(vNum(sc.mm) ?? 10, 1, 50) },
     style: { colour: vBool(style.colour, false), photocopySafe: vBool(style.photocopySafe, false), largePrint: vBool(style.largePrint, false) }
@@ -1879,6 +1884,7 @@ function makeKit(spec, o) {
    `ghost` (editor only): objects the question hides are drawn faded in the key. `hits`: add handles for picking and dragging. */
 function renderSVG(spec, o) {
   o = Object.assign({ version: 'key', ghost: false, hits: false, background: 'white', px: null, id: 'g', xmlHeader: false }, o);
+  if (spec.mc && spec.mc.on && (spec.type === 'plane' || isNL(spec))) return renderMC(spec, o);
   if (isNL(spec)) return renderNumberLine(spec, o);
   if (spec.type === 'paper') return renderPaper(spec, o);
   if (spec.type === 'data') return renderData(spec, o);
@@ -1920,6 +1926,7 @@ function renderSVG(spec, o) {
   const rightH = rightTabs.length ? rightTabs.reduce((a, t) => a + t.lay.ht + tgap, 0) - tgap : 0;
   const belowH = belowTabs.reduce((a, t) => a + t.lay.ht + tgap, 0);
   const capLines = objs.filter(ob => OBJECT_KINDS[ob.kind].captions).flatMap(ob => OBJECT_KINDS[ob.kind].captions(ob).map(l => Object.assign({ live: !hid.has(OBJECT_KINDS[ob.kind].token || 'objects') }, l)));
+  if (spec.windowCaption) capLines.push({ head: 'Window', text: 'x: [' + fmtNum(ax.lo) + ', ' + fmtNum(ax.hi) + ', ' + fmtNum(ax.step) + '], y: [' + fmtNum(ay.lo) + ', ' + fmtNum(ay.hi) + ', ' + fmtNum(ay.step) + ']', live: true, always: true });   // as a graphing calculator shows it
   const capLH = FS * 1.5, capH = capLines.length ? capLines.length * capLH + 1.5 * S : 0;
   const R = PAD + Math.max(halfLast, extHiX + xLetterW) + rightW;
   const T = PAD + titleSp + FT * .6 + extHiY + (letters ? FS + 1 : 0);
@@ -2026,6 +2033,7 @@ function renderSVG(spec, o) {
   if (capLines.length) capLines.forEach((l, i) => {
     const y = H - PAD - capH + (i + 1) * capLH - FS * .32, text = l.head ? l.head + ': ' + l.text : l.text;
     if (!l.live) return;
+    if (l.always) { out.push(txt((x0 + x1) / 2, y, text, { fs: FS })); return; }
     if (!hid.has('notation')) out.push(txt((x0 + x1) / 2, y, text, { fs: FS }));
     else if (K.blk.has('notation') && l.head) out.push(txt((x0 + x1) / 2, y, l.head + ': ' + K.under(24), { fs: FS }));
   });
@@ -3708,6 +3716,266 @@ function dataIssues(spec) {
   return out;
 }
 
+/* ==========================================================================
+   Phase 6A: multiple choice. One correct graph and three plausible wrong ones, side by side on the same scale, shuffled,
+   with the answer letter in the key. A wrong graph is made from the right one by a *rule* that copies a real student mistake.
+   ========================================================================== */
+const MC_LAYOUTS = { '2x2': [2, 2], '1x4': [4, 1], '4x1': [1, 4] };
+const MC_LETTERS = { ABCD: 'ABCD', abcd: 'abcd', 1234: '1234' };
+const mulberry = seed => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
+const shuffled = (list, rnd) => { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const clone = v => JSON.parse(JSON.stringify(v));
+
+/* y = mx + c as text: whole numbers, x/3 for a unit fraction, decimals otherwise. */
+function linExpr(m, c) {
+  m = clean(m); c = clean(c);
+  const mp = m === 0 ? '' : m === 1 ? 'x' : m === -1 ? '-x' : Number.isInteger(m) ? m + 'x' : Number.isInteger(clean(1 / m)) ? (m < 0 ? '-' : '') + 'x/' + Math.abs(clean(1 / m)) : m + 'x';
+  return 'y = ' + (mp || '') + (c === 0 ? (mp ? '' : '0') : mp ? (c < 0 ? ' - ' : ' + ') + Math.abs(c) : String(c));
+}
+/* Apply f(line) to every straight-line equation; null when nothing changed. */
+function mapLines(spec, f, rnd) {
+  const s = clone(spec); let changed = false;
+  s.objects.forEach(o => {
+    if (o.kind !== 'function') return;
+    const eq = parseEquation(o.expr);
+    if (!eq.ok || eq.vertical !== null || !eq.linear) return;
+    const r = f(eq.linear, rnd);
+    if (r) { o.expr = linExpr(r.m, r.c); changed = true; }
+  });
+  return changed ? s : null;
+}
+function mapKind(spec, kind, f) {
+  const s = clone(spec); let changed = false;
+  s.objects.forEach((o, i) => { if (o.kind === kind) { const r = f(o); if (r) { s.objects[i] = r; changed = true; } } });
+  return changed ? s : null;
+}
+const SWAP_MIRROR = { xaxis: 'yaxis', yaxis: 'xaxis', yx: 'ynx', ynx: 'yx', horizontal: 'vertical', vertical: 'horizontal' };
+const FLIP_OP = { ge: 'le', le: 'ge', gt: 'lt', lt: 'gt' }, TOGGLE_OP = { ge: 'gt', gt: 'ge', le: 'lt', lt: 'le' };
+const movePoints = (spec, f) => {                                       // every point, vertex, transformation input: same change
+  const s = clone(spec); let changed = false;
+  s.objects.forEach(o => {
+    if (o.kind === 'point') { const x = parseNum(o.x), y = parseNum(o.y); if (isFin(x) && isFin(y)) { const q = f(x, y); o.x = q[0]; o.y = q[1]; changed = true; } }
+    else if (o.kind === 'polygon' || o.kind === 'path') o.vertices = o.vertices.map(v => { const x = parseNum(v[0]), y = parseNum(v[1]); if (!isFin(x) || !isFin(y)) return v; const q = f(x, y); changed = true; return [q[0], q[1]]; });
+  });
+  return changed ? s : null;
+};
+/* The rules. `make(spec, rnd)` returns a changed copy or null when the rule does not apply to this graph. */
+const DISTRACTORS = {
+  slopeSign:     { name: 'Slope sign flipped', make: (s, r) => mapLines(s, l => l.m !== 0 ? { m: -l.m, c: l.c } : null, r) },
+  riseRun:       { name: 'Rise and run swapped', make: (s, r) => mapLines(s, l => l.m !== 0 && Math.abs(l.m) !== 1 ? { m: 1 / l.m, c: l.c } : null, r) },
+  wrongAxis:     { name: 'Intercept placed on the wrong axis', make: (s, r) => mapLines(s, l => l.m !== 0 && l.c !== 0 ? { m: l.m, c: -l.m * l.c } : null, r) },
+  interceptSign: { name: 'Sign of the intercept flipped', make: (s, r) => mapLines(s, l => l.c !== 0 ? { m: l.m, c: -l.c } : null, r) },
+  reflectAxis:   { name: 'Reflection in the wrong line', make: s => mapKind(s, 'transform', o => o.how === 'reflect' ? Object.assign({}, o, { mirror: SWAP_MIRROR[o.mirror] }) : null) },
+  rotateDir:     { name: 'Rotation in the wrong direction', make: s => mapKind(s, 'transform', o => o.how === 'rotate' && o.angle !== 180 ? Object.assign({}, o, { dir: o.dir === 'cw' ? 'ccw' : 'cw' }) : null) },
+  translateSign: { name: 'Translation in the wrong direction', make: s => mapKind(s, 'transform', o => o.how === 'translate' && (parseNum(o.dx) || parseNum(o.dy)) ? Object.assign({}, o, { dx: -parseNum(o.dx), dy: parseNum(o.dy) }) : null) },
+  openClosed:    { name: 'Open and closed dots swapped', make(s) {
+    const a = mapKind(s, 'point', o => Object.assign({}, o, { style: o.style === 'open' ? 'filled' : 'open' }));
+    const b = mapKind(a || s, 'nlpoint', o => Object.assign({}, o, { closed: !o.closed }));
+    const c = mapKind(b || a || s, 'inequality', o => Object.assign({}, o, { a: Object.assign({}, o.a, { op: TOGGLE_OP[o.a.op] }), b: Object.assign({}, o.b, { op: TOGGLE_OP[o.b.op] }) }));
+    return c || b || a;
+  } },
+  ineqReversed:  { name: 'Inequality direction reversed', make: s => mapKind(s, 'inequality', o => Object.assign({}, o, { a: Object.assign({}, o.a, { op: FLIP_OP[o.a.op] }), b: Object.assign({}, o.b, { op: FLIP_OP[o.b.op] }) })) },
+  /* fallbacks: used only when the rules above cannot make three different wrong graphs */
+  interceptShift: { fallback: true, name: 'Intercept off by a few units', make: (s, r) => mapLines(s, l => ({ m: l.m, c: l.c + (r() < .5 ? -1 : 1) * (1 + Math.floor(r() * 3)) }), r) },
+  slopeShift:     { fallback: true, name: 'Slope off by one', make: (s, r) => mapLines(s, l => ({ m: l.m + (r() < .5 ? -1 : 1), c: l.c }), r) },
+  swapXY:         { fallback: true, name: 'x and y swapped', make: s => movePoints(s, (x, y) => [y, x]) },
+  moved:          { fallback: true, name: 'Shape in the wrong place', make: (s, r) => { const dx = (r() < .5 ? -1 : 1) * (1 + Math.floor(r() * 3)), dy = (r() < .5 ? -1 : 1) * (1 + Math.floor(r() * 3)); return movePoints(s, (x, y) => [x + dx, y + dy]); } },
+  shiftMarks:     { fallback: true, name: 'Number line marks moved', make: (s, r) => { const d = (r() < .5 ? -1 : 1) * (1 + Math.floor(r() * 2)); let ch = false; const t = clone(s); t.objects.forEach(o => { if (o.kind === 'inequality') { ['a', 'b'].forEach(k => { const v = parseNum(o[k].at); if (isFin(v)) { o[k].at = v + d; ch = true; } }); } else if (o.kind === 'nlpoint') { const v = parseNum(o.at); if (isFin(v)) { o.at = v + d; ch = true; } } }); return ch ? t : null; } }
+};
+const MC_RULE_IDS = Object.keys(DISTRACTORS).filter(k => !DISTRACTORS[k].fallback);
+function normMc(r) {
+  r = objOf(r);
+  return { on: vBool(r.on, false), layout: vPick(r.layout, Object.keys(MC_LAYOUTS), '2x2'), seed: vInt(r.seed, 1, 999999, 1), rules: [...new Set(arr(r.rules).filter(id => MC_RULE_IDS.includes(id)))], letters: vPick(r.letters, Object.keys(MC_LETTERS), 'ABCD'), mark: vBool(r.mark, true) };
+}
+/* The graph with its axes fixed at what it would have drawn, so every choice shares one scale. */
+function freezeAxes(spec) {
+  const s = clone(spec), A = analyse(spec);
+  if (isNL(spec)) { const ax = A.axes[0]; Object.assign(s.x, { min: ax.lo, max: ax.hi, step: ax.step }); }
+  else if (spec.type === 'plane') { Object.assign(s.x, { min: A.ax.lo, max: A.ax.hi, step: A.ax.step }); Object.assign(s.y, { min: A.ay.lo, max: A.ay.hi, step: A.ay.step }); }
+  s.mc = Object.assign({}, s.mc, { on: false });
+  return s;
+}
+/* The four choices: the right graph and three from the rules, in shuffled order. Pure and repeatable: the same seed gives the same question. */
+function mcPlan(spec) {
+  const base = freezeAxes(spec), rnd = mulberry(spec.mc.seed), allowed = spec.mc.rules.length ? spec.mc.rules : MC_RULE_IDS;
+  const seen = new Set([JSON.stringify(base.objects)]), cands = [];
+  const tryRule = id => { const r = DISTRACTORS[id].make(base, rnd); if (!r) return; const key = JSON.stringify(r.objects); if (seen.has(key)) return; seen.add(key); cands.push({ rule: id, name: DISTRACTORS[id].name, spec: r }); };
+  allowed.forEach(tryRule);
+  if (cands.length < 3) Object.keys(DISTRACTORS).filter(k => DISTRACTORS[k].fallback).forEach(tryRule);
+  if (cands.length < 3) return { error: base.objects.some(o => kindOn(o.kind) === base.type) ? 'These rules cannot make three different wrong graphs from this one. Allow more rules, or change the graph.' : 'Add a line, a shape or a mark to the graph first.', options: [] };
+  const wrong = shuffled(cands, rnd).slice(0, 3);
+  const opts = shuffled([{ correct: true, rule: '', name: 'Correct answer', spec: base }, ...wrong.map(w => Object.assign({ correct: false }, w))], rnd);
+  return { base, options: opts, answer: opts.findIndex(o => o.correct), letters: MC_LETTERS[spec.mc.letters] };
+}
+const mcAnswerLetter = plan => plan.options.length ? plan.letters[plan.answer] : '';
+/* Put one rendered graph inside another at (x, y), w wide. */
+function nestSVG(svg, x, y, w, h) {
+  return svg.replace(/^<svg [^>]*viewBox="([^"]+)"[^>]*>/, (m, vb) => `<svg x="${f3(x)}" y="${f3(y)}" width="${f3(w)}" height="${f3(h)}" viewBox="${vb}">`);
+}
+function renderMC(spec, o) {
+  const plan = mcPlan(spec);
+  if (plan.error) return renderSVG(Object.assign({}, spec, { mc: Object.assign({}, spec.mc, { on: false }) }), o);
+  const K = makeKit(spec, o), { S, FS, PAD } = K, size = sizeMM(spec.size), W = size.w, [cols, rows] = MC_LAYOUTS[spec.mc.layout];
+  const gap = 5 * S, pw = Math.min((W - 2 * PAD - (cols - 1) * gap) / cols, cols === 1 ? 92 : 1e9), left = (W - cols * pw - (cols - 1) * gap) / 2, stem = K.titleInfo(W).sp, letterH = FS * 1.9;     // one column of graphs stays a sensible size
+  const kids = plan.options.map((op, i) => {
+    const sp = normalize(Object.assign(clone(op.spec), { title: '', name: '', size: { preset: 'custom', w: pw, h: null }, hidden: [], blanks: [] }));
+    const svg = renderSVG(sp, { version: 'key', background: 'none', id: (o.id || 'g') + '-c' + i }), m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg);
+    return { svg, w: +m[1], h: +m[2] };
+  });
+  const rowH = Array.from({ length: rows }, (_, r) => Math.max(...kids.filter((_, i) => Math.floor(i / cols) === r).map(k => k.h)) + letterH);
+  const body = [], top = PAD + stem + 1;
+  kids.forEach((k, i) => {
+    const c = i % cols, r = Math.floor(i / cols), x = left + c * (pw + gap), y = top + sumOf(rowH.slice(0, r)) + r * gap * .6;
+    body.push(nestSVG(k.svg, x, y, k.w, k.h));
+    body.push(K.txt(x + pw / 2, y + k.h + FS * 1.25, plan.letters[i], { fs: FS * 1.15, bold: true, plain: true }));
+    if (!K.isQ && spec.mc.mark && plan.options[i].correct) body.push(`<rect x="${f3(x - 1)}" y="${f3(y - 1)}" width="${f3(pw + 2)}" height="${f3(k.h + letterH + 1.5)}" rx="2" fill="none" stroke="#000" stroke-width="${K.lw(.9)}"/>`);
+  });
+  const H = top + sumOf(rowH) + (rows - 1) * gap * .6 + PAD + FS * 2.4;                  // room for the answer line, kept in the question so both pages match
+  body.push(...K.titleSVG(W, W / 2));
+  if (!K.isQ) body.push(K.txt(W / 2, H - PAD - FS * .3, 'Answer: ' + mcAnswerLetter(plan), { fs: FS * 1.1, bold: true, plain: true }));
+  if (o.geom) Object.assign(o.geom, { W, H, cell: kids[0].w / 10 });
+  return K.shell(W, H, '', body.join(''));
+}
+
+/* ==========================================================================
+   Phase 6B/6C: sketch questions, exam look, a test-wide look, variants, annotations.
+   ========================================================================== */
+/* "Sketch the graph": the question is the blank grid (given points and shapes stay); the key draws it with its key points labelled. */
+const SKETCH_HIDDEN = ['function', 'related', 'intersect', 'guide', 'vlt', 'transform', 'symmetry', 'areacount', 'pythag', 'measure', 'circle'];
+function applySketch(spec) {
+  const s = clone(spec);
+  s.hidden = s.hidden.filter(t => ELEMENT_TOKENS.includes(t));
+  s.objects.forEach(o => {
+    if (kindOn(o.kind) !== s.type) return;
+    if (SKETCH_HIDDEN.includes(o.kind)) s.hidden.push(o.id);
+    if (o.kind === 'function' && o.intercepts === 'none') o.intercepts = 'labelled';        // the key shows where it crosses the axes
+  });
+  return normalize(s);
+}
+/* A plain exam look: tick marks on the axes, no gridlines. (Whether this matches the diploma exam is for a teacher with released items to say.) */
+function applyExamStyle(spec) {
+  const s = clone(spec);
+  s.grid = Object.assign({}, s.grid, { major: false, minor: false, highlight5: false });
+  s.axes = Object.assign({}, s.axes, { position: 'origin', arrows: 'both', letters: true });
+  return normalize(s);
+}
+/* What makes graphs on one test look alike: size, scale, axes, gridlines, number format, print options. Not the content. */
+function extractLook(spec) {
+  const ax = a => ({ letter: a.letter, minorPerMajor: a.minorPerMajor, labelEvery: a.labelEvery, format: a.format, decimals: a.decimals, breakMark: a.breakMark });
+  return { size: clone(spec.size), quadrants: spec.quadrants, scale: clone(spec.scale), axes: clone(spec.axes), grid: clone(spec.grid), quadrantLabels: spec.quadrantLabels, windowCaption: !!spec.windowCaption, x: ax(spec.x), y: ax(spec.y), style: clone(spec.style) };
+}
+function applyLook(spec, look) {
+  look = objOf(look);
+  const s = clone(spec);
+  ['size', 'quadrants', 'scale', 'axes', 'grid', 'quadrantLabels', 'windowCaption', 'style'].forEach(k => { if (look[k] !== undefined) s[k] = clone(look[k]); });
+  ['x', 'y'].forEach(k => { if (look[k]) Object.assign(s[k], clone(look[k])); });
+  return normalize(s);
+}
+/* ---------- variants: the same question with different numbers ---------- */
+function variantSpec(spec, seed, tries) {
+  const base = JSON.stringify(spec.objects);
+  for (let t = 0; t < (tries || 60); t++) {
+    const rnd = mulberry(seed * 977 + t * 7919 + 1), v = perturbSpec(spec, rnd);
+    if (!v || JSON.stringify(v.objects) === base) continue;
+    if (outsideObjects(v).length === 0 && readability(v).length === 0) return v;
+  }
+  return null;
+}
+function perturbSpec(spec, rnd) {
+  const s = clone(spec), ri = (a, b) => a + Math.floor(rnd() * (b - a + 1)), nz = k => { let d = 0; while (!d) d = ri(-k, k); return d; };
+  const pick = list => list[Math.floor(rnd() * list.length)];
+  let changed = false;
+  const shift = (dx, dy) => { let any = false; s.objects.forEach(o => {
+    if (o.kind === 'polygon' || o.kind === 'path') { o.vertices = o.vertices.map(v => { const x = parseNum(v[0]), y = parseNum(v[1]); return isFin(x) && isFin(y) ? [x + dx, y + dy] : v; }); any = true; }
+  }); return any; };
+  const dx = ri(-3, 3), dy = ri(-3, 3);
+  if (s.type === 'plane' && s.objects.some(o => o.kind === 'polygon' || o.kind === 'path') && (dx || dy)) changed = shift(dx, dy) || changed;
+  s.objects.forEach(o => {
+    if (o.kind === 'point') { const x = parseNum(o.x), y = parseNum(o.y); if (isFin(x) && isFin(y)) { o.x = x + ri(-2, 2); o.y = y + ri(-2, 2); changed = true; } }
+    else if (o.kind === 'function') {
+      const eq = parseEquation(o.expr);
+      if (eq.ok && eq.vertical === null && eq.linear) {
+        let { m, c } = eq.linear;
+        if (Number.isInteger(m) && m !== 0) { const opts = [-4, -3, -2, -1, 1, 2, 3, 4].filter(v => v !== m); m = pick(opts); }
+        else if (m !== 0 && Number.isInteger(clean(1 / m))) m = pick([-1 / 2, 1 / 2, -1 / 3, 1 / 3, -1 / 4, 1 / 4].filter(v => Math.abs(v - m) > 1e-9));
+        if (Number.isInteger(c)) c = pick([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5].filter(v => v !== c));
+        o.expr = linExpr(m, c); changed = true;
+      }
+    }
+    else if (o.kind === 'transform') {
+      if (o.how === 'translate') { o.dx = nz(4); o.dy = nz(4); changed = true; }
+      else if (o.how === 'reflect' && (o.mirror === 'horizontal' || o.mirror === 'vertical')) { o.at = nz(4); changed = true; }
+      else if (o.how === 'rotate') { o.angle = pick([90, 180, 270]); o.dir = pick(['cw', 'ccw']); changed = true; }
+      else if (o.how === 'dilate') { o.k = pick([2, 3, '1/2', -1, -2]); changed = true; }
+    }
+    else if (o.kind === 'inequality') { ['a', 'b'].forEach(k => { const v = parseNum(o[k].at); if (isFin(v)) { o[k].at = v + nz(2); changed = true; } }); }
+    else if (o.kind === 'nlpoint') { const v = parseNum(o.at); if (isFin(v)) { o.at = v + nz(3); changed = true; } }
+    else if (o.kind === 'hops') { const st = parseNum(o.start); if (isFin(st)) { o.start = st + ri(-3, 3); o.steps = o.steps.map(v => { const n = parseNum(v); return isFin(n) ? (n < 0 ? -1 : 1) * ri(1, 8) : v; }); changed = true; } }
+    else if (o.kind === 'circle') { const cx = parseNum(o.cx), cy = parseNum(o.cy); if (isFin(cx) && isFin(cy)) { o.cx = cx + ri(-2, 2); o.cy = cy + ri(-2, 2); changed = true; } }
+  });
+  return changed ? normalize(s) : null;
+}
+
+/* ---------- annotations: arrows, notes, lettered regions ---------- */
+const xyNorm = r => { r = objOf(r); return { x: cellClean(r.x), y: cellClean(r.y) }; };
+const xyOf = p => { const x = parseNum(p.x), y = parseNum(p.y); return isFin(x) && isFin(y) ? { x, y } : null; };
+OBJECT_KINDS.arrow = {
+  name: 'Arrow', prefix: 'ar',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'arrow', from: xyNorm(r.from), to: xyNorm(r.to), label: vStr(r.label, ''), dash: vPick(r.dash, Object.keys(DASHES), 'solid') }),
+  bounds: o => [xyOf(o.from), xyOf(o.to)].filter(Boolean),
+  draw(o, C) {
+    const a = xyOf(o.from), b = xyOf(o.to);
+    if (!a || !b || (a.x === b.x && a.y === b.y)) return null;
+    const A = [C.sx(a.x), C.sy(a.y)], B = [C.sx(b.x), C.sy(b.y)], d = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, u = [(B[0] - A[0]) / d, (B[1] - A[1]) / d], S = C.S;
+    const end = [B[0] - u[0] * 2 * S, B[1] - u[1] * 2 * S];
+    let shape = `<line x1="${f3(A[0])}" y1="${f3(A[1])}" x2="${f3(end[0])}" y2="${f3(end[1])}" ${geomStroke(C, .55)}${dashAttr(o.dash)}/>` + C.head(B[0], B[1], u[0], u[1], C.col, 1);
+    let label = '';
+    if (o.label) { const nx = -u[1], ny = u[0], side = ny > 0 || (ny === 0 && nx > 0) ? 1 : -1; label = C.labelAt((A[0] + B[0]) / 2 + nx * side * 2.6 * S, (A[1] + B[1]) / 2 + ny * side * 2.6 * S + C.K.FS * .3, o.label, 'middle', false); }
+    return { shape, label };
+  }
+};
+OBJECT_KINDS.note = {
+  name: 'Text note', prefix: 'nt',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'note', text: vStr(r.text, '').slice(0, 200), at: xyNorm(r.at), box: vBool(r.box, false), leader: xyNorm(r.leader) }),
+  bounds: o => [xyOf(o.at), xyOf(o.leader)].filter(Boolean),
+  draw(o, C) {
+    const p = xyOf(o.at);
+    if (!p || !o.text.trim()) return null;
+    const K = C.K, S = C.S, lines = o.text.split('\n').slice(0, 4), fs = K.FS, X = C.sx(p.x), Y = C.sy(p.y), lh = fs * 1.3;
+    const w = Math.max(...lines.map(l => K.w(l, fs))) + (o.box ? 3 * S : 0), h = lines.length * lh + (o.box ? 2 * S : 0), x0 = X - w / 2, y0 = Y - h / 2;
+    let shape = '', label = '';
+    const q = xyOf(o.leader);
+    if (q) {                                                                 // a leader from the box edge to the target, ending in an arrowhead
+      const T = [C.sx(q.x), C.sy(q.y)], dx = T[0] - X, dy = T[1] - Y, k = Math.min(w / 2 / (Math.abs(dx) || 1e-9), h / 2 / (Math.abs(dy) || 1e-9)), st = [X + dx * Math.min(k, 1), Y + dy * Math.min(k, 1)], d = Math.hypot(T[0] - st[0], T[1] - st[1]);
+      if (d > 2 * S) { const u = [(T[0] - st[0]) / d, (T[1] - st[1]) / d]; shape += `<line x1="${f3(st[0])}" y1="${f3(st[1])}" x2="${f3(T[0] - u[0] * 1.8 * S)}" y2="${f3(T[1] - u[1] * 1.8 * S)}" ${geomStroke(C, .45)}/>` + C.head(T[0], T[1], u[0], u[1], C.col, .9); }
+    }
+    if (o.box) shape += `<rect x="${f3(x0)}" y="${f3(y0)}" width="${f3(w)}" height="${f3(h)}" rx="${f3(S)}" fill="#fff" ${geomStroke(C, .45)}/>`;
+    lines.forEach((l, i) => { label += K.txt(X, y0 + (o.box ? S : 0) + (i + 1) * lh - fs * .3, l, { fs, halo: !o.box }); });
+    return { shape, label };
+  }
+};
+OBJECT_KINDS.region = {
+  name: 'Lettered region', prefix: 'rn',
+  norm: r => { const V = arr(r.vertices).slice(0, MAX_VERTS).map(v => Array.isArray(v) ? [cellClean(v[0]), cellClean(v[1])] : [null, null]); return { id: vStr(r.id, ''), kind: 'region', vertices: V, label: vStr(r.label, '').slice(0, 3), fill: vPick(r.fill, FILLS, 'none'), dash: vPick(r.dash, Object.keys(DASHES), 'dashed') }; },
+  bounds: o => o.vertices.map(v => xyOf({ x: v[0], y: v[1] })).filter(Boolean),
+  draw(o, C) {
+    const P = o.vertices.map(v => xyOf({ x: v[0], y: v[1] })).filter(Boolean);
+    if (P.length < 3) return null;
+    const S = C.S, sp = P.map(p => [C.sx(p.x), C.sy(p.y)]), fill = o.fill === 'light' ? 'rgba(0,0,0,.09)' : o.fill === 'hatch' ? C.hatch() : 'none';
+    let shape = `<polygon points="${sp.map(q => f3(q[0]) + ',' + f3(q[1])).join(' ')}" fill="${fill}" ${geomStroke(C, .5)}${dashAttr(o.dash)} stroke-linejoin="round"/>`, label = '';
+    if (o.label) {
+      const cx = sumOf(sp.map(q => q[0])) / sp.length, cy = sumOf(sp.map(q => q[1])) / sp.length;
+      shape += `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(2.9 * S)}" fill="#fff" ${geomStroke(C, .5)}/>`;
+      label = C.K.txt(cx, cy + C.K.FS * .36, o.label, { fs: C.K.FS, bold: true, plain: true });
+    }
+    return { shape, label };
+  }
+};
+
+OBJECT_KINDS.arrow.todo = o => !xyOf(o.from) || !xyOf(o.to) ? 'give it a start and an end.' : '';
+OBJECT_KINDS.note.todo = o => !o.text.trim() ? 'type the text.' : !xyOf(o.at) ? 'give it a position.' : '';
+OBJECT_KINDS.region.todo = o => o.vertices.filter(v => xyOf({ x: v[0], y: v[1] })).length < 3 ? 'give it at least three corners.' : '';
+
 /* The page size actually drawn (a locked physical scale makes the page follow the grid). */
 function svgSize(spec) {
   const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(renderSVG(spec));
@@ -3742,7 +4010,7 @@ function pngWithDpi(u8, dpi) {
 
   /* ---------- state: the spec is the truth; view/pick/tab are UI-only ---------- */
   let spec = sampleSpec();
-  const state = { view: 'key', pick: false, edit: false, tab: 'graph', size: null, outside: [], issues: [], geom: {}, printJob: null };
+  const state = { variantSeed: 1, tag: '', view: 'key', pick: false, edit: false, tab: 'graph', size: null, outside: [], issues: [], geom: {}, printJob: null };
   const hist = [JSON.stringify(spec)];
   let idx = 0, lastKey = null, lastT = 0;
 
@@ -3935,6 +4203,13 @@ function pngWithDpi(u8, dpi) {
           <div><label class="lab">Line</label><select data-bind="objects.${i}.dash">${optList(DASH_NAMES)}</select></div><div><label class="lab">Fill</label><select data-bind="objects.${i}.fill">${optList({ none: 'None', light: 'Light grey', hatch: 'Hatched' })}</select></div></div>
         <div class="row" style="gap:14px;flex-wrap:wrap">${chk(`objects.${i}.radius`, 'Draw a radius, with its length')}${chk(`objects.${i}.equation`, 'Write the equation beneath')}</div></div>`).join('')
     };
+    const arrows = of('arrow').map(([o, i]) => `<div class="card">${head(i, 'Arrow')}<div class="row">${num(`objects.${i}.from.x`, 'From x')}${num(`objects.${i}.from.y`, 'y')}${num(`objects.${i}.to.x`, 'To x')}${num(`objects.${i}.to.y`, 'y')}</div>
+        <div class="row"><div><label class="lab">Words beside it</label><input type="text" data-bind="objects.${i}.label" placeholder="e.g. steeper"></div><div><label class="lab">Line</label><select data-bind="objects.${i}.dash">${optList(DASH_NAMES)}</select></div></div></div>`).join('');
+    const notes = of('note').map(([o, i]) => `<div class="card">${head(i, 'Text note')}<div><label class="lab">Text (new line for a second line)</label><textarea class="in" rows="2" data-bind="objects.${i}.text" style="width:100%" spellcheck="false"></textarea></div>
+        <div class="row">${num(`objects.${i}.at.x`, 'At x')}${num(`objects.${i}.at.y`, 'y')}</div><div class="row">${num(`objects.${i}.leader.x`, 'Points to x', 'none')}${num(`objects.${i}.leader.y`, 'y', 'none')}</div>${chk(`objects.${i}.box`, 'Draw a box around it')}</div>`).join('');
+    const regions = of('region').map(([o, i]) => `<div class="card">${head(i, 'Lettered region')}<div class="row"><div style="flex:none;width:80px"><label class="lab">Letter</label><input type="text" maxlength="3" data-bind="objects.${i}.label"></div>
+        <div><label class="lab">Fill</label><select data-bind="objects.${i}.fill">${optList({ none: 'None', light: 'Light grey', hatch: 'Hatched' })}</select></div><div><label class="lab">Outline</label><select data-bind="objects.${i}.dash">${optList(DASH_NAMES)}</select></div></div>
+        <div><label class="lab">Corners (x, y — one per line)</label><textarea class="in" rows="4" data-dregion="${i}" spellcheck="false" style="width:100%;font-family:var(--mono)">${esc(o.vertices.map(v => cellStr(v[0]) + ', ' + cellStr(v[1])).join('\n'))}</textarea></div></div>`).join('');
     const sec = (title, k, act, btn, hint) => `<div><h3 class="section-title">${title}</h3><button class="btn small" type="button" data-act="${act}">+ ${btn}</button><p class="hint" style="margin:6px 0">${hint}</p><div style="display:grid;gap:10px">${cards[k]}</div></div>`;
     $('#geometryPane').innerHTML =
       `<p class="hint">These work on shapes you have drawn on the Shapes tab (or on the image of a transformation), and follow them when they change. Hide one in the question on the Test tab, under “Individual points and shapes”. The text they write beneath the graph is hidden with “Notation”, and can be replaced by an answer line.</p>` +
@@ -3943,7 +4218,9 @@ function pngWithDpi(u8, dpi) {
       sec('Pythagorean theorem', 'pythag', 'addPythag', 'Squares on the sides', 'Draws a square on each side of a triangle with its area, and marks a right angle.') +
       sec('Distance and midpoint', 'measure', 'addMeasure', 'Distance and midpoint', 'Pick two points. Show the right triangle with Δx and Δy, the midpoint, and the working for the distance.') +
       sec('Right angles and equal sides', 'mark', 'addMark', 'Marks', 'Right-angle squares and equal-length tick marks (one tick for the first pair of equal sides, two for the next, …).') +
-      sec('Circles', 'circle', 'addCircle', 'Circle', 'Centre and radius on the grid.');
+      sec('Circles', 'circle', 'addCircle', 'Circle', 'Centre and radius on the grid.') +
+      `<div><h3 class="section-title">Annotations</h3><div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="addArrow">+ Arrow</button><button class="btn small" type="button" data-act="addNote">+ Text note</button><button class="btn small" type="button" data-act="addRegion">+ Lettered region</button></div>
+        <p class="hint" style="margin:6px 0">Arrows and notes point things out; lettered regions (A, B, C…) are for “which section…” questions. Hide any of them in the question by name.</p><div style="display:grid;gap:10px">${arrows}${notes}${regions}</div></div>`;
   }
 
   /* ---------- the Equations tab: equations, tables of values, related lines and marks ---------- */
@@ -4152,7 +4429,28 @@ function pngWithDpi(u8, dpi) {
       `<label class="check"><input type="checkbox" data-vis="${tok}"> ${name}</label>` +
       (blankable && (tok !== 'notation' || spec.type === 'plane' || spec.type === 'data') ? `<label class="check sm" data-blankwrap="${tok}"><input type="checkbox" data-blank="${tok}"> Answer line</label>` : '<span></span>')); }).join('');
     const objs = spec.objects.filter(o => kindOn(o.kind) === spec.type).map(o => `<label class="check"><input type="checkbox" data-vis="${o.id}"> <span data-oname="${o.id}"></span></label>`).join('');
-    $('#testPane').innerHTML = `
+    const canQ = spec.type === 'plane' || spec.type === 'numberline', plane = spec.type === 'plane';
+    const mcRules = MC_RULE_IDS.map(id => `<label class="check sm"><input type="checkbox" data-mcrule="${id}"> ${esc(DISTRACTORS[id].name)}</label>`).join('');
+    const qtools = !canQ ? '' : `
+      <div><h3 class="section-title">Question format</h3>
+        <div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="sketch" title="Hide the line, curve or image in the question (given points stay); the key labels where it crosses the axes">Sketch the graph</button>
+          ${plane ? `<button class="btn small" type="button" data-act="exam" title="Tick marks on the axes, no gridlines">Exam look: ticks, no gridlines</button>` : ''}</div>
+        ${plane ? `<label class="check" style="margin-top:8px"><input type="checkbox" data-bind="windowCaption"> Graphing-calculator window beneath: <span class="hint" style="display:inline">x: [−10, 10, 1], y: [−10, 10, 1]</span></label>` : ''}
+        <label class="check" style="margin-top:10px"><input type="checkbox" data-bind="mc.on"> <b>Multiple choice:</b> four graphs, one right</label>
+        <div data-showif="mc.on" style="display:grid;gap:8px;margin-top:8px">
+          <div class="row"><div><label class="lab">Layout</label><div class="seg" data-seg="mc.layout"><button type="button" data-v="2x2">2 × 2</button><button type="button" data-v="1x4">A B C D across</button><button type="button" data-v="4x1">A B C D down</button></div></div></div>
+          <div class="row"><div><label class="lab">Labels</label><select data-bind="mc.letters"><option value="ABCD">A B C D</option><option value="abcd">a b c d</option><option value="1234">1 2 3 4</option></select></div>
+            <div><label class="lab">Shuffle number</label><input type="number" min="1" max="999999" step="1" data-bind="mc.seed"></div><div style="flex:none"><button class="btn small" type="button" data-act="mcShuffle" title="Shuffle the choices and pick new mistakes">Shuffle</button></div></div>
+          <label class="check sm"><input type="checkbox" data-bind="mc.mark"> Frame the right answer in the key</label>
+          <div><label class="lab">Wrong answers may copy these mistakes</label><div style="display:grid;gap:4px">${mcRules}</div><p class="hint" style="margin-top:4px">Only rules that fit the graph are used. If fewer than three fit, simple “moved a bit” graphs fill in.</p></div>
+          <div id="mcSummary"></div></div></div>
+      <div><h3 class="section-title">Versions and a look for the whole test</h3>
+        <div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="variant" title="Same kind of question with different numbers (Undo brings the old one back)">New variant</button>
+          <button class="btn small" type="button" data-act="exportVersions" title="Question + key files for this graph and two variants: -a, -b, -c">Export versions A, B, C</button></div>
+        <div class="row tight" style="flex-wrap:wrap;margin-top:8px"><button class="btn small" type="button" data-act="saveLook" title="Remember this graph’s size, scale, axes, gridlines and print options">Use this graph’s look for the test</button>
+          <button class="btn small" type="button" data-act="applyLook">Apply the test look</button></div>
+        <p class="hint" style="margin-top:6px" id="lookHint"></p></div>`;
+    $('#testPane').innerHTML = qtools + `
       <div><h3 class="section-title">Scaffold level <span class="pill" id="levelPill"></span></h3>
         <div class="levels">${SCAFFOLD_LEVELS.map(k => `<button type="button" class="level" data-level="${k}"><b>${LEVEL_INFO[k][0]}</b><span>${LEVEL_INFO[k][1]}</span></button>`).join('')}</div>
         <p class="hint" style="margin-top:8px">A level just picks what the <b>Question</b> version hides. Fine-tune below. The <b>Answer key</b> always shows everything.</p></div>
@@ -4205,7 +4503,7 @@ function pngWithDpi(u8, dpi) {
     $$('[data-open]').forEach(el => { el.checked = spec.objects[+el.dataset.open].style === 'open'; });
     $$('[data-types]').forEach(el => { el.hidden = !el.dataset.types.split(',').includes(spec.type); });
     { const t = $('.tab.active'); if (t && t.hidden) $('.tab[data-tab="graph"]').click(); }
-    if (isNL(spec)) state.edit = false;
+    if (isNL(spec) || spec.mc.on) state.edit = false;
     $$('[data-showif]').forEach(el => { el.hidden = !getPath(spec, el.dataset.showif); });
     $$('[data-showif-not]').forEach(el => { el.hidden = !!getPath(spec, el.dataset.showifNot); });
     $$('[data-eqerr]').forEach(el => { const o = spec.objects[+el.dataset.eqerr]; el.textContent = o && o.expr.trim() ? parseEquation(o.expr).error || '' : ''; });
@@ -4213,6 +4511,9 @@ function pngWithDpi(u8, dpi) {
     if ($('[data-ycell]')) { const R = resolveObjects(spec); $$('[data-ycell]').forEach(el => { const [i, k] = el.dataset.ycell.split(':'), r = R.res(spec.objects[+i].id); el.textContent = r && r.model && r.model.rows[+k] ? r.model.rows[+k].ytext : ''; }); }
     $$('[data-lnames]').forEach(el => { const o = spec.objects.find(x => x.id === el.dataset.lnames); el.textContent = o ? o.labels.filter(Boolean).join('') || 'no names' : ''; });
     if ($('[data-dcount]')) { const M = dataModel(spec); $$('[data-dcount]').forEach(el => { const g = M.groups && M.groups[+el.dataset.dcount]; el.textContent = g ? g.n + ' number' + (g.n === 1 ? '' : 's') + (g.n ? ' · mean ' + approx(g.mean) + ' · median ' + fmtNum(g.median) : '') : ''; }); }
+    $$('[data-mcrule]').forEach(el => { el.checked = !spec.mc.rules.length || spec.mc.rules.includes(el.dataset.mcrule); });
+    { const box = $('#mcSummary'); if (box) box.innerHTML = spec.mc.on ? (() => { const P = mcPlan(spec); return P.error ? `<p class="issue">${esc(P.error)}</p>` : '<p class="hint" style="margin-bottom:4px">The four choices, as they appear:</p>' + P.options.map((op, i) => `<p class="${op.correct ? 'ok-line' : 'hint'}" style="margin:2px 0"><b>${P.letters[i]}</b> ${op.correct ? '✓ the correct graph' : esc(op.name)}</p>`).join(''); })() : ''; }
+    { const h = $('#lookHint'); if (h) h.textContent = readLook() ? 'A test look is saved in this browser.' : 'The look is the size, scale, axes, gridlines and print options — not the equations or points.'; }
     $$('[data-oname]').forEach(el => { const o = spec.objects.find(x => x.id === el.dataset.oname); el.textContent = o ? objName(o, spec.objects) : ''; });
     const locked = spec.scale.lock, { w, h } = state.size || { w: 0, h: 0 }, sz = sizeMM(spec.size);
     $('#sizePreset').value = spec.size.preset;
@@ -4260,6 +4561,7 @@ function pngWithDpi(u8, dpi) {
   }
   function renderStatus() {
     const { w, h } = state.size, bad = countBad(), out = state.outside.length, iss = state.issues.length, dot = '<span class="dotline"></span>';
+    if (spec.mc.on && (spec.type === 'plane' || isNL(spec))) { const P = mcPlan(spec); $('#status').innerHTML = `<span><b>${+w.toFixed(1)} × ${+h.toFixed(1)}</b> mm</span>${dot}<span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span>${dot}<span>Multiple choice${P.error ? ': ' + esc(P.error) : ' — answer <b>' + mcAnswerLetter(P) + '</b>'}</span>`; return; }
     if (spec.type === 'data') {
       $('#status').innerHTML = `<span><b>${+w.toFixed(1)} × ${+h.toFixed(1)}</b> mm</span>${dot}<span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span>${dot}<span>${DATA_NAMES[spec.data.kind]}</span>` + (iss ? `${dot}<span class="warn">${iss} note${iss === 1 ? '' : 's'} (Test tab)</span>` : '');
       return;
@@ -4301,6 +4603,18 @@ function pngWithDpi(u8, dpi) {
     const tri = [[1, 1], [4, 1], [1, 4]].map(([a, b]) => [clean(a * u + off), clean(b * u + off)]);
     spec.objects.push(makeObject(spec, kind, kind === 'polygon' ? { vertices: tri, labels: labs } : { vertices: tri.slice(0, 2), labels: labs.slice(0, 2) }));
     commit(null, true);
+  }
+  const readLook = () => { try { const t = localStorage.getItem('mathgraphmaker.testLook'); return t ? JSON.parse(t) : null; } catch (e) { return null; } };
+  async function exportVersions(n) {
+    const keep = spec;
+    try {
+      for (let i = 0; i < n; i++) {
+        const v = i === 0 ? keep : variantSpec(keep, 1000 + state.variantSeed + i * 13);
+        if (!v) { toast('Nothing to vary here, so only one version was made.', 'err'); break; }
+        spec = v; state.tag = 'abcdefgh'[i]; await exportPair();
+        await new Promise(r => setTimeout(r, 350));
+      }
+    } finally { spec = keep; state.tag = ''; refresh(); }
   }
   function addTransform(after) {
     const src = after || spec.objects.filter(o => o.kind === 'polygon' || o.kind === 'path' || o.kind === 'point').pop();
@@ -4359,7 +4673,7 @@ function pngWithDpi(u8, dpi) {
   function delVert(i, k) { const o = spec.objects[i]; o.vertices.splice(k, 1); o.labels.splice(k, 1); commit(null, true); }
 
   /* ---------- files ---------- */
-  const slug = () => (spec.name || spec.title || (spec.type === 'paper' ? 'paper' : 'graph')).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'graph';
+  const slug = () => ((spec.name || spec.title || (spec.type === 'paper' ? 'paper' : 'graph')).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'graph') + (state.tag ? '-' + state.tag : '');
   const suffix = version => spec.type === 'paper' ? '' : version === 'key' ? '-key' : '-q';
   function download(name, blob) {
     const a = document.createElement('a');
@@ -4426,6 +4740,13 @@ function pngWithDpi(u8, dpi) {
       else if (kind === 'values') spec.objects[+i].values = items.map(cellFromText).slice(0, MAX_CRIT);
       else if (kind === 'signs') spec.objects[+i].signs = items.slice(0, MAX_CRIT + 1);
       commit('list:' + t.dataset.list);
+    } else if (t.dataset.mcrule) {
+      const all = MC_RULE_IDS, cur = spec.mc.rules.length ? spec.mc.rules.slice() : all.slice(), id = t.dataset.mcrule;
+      const next = t.checked ? [...new Set([...cur, id])] : cur.filter(x => x !== id);
+      if (!next.length) { t.checked = true; return toast('Keep at least one mistake ticked.', 'err'); }
+      spec.mc.rules = next.length === all.length ? [] : next; commit('mc:rules');
+    } else if (t.dataset.dregion !== undefined) {
+      spec.objects[+t.dataset.dregion].vertices = t.value.split('\n').map(l => l.split(/[,;\s]+/).filter(Boolean)).filter(a => a.length).slice(0, MAX_VERTS).map(a => [cellFromText(a[0]), cellFromText(a[1] === undefined ? '' : a[1])]); spec = normalize(spec); commit('rg:' + t.dataset.dregion);
     } else if (t.id === 'dataPreset') {
       if (t.value) { spec = applyDataPreset(spec, t.value); t.value = ''; commit(null, true); toast('Sample data loaded. Undo brings back what you had.', 'ok'); }
     } else if (t.dataset.dcell) {                                      // a number in the data tables
@@ -4490,6 +4811,16 @@ function pngWithDpi(u8, dpi) {
       if (r.error) return toast(r.error, 'err');
       Object.assign(spec.data, r.data); spec = normalize(spec); commit(null, true); toast('Data replaced. ' + (r.note || 'Undo brings back the old data.'), 'ok');
     }
+    else if (a === 'addArrow') addObj('arrow', { from: { x: -4, y: 4 }, to: { x: -1, y: 1 } });
+    else if (a === 'addNote') addObj('note', { text: 'Note', at: { x: 3, y: 4 }, box: true });
+    else if (a === 'addRegion') { const used = new Set(spec.objects.filter(o => o.kind === 'region').map(o => o.label)); addObj('region', { vertices: [[1, 1], [5, 1], [5, 5]], label: 'ABCDEFGH'.split('').find(l => !used.has(l)) || '', fill: 'light' }); }
+    else if (a === 'sketch') { spec = applySketch(spec); commit(null, true); toast('Sketch question: the graph is hidden in the question. Undo brings it back.', 'ok'); }
+    else if (a === 'exam') { spec = applyExamStyle(spec); commit(null, true); }
+    else if (a === 'mcShuffle') { spec.mc.seed = 1 + Math.floor(Math.random() * 999999); commit(null, false); }
+    else if (a === 'variant') { const v = variantSpec(spec, state.variantSeed++); if (!v) return toast('Nothing to vary here: add a line, a shape or marks first.', 'err'); spec = v; commit(null, true); toast('A different version of this question. Undo brings back the last one.', 'ok'); }
+    else if (a === 'exportVersions') exportVersions(3);
+    else if (a === 'saveLook') { try { localStorage.setItem('mathgraphmaker.testLook', JSON.stringify(extractLook(spec))); toast('Saved. Open another graph and choose “Apply the test look”.', 'ok'); } catch (e) { toast('This browser will not keep it (private window?).', 'err'); } syncControls(); }
+    else if (a === 'applyLook') { const look = readLook(); if (!look) return toast('No test look saved yet: set up one graph and choose “Use this graph’s look for the test”.', 'err'); spec = applyLook(spec, look); commit(null, true); toast('The test look is applied. Undo brings back the old one.', 'ok'); }
     else if (a === 'addSymmetry') addGeom('symmetry', ['polygon', 'path', 'transform'], { count: true, order: true, lines: true }, 'Add a polygon first.');
     else if (a === 'addAreacount') addGeom('areacount', ['polygon', 'transform'], {}, 'Add a polygon first.');
     else if (a === 'addPythag') addGeom('pythag', ['polygon', 'transform'], { equation: true }, 'Add a triangle first (a polygon with three corners).');
