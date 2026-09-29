@@ -180,12 +180,37 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 - Known limits: four across at full width makes small graphs (use a wider custom size or the 2 × 2 layout); a wrong graph may fall partly outside the shared
   window (it is clipped, as a student would see); the rules cover the seven mistakes the blueprint lists plus two extras.
 
+## Phase 7 notes (workflow and comfort)
+- **Everything new lives under one "More ▾" menu** (the toolbar was already full): course, duplicate, print, copy image, CSV import,
+  shortcuts, recent graphs, and the transparent-background switch that used to sit in the toolbar.
+- **Course mode** (Everything / Middle school / High school / Calculus) hides tool groups a course does not use, using one `data-course` tag per
+  tool ("high calculus" means those two courses only). It is remembered in this browser, not in the file. In middle-school mode no
+  high-school tool is visible (a browser test checks every element tagged for a higher course, not a hand-picked list): sign charts, the vertical
+  line test, intersections, distance and midpoint, circles, the trig preset and the π number format. Calculus hides the middle-school
+  Geometry tab and data displays. **Tagging is by judgement** (for example, circles and distance/midpoint are Math 10C); adjusting it is one
+  attribute per tool. Phases 8–12 will tag their tools the same way, so course mode is ready for them.
+- **Built-in presets:** blank four-quadrant ±10, one-quadrant 0–20, integer number line −10 to 10, fraction number line 0–1, and **trig 0 to 2π with π/6 ticks**
+  (new number format "multiples of π": `π/6`, `π/3`, `π/2`, … as stacked fractions; `sin(x)` draws on it). **Your own presets** keep the whole
+  graph (so they also work as templates) and live in this browser.
+- **Duplicate** makes a copy with the next file name (`q4` → `q4-2`, `q-4` → `q-5`), so the original file is never overwritten.
+  **Recent graphs** (last eight, remembered in `localStorage` whenever you save, export, copy, print, duplicate or start over) are a convenience;
+  the JSON files are the real save, and the tool works normally if the browser refuses to store anything.
+- **CSV import** adds points to a coordinate plane or replaces the data of a data display (same reader as the paste box).
+- **Copy image to the clipboard** works from `file://` in Chromium (tested, and the clipboard really holds a PNG). Where a browser refuses, the
+  tool says so and points to Export PNG instead of failing silently.
+- **Print…** prints the question, the key, or both alternating, one, two, four or six to a page (Letter or A4). One to a page is real size; several are
+  scaled down (never up). Ctrl+P still prints the single graph. Not verified with a real print dialog: page margins differ by browser; the sheet
+  asks the browser for no margin.
+- **Keyboard shortcuts:** `K` question / key, `P` place points, `Esc` stop, `Delete` remove the point you last placed or dragged, plus the existing
+  undo / redo / save, and `?` for the list. Letters do nothing while typing in a box (tested).
+- Assumptions to check: what counts as a "high-school" tool, and the default for a new browser (Everything, so nothing is hidden until a teacher chooses).
+
 ## How Phase 1 is tested
-- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 131 tests after Phase 6): axis maths, number
+- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 136 tests after Phase 7): axis maths, number
   cleanup, label typography, `normalize` idempotence, save/load round trip, stable ids, paste parsing, and a
   render matrix (every layout × scaffold level × style) asserting no `NaN`/`undefined`, an identical page and
   plot rectangle in question and key, and that a hidden title/label never leaks into the question SVG.
-- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 183 checks after Phase 6) drive the real page
+- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 220 checks after Phase 7) drive the real page
   over `file://` in Chromium: no network requests, table entry and paste, click-to-place and drag with snapping,
   scaffold levels, pick-to-hide, export names (`q4-q.png` / `q4-key.png`), PNG stamped 300 DPI with pixel size
   matching the millimetres, the locked scale **measured by the browser** (ten 10 mm squares = 100 mm),
@@ -230,5 +255,5 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 - [x] Phase 4: transformations, geometry, paper (specVersion 4)
 - [x] Phase 5: data displays
 - [x] Phase 6: test-making toolkit
-- [ ] Phase 7: workflow and comfort
+- [x] Phase 7: workflow and comfort
 - [ ] Phases 8–12: waiting on the stream decision

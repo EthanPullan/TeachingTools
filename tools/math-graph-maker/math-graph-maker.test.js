@@ -26,7 +26,8 @@ const G = vm.runInNewContext(core + `;({ SPEC_VERSION, TOOL, SCAFFOLD, SCAFFOLD_
   medianOf, modesOf, quartiles, fiveNumber, niceBinWidth, histBins, apportion, stemLeaf, leastSquares, symbolCount, parseList, meanOf,
   normData, dataAxis, axFrac, dataModel, dataTableModel, dataCaptions, dataIssues, DATA_PRESETS, applyDataPreset, DATA_KINDS, fitEquation, dataFromPaste,
   linExpr, DISTRACTORS, MC_RULE_IDS, normMc, freezeAxes, mcPlan, mulberry, shuffled,
-  applySketch, applyExamStyle, extractLook, applyLook, variantSpec, perturbSpec })`, {});
+  applySketch, applyExamStyle, extractLook, applyLook, variantSpec, perturbSpec,
+  piStr, BUILTIN_PRESETS, copyName, duplicateSpec, recentEntry, pushRecent, blankish, COURSES, courseShows, renderSheet, SHEET_PER })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -1752,4 +1753,65 @@ test('annotations: arrows, notes and lettered regions', () => {
   assert.equal(G.objName(s.objects[0]), 'Arrow steeper'); assert.equal(G.objName(s.objects[1]), 'Note “y-intercept”'); assert.equal(G.objName(s.objects[3]), 'Region A');
   const n = G.normalize(s); assert.deepEqual(plain(G.normalize(n)), plain(n)); assert.deepEqual(plain(G.parseFile(G.serialize(n))), plain(n));
   assert.equal(G.normalize({ objects: [{ kind: 'note', text: 'x'.repeat(500) }] }).objects[0].text.length, 200);
+});
+
+
+/* ================= Phase 7: workflow ================= */
+test('multiples of π for trig axes', () => {
+  const P = v => G.piStr(v, false), pi = Math.PI;
+  assert.deepEqual([0, pi / 6, pi / 4, pi / 3, pi / 2, 2 * pi / 3, 3 * pi / 4, 5 * pi / 6, pi, 7 * pi / 6, 3 * pi / 2, 2 * pi, -pi / 2, -2 * pi].map(P), ['0', 'π/6', 'π/4', 'π/3', 'π/2', '2π/3', '3π/4', '5π/6', 'π', '7π/6', '3π/2', '2π', '-π/2', '-2π']);
+  assert.equal(G.piStr(pi / 6, true), '{π/6}'); assert.equal(G.piStr(5 * pi / 6, true), '{5π/6}'); assert.equal(G.piStr(pi, true), 'π'); assert.equal(G.piStr(0.3, true), null, 'not a nice multiple: the caller falls back to decimals');
+  const ax = { lo: 0, hi: 2 * pi, step: pi / 6, fmt: { format: 'pi', decimals: null } };
+  const lab = G.ticks(ax).map(v => G.fmtTick(v, ax, true)); assert.equal(lab.length, 13); assert.deepEqual(plain([lab[0], lab[1], lab[6], lab[12]]), ['0', 'π/6', 'π', '2π']);
+  assert.equal(G.valText(pi / 3, { fmt: { format: 'pi' } }), '{π/3}'); assert.equal(G.valText(-pi / 2, { fmt: { format: 'pi' } }), '−{π/2}'); assert.equal(G.valText(0.3, { fmt: { format: 'pi' } }), '0.3');
+  assert.equal(G.normalize({ x: { format: 'pi' } }).x.format, 'pi');
+});
+
+test('built-in presets: valid, tidy, and the right range', () => {
+  assert.deepEqual(Object.keys(G.BUILTIN_PRESETS), ['fourQuad', 'oneQuad', 'intLine', 'fracLine', 'trig'], 'the five the blueprint asks for');
+  for (const id of Object.keys(G.BUILTIN_PRESETS)) { const s = G.BUILTIN_PRESETS[id].make(); assert.deepEqual(plain(G.normalize(s)), plain(s), id + ' is normalised'); noBad(G.renderSVG(s, {})); assert.equal(G.readability(s).length, 0); }
+  const f = G.BUILTIN_PRESETS.fourQuad.make(); assert.deepEqual(plain([f.quadrants, f.x.min, f.x.max, f.y.min, f.y.max]), [4, -10, 10, -10, 10]);
+  const o = G.BUILTIN_PRESETS.oneQuad.make(); assert.deepEqual(plain([o.quadrants, o.x.min, o.x.max, o.y.max]), [1, 0, 20, 20]);
+  const il = G.BUILTIN_PRESETS.intLine.make(); assert.deepEqual(plain([il.type, il.x.min, il.x.max, il.x.step]), ['numberline', -10, 10, 1]);
+  const fl = G.BUILTIN_PRESETS.fracLine.make(); assert.deepEqual(plain([fl.type, fl.x.min, fl.x.max, fl.x.format]), ['numberline', 0, 1, 'fraction']);
+  const tr = G.BUILTIN_PRESETS.trig.make(); assert.equal(tr.x.format, 'pi'); assert.ok(Math.abs(tr.x.max - 2 * Math.PI) < 1e-12 && Math.abs(tr.x.step - Math.PI / 6) < 1e-12);
+  const svg = G.renderSVG(tr, {}); assert.ok(plainText(svg).includes('π') && plainText(svg).includes('2π') && plainText(svg).includes('5π'), 'π/6 ticks are labelled with multiples of π');
+  assert.equal(G.BUILTIN_PRESETS.trig.course, 'high calculus'); assert.equal(G.BUILTIN_PRESETS.fourQuad.course, 'all');
+  tr.objects.push(G.makeObject(tr, 'function', { expr: 'y = sin(x)', label: 'none' })); assert.ok(G.readability(G.normalize(tr)).every(i => !/Equation/.test(i.text)), 'sin(x) draws on the trig axes'); noBad(G.renderSVG(G.normalize(tr), {}));
+});
+
+test('duplicate and recent graphs', () => {
+  const nm = (name, title) => G.copyName(Object.assign(G.blankSpec(), { name, title }));
+  assert.equal(nm('q4', ''), 'q4-2'); assert.equal(nm('q4-2', ''), 'q4-3'); assert.equal(nm('Q 4!', ''), 'q-5', 'question 4 duplicates to question 5'); assert.equal(nm('', 'Plot the points'), 'plot-the-points-2'); assert.equal(nm('', ''), 'graph-2'); assert.equal(nm('a-9', ''), 'a-10');
+  const s = G.blankSpec(); s.name = 'q4'; s.title = 'T'; s.objects.push(G.makeObject(s, 'point', { x: 1, y: 2 })); const d = G.duplicateSpec(s);
+  assert.equal(d.name, 'q4-2'); assert.deepEqual(plain(d.objects), plain(s.objects)); assert.equal(s.name, 'q4', 'the original is untouched'); d.objects[0].x = 9; assert.equal(s.objects[0].x, 1, 'a real copy, not a shared object');
+  const e = n => G.recentEntry(Object.assign(G.blankSpec(), { name: n, title: 'T' + n }), 100);
+  let list = []; for (const n of ['a', 'b', 'c']) list = G.pushRecent(list, e(n)); assert.deepEqual(plain(list.map(x => x.label)), ['Tc', 'Tb', 'Ta'], 'newest first');
+  list = G.pushRecent(list, e('a')); assert.deepEqual(plain(list.map(x => x.label)), ['Ta', 'Tc', 'Tb'], 'saving again moves it to the top, no duplicate');
+  let many = []; for (let i = 0; i < 20; i++) many = G.pushRecent(many, e('n' + i), 8); assert.equal(many.length, 8); assert.equal(many[0].label, 'Tn19');
+  assert.equal(G.pushRecent([], { key: 'k', json: 'x'.repeat(300000) }).length, 0, 'a huge graph is not kept in the browser'); assert.deepEqual(plain(G.pushRecent(null, e('z'))).length, 1);
+  const back = G.parseFile(e('a').json); assert.equal(back.name, 'a'); assert.equal(G.blankish(G.blankSpec()), true); assert.equal(G.blankish(s), false);
+});
+
+test('courses decide which tool groups show', () => {
+  const show = (c, l) => G.courseShows(c, l);
+  assert.equal(show('all', 'calculus'), true); assert.equal(show('middle', 'high calculus'), false); assert.equal(show('high', 'high calculus'), true); assert.equal(show('calculus', 'high calculus'), true); assert.equal(show('middle', undefined), true, 'untagged tools show everywhere'); assert.equal(show('middle', 'middle high'), true); assert.equal(show('calculus', 'middle high'), false);
+  assert.deepEqual(Object.keys(G.COURSES), ['all', 'middle', 'high', 'calculus']);
+});
+
+test('print sheets: 1, 2, 4 or 6 to a page, never enlarged, question and key', () => {
+  const s = G.blankSpec(); s.title = 'Plot the points'; s.size = { preset: 'half' }; s.objects.push(G.makeObject(s, 'point', { x: 2, y: 3, label: 'A' })); const sp = G.normalize(s);
+  const nested = svg => [...svg.matchAll(/<svg x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/g)].map(m => m.slice(1).map(Number));
+  for (const [per, n] of [[1, 1], [2, 2], [4, 4], [6, 6]]) {
+    const svg = G.renderSheet(sp, { per }), boxes = nested(svg); noBad(svg); assert.equal(boxes.length, n, per + ' per page'); assert.match(svg, /viewBox="0 0 215\.9 279\.4"/);
+    for (const [x, y, w, h] of boxes) assert.ok(x >= 10 - 1e-6 && y >= 10 - 1e-6 && x + w <= 215.9 - 10 + 1e-6 && y + h <= 279.4 - 10 + 1e-6, 'inside the margins');
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) { const a = boxes[i], b = boxes[j]; assert.ok(a[0] + a[2] <= b[0] + 1e-6 || b[0] + b[2] <= a[0] + 1e-6 || a[1] + a[3] <= b[1] + 1e-6 || b[1] + b[3] <= a[1] + 1e-6, 'no overlap'); }
+  }
+  const one = nested(G.renderSheet(sp, { per: 1 }))[0], nat = G.svgSize(sp); assert.ok(Math.abs(one[2] - nat.w) < 1e-6 && Math.abs(one[3] - nat.h) < 1e-6, '1 per page prints at real size');
+  const six = nested(G.renderSheet(sp, { per: 6 }))[0]; assert.ok(six[2] < nat.w, 'six to a page is scaled down');
+  const q = G.renderSheet(sp, { per: 2, content: 'question' }), k = G.renderSheet(sp, { per: 2, content: 'key' }); assert.equal(q, G.renderSheet(sp, { per: 2, content: 'question' }));
+  const hid = G.normalize(Object.assign({}, sp, { hidden: ['objects'] })); assert.ok(/data-obj/.test(G.renderSheet(hid, { per: 2, content: 'key' })) && !/data-obj/.test(G.renderSheet(hid, { per: 2, content: 'question' })), 'question copies hide what the question hides; key copies show it');
+  const pair = G.renderSheet(hid, { per: 2, content: 'pair' }); assert.equal(countM(pair, /data-obj/g), 1, 'a pair sheet: one question (hidden) and one key (shown)');
+  assert.match(G.renderSheet(sp, { per: 4, page: 'a4' }), /viewBox="0 0 210 297"/);
+  const mc = G.normalize(Object.assign({}, sp, { mc: { on: true } })); noBad(G.renderSheet(mc, { per: 2 }));
 });

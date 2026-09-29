@@ -27,7 +27,7 @@ function pngInfo(buf) {
 
 (async () => {
   const browser = await pw.chromium.launch();
-  const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1400, height: 1000 } });
+  const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1400, height: 1000 }, permissions: ['clipboard-read', 'clipboard-write'] });
   const page = await ctx.newPage();
   const errors = [], external = [], downloads = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -189,10 +189,10 @@ function pngInfo(buf) {
   const dl3 = downloads.length;
   await page.click('#pairBtn'); await waitDownloads(dl3 + 2);
   check('SVG pair names', downloads.slice(dl3).map(d => d.suggestedFilename()).join() === 'q4-q.svg,q4-key.svg');
-  await page.check('#transparent');
+  await page.click('#moreMenu > summary'); await page.check('#transparent'); await page.click('#moreMenu > summary');
   const dl4 = downloads.length; await page.click('#svgBtn'); await waitDownloads(dl4 + 1);
   check('transparent SVG has no white page rectangle', !/<rect width="[\d.]+" height="[\d.]+" fill="#fff"\/>/.test(fs.readFileSync(await saved(downloads[dl4]), 'utf8')));
-  await page.uncheck('#transparent');
+  await page.click('#moreMenu > summary'); await page.uncheck('#transparent'); await page.click('#moreMenu > summary');
 
   console.log('Save and reopen');
   const beforeSave = await page.evaluate(() => document.querySelector('#preview').innerHTML);
@@ -691,6 +691,122 @@ function pngInfo(buf) {
   await page.fill('#geometryPane textarea[data-dregion]', '0, 0\n6, 0\n6, 6\n0, 6');
   check('region corners can be retyped', (await page.$eval('#preview [data-obj^="rn"] polygon', p => p.getAttribute('points').split(' ').length)) === 4);
   await shot('25-annotations');
+
+  console.log('Workflow and comfort');
+  await page.click('#newBtn');
+  const more = async () => { if (!(await page.$eval('#moreMenu', m => m.open))) await page.click('#moreMenu > summary'); };
+  const menuAct = async a => { await more(); await page.click(`#moreMenu [data-act="${a}"]`); };
+  await tab('graph');
+  /* built-in presets */
+  const presetOpts = () => page.$$eval('#presetSel option', o => o.map(x => x.textContent));
+  check('the five built-in presets are offered', (await presetOpts()).filter(t => /four-quadrant|One-quadrant|Integer number line|Fraction number line|Trig/.test(t)).length === 5, await presetOpts());
+  await page.selectOption('#presetSel', 'b:trig');
+  check('Trig preset: 0 to 2π with π/6 ticks, labelled in multiples of π', /2π/.test(await words5()) && /5π/.test(await words5()) && /7π/.test(await words5()) && !/6\.28/.test(await words5()), (await words5()).slice(0, 120));
+  await page.selectOption('#presetSel', 'b:oneQuad');
+  check('One-quadrant 0–20 preset', /20/.test(await words5()) && (await page.$$eval('#preview text', t => t.some(x => x.textContent === '−'))) === false);
+  await page.selectOption('#presetSel', 'b:intLine');
+  check('Integer number line preset switches to a number line', await page.isVisible('.tab[data-tab="line"]'));
+  await page.selectOption('#presetSel', 'b:fourQuad');
+  /* user presets */
+  await page.fill('#fname', 'q4'); await page.fill('#title', 'Plot the points');
+  await tab('objects'); await page.click('#objectsPane [data-act="addShape"][data-kind="polygon"]'); await tab('graph');
+  await page.fill('#presetName', 'My triangle template'); await page.click('[data-act="presetSave"]');
+  check('“Save preset” adds it under Yours', (await presetOpts()).includes('My triangle template'));
+  await page.click('#newBtn'); await tab('graph');
+  await page.selectOption('#presetSel', { label: 'My triangle template' });
+  check('applying your preset brings back the whole graph', (await objIds()).includes('pg1') && await page.$eval('#title', t => t.value) === 'Plot the points');
+  await page.click('#presetDel');
+  check('a preset can be deleted', !(await presetOpts()).includes('My triangle template'));
+
+  /* duplicate and recents */
+  await page.fill('#fname', 'q4');
+  await menuAct('duplicate');
+  check('Duplicate: a copy with a new file name and the same graph', await page.$eval('#fname', t => t.value) === 'q4-2' && (await objIds()).includes('pg1'));
+  await menuAct('duplicate');
+  check('duplicating again counts on: q4-3', await page.$eval('#fname', t => t.value) === 'q4-3');
+  const dlr = downloads.length; await page.click('#saveBtn'); await waitDownloads(dlr + 1);
+  await more();
+  check('saved graphs are listed under Recent graphs', /Plot the points/.test(await page.$eval('#recentList', e => e.textContent)));
+  await page.click('#newBtn'); check('a new graph is blank', (await objIds()).length === 0);
+  await more(); await page.click('#recentList [data-recent="0"]');
+  check('opening a recent graph brings it back', (await objIds()).includes('pg1') && await page.$eval('#fname', t => t.value) === 'q4-3');
+
+  /* course mode */
+  const visible = sel => page.isVisible(sel).catch(() => false);
+  await tab('functions');
+  check('everything shows by default', await visible('#functionsPane [data-act="addVlt"]') && await visible('.tab[data-tab="geometry"]'));
+  await more(); await page.selectOption('#courseSel', 'middle');
+  check('middle school: no vertical line test, no intersections, no distance/midpoint or circles', !(await visible('#functionsPane [data-act="addVlt"]')) && !(await visible('#functionsPane [data-act="addIntersect"]')));
+  await tab('geometry');
+  check('middle school: Pythagorean squares and symmetry stay; distance/midpoint and circles go', await visible('#geometryPane [data-act="addPythag"]') && await visible('#geometryPane [data-act="addSymmetry"]') && !(await visible('#geometryPane [data-act="addMeasure"]')) && !(await visible('#geometryPane [data-act="addCircle"]')));
+  await tab('graph');
+  check('middle school: the trig preset and π axis format are not offered', !(await presetOpts()).some(t => /Trig/.test(t)));
+  await page.click('[data-seg="type"] [data-v="numberline"]'); await tab('line');
+  check('middle school: no sign chart button', !(await visible('#linePane [data-act="addSign"]')) && await visible('#linePane [data-act="addIneq"]'));
+  await tab('graph'); await page.click('[data-seg="type"] [data-v="plane"]');
+  const hiddenHigh = await page.$$eval('[data-course]', els => els.filter(e => !/middle/.test(e.dataset.course) && e.dataset.course !== 'all' && e.tagName !== 'OPTION').every(e => e.offsetParent === null));
+  check('middle school mode: every tool tagged for the higher courses is hidden', hiddenHigh);
+  await more(); await page.selectOption('#courseSel', 'calculus');
+  check('calculus: the middle-school Geometry tab and data displays go; sign charts and the trig preset are there', !(await visible('.tab[data-tab="geometry"]')) && !(await visible('[data-seg="type"] [data-v="data"]')) && (await presetOpts()).some(t => /Trig/.test(t)));
+  await page.reload(); await page.waitForSelector('#preview svg');
+  check('the course is remembered next time', await page.$eval('#courseSel', s => s.value) === 'calculus');
+  await more(); await page.selectOption('#courseSel', 'all');
+  check('“Everything” brings it all back', await visible('.tab[data-tab="geometry"]') && await visible('[data-seg="type"] [data-v="data"]'));
+
+  /* CSV import */
+  await page.click('#newBtn');
+  const csv = path.join(os.tmpdir(), 'pts.csv'); fs.writeFileSync(csv, 'x,y\n1,2\n3,4\n-2,5\n');
+  await more(); const fch = page.waitForEvent('filechooser'); await page.click('#moreMenu [data-act="importCsv"]'); await (await fch).setFiles(csv);
+  await page.waitForTimeout(200);
+  check('CSV import adds points to a coordinate plane', (await objIds()).filter(i => /^pt/.test(i)).length === 3);
+  await tab('graph'); await page.click('[data-seg="type"] [data-v="data"]'); await tab('data'); await page.selectOption('#dataPane [data-bind="data.kind"]', 'histogram');
+  const csv2 = path.join(os.tmpdir(), 'scores.csv'); fs.writeFileSync(csv2, '52\n61\n64\n70\n75\n75\n88\n');
+  await more(); const fch2 = page.waitForEvent('filechooser'); await page.click('#moreMenu [data-act="importCsv"]'); await (await fch2).setFiles(csv2);
+  await page.waitForTimeout(200);
+  check('CSV import fills a data display', /7 numbers/.test(await page.$eval('#dataPane [data-dcount="0"]', e => e.textContent)));
+  await tab('graph'); await page.click('[data-seg="type"] [data-v="plane"]');
+
+  /* copy image */
+  await menuAct('copyImage'); await page.waitForTimeout(400);
+  const toastText = await page.$eval('#toasts', e => e.textContent);
+  const copied = /Copied/.test(toastText);
+  check('Copy image either copies or explains that it cannot (never fails silently)', copied || /will not copy pictures/.test(toastText), toastText);
+  if (copied) check('the clipboard really holds a PNG', await page.evaluate(async () => { const items = await navigator.clipboard.read(); return items.some(i => i.types.includes('image/png')); }).catch(() => false));
+  console.log('    (copy image from file:// in Chromium: ' + (copied ? 'works' : 'refused, message shown') + ')');
+  await page.evaluate(() => { document.querySelector('#toasts').innerHTML = ''; });
+
+  /* print sheets */
+  await page.click('#newBtn'); await tab('objects'); await page.click('#objectsPane [data-act="addShape"][data-kind="polygon"]');
+  await menuAct('printDlg'); await page.selectOption('#printPer', '4'); await page.selectOption('#printContent', 'pair');
+  await page.evaluate(() => { window.print = () => window.dispatchEvent(new Event('beforeprint')); });
+  await page.click('#printOk'); await page.waitForTimeout(150);
+  check('Print a sheet: four graphs on one page, question and key alternating', (await page.$$eval('#printSheet svg svg', s => s.length)) === 4 && /215\.9mm/.test(await page.$eval('#printSheet svg', s => s.getAttribute('width'))));
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  check('and the sheet is cleared afterwards, so Ctrl+P prints the single graph again', (await page.$eval('#printSheet', e => e.innerHTML)) === '');
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  check('Ctrl+P after that prints one graph', (await page.$$eval('#printSheet svg svg', s => s.length)) === 0 && (await page.$$eval('#printSheet svg', s => s.length)) === 1);
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+
+  /* keyboard */
+  await page.click('#newBtn'); await tab('graph');
+  await page.keyboard.press('k');
+  check('K switches to the question version', await page.$eval('#viewSeg [data-view="question"]', b => b.classList.contains('active')));
+  await page.keyboard.press('k');
+  check('and back to the key', await page.$eval('#viewSeg [data-view="key"]', b => b.classList.contains('active')));
+  await page.keyboard.press('p');
+  check('P turns on placing points', await page.$eval('#editTool', c => c.checked));
+  const spot = await toClient(2, 3); await page.mouse.click(spot.x, spot.y);
+  check('clicking places a point', (await objIds()).length === 1);
+  await page.keyboard.press('Delete');
+  check('Delete removes the point you just placed', (await objIds()).length === 0);
+  await page.keyboard.press('Control+z');
+  check('and Ctrl+Z brings it back', (await objIds()).length === 1);
+  await page.keyboard.press('Escape');
+  check('Esc stops placing points', !(await page.$eval('#editTool', c => c.checked)));
+  await page.click('#title'); await page.keyboard.type('kpk'); await page.keyboard.press('Escape');
+  check('letters typed in a box are not shortcuts', await page.$eval('#title', t => t.value) === 'kpk' && !(await page.$eval('#editTool', c => c.checked)));
+  await page.click('.canvas-scroll'); await page.keyboard.press('?');
+  check('? shows the shortcut list', await page.$eval('#keysDlg', d => d.open)); await page.click('#keysOk');
 
   console.log('Print layout (Ctrl+P)');
   await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));

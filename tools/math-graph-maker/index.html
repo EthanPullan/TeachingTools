@@ -112,6 +112,16 @@
   .dt select{border:none;background:transparent;border-radius:0;padding:7px 2px;width:64px;font-size:13px;}
   .dt td.act,.dt th.act{width:26px;min-width:26px;text-align:center;}
   .toolbar select{width:auto;padding:6px 8px;}
+  .course-off{display:none !important;}
+  details.menu{position:relative;}
+  details.menu>summary{list-style:none;cursor:pointer;}
+  details.menu>summary::-webkit-details-marker{display:none;}
+  .menu-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(20,40,33,.2);padding:10px;width:280px;display:grid;gap:8px;}
+  .menu-panel .btn{width:100%;text-align:left;}
+  .menu-panel h5{margin:4px 0 0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .menu-panel .recent{display:grid;gap:4px;max-height:200px;overflow:auto;}
+  .menu-panel .recent .btn{font-size:12px;padding:5px 8px;}
+  kbd{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:var(--panel);}
   .issue{font-size:12px;color:var(--danger);margin:0;padding:2px 0;}
   .ok-line{font-size:12.5px;color:var(--ok);font-weight:600;margin:0;}
   .xbtn{border:none;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:2px 6px;border-radius:6px;}
@@ -176,7 +186,18 @@
     <button class="btn small" id="undoBtn" type="button" title="Undo (Ctrl+Z)">↶ Undo</button>
     <button class="btn small" id="redoBtn" type="button" title="Redo (Ctrl+Y)">↷ Redo</button>
     <div class="spacer"></div>
-    <label class="check" title="Export PNG/SVG without a white background"><input type="checkbox" id="transparent"> Transparent</label>
+    <details class="menu" id="moreMenu"><summary class="btn small" title="Duplicate, recent graphs, import, copy, print sheets, course mode, shortcuts">More ▾</summary>
+      <div class="menu-panel">
+        <div><label class="lab" for="courseSel">Course (hides tools it doesn’t use)</label><select id="courseSel" style="width:100%"></select></div>
+        <button class="btn small" type="button" data-act="duplicate" title="Make a copy to tweak: same graph, a new file name">Duplicate this graph</button>
+        <button class="btn small" type="button" data-act="printDlg">Print… (one graph, or a sheet of several)</button>
+        <button class="btn small" type="button" data-act="copyImage" title="Copy the graph as a picture to paste into Word or Docs">Copy image to the clipboard</button>
+        <button class="btn small" type="button" data-act="importCsv" title="Points for a coordinate plane, or data for a data display, from a .csv or .tsv file">Import CSV…</button>
+        <label class="check" title="Export PNG/SVG without a white background"><input type="checkbox" id="transparent"> Transparent background when exporting</label>
+        <button class="btn small" type="button" data-act="shortcuts">Keyboard shortcuts</button>
+        <h5>Recent graphs</h5><div class="recent" id="recentList"></div>
+      </div></details>
+    <input type="file" id="csvIn" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
     <button class="btn" id="pairBtn" data-types="plane,numberline,data" type="button" title="Download the question and the answer key together, with matching file names (e.g. q4-q.png and q4-key.png)">Export question + key</button>
     <select id="pairFmt" data-types="plane,numberline,data" aria-label="Format for the question + key pair"><option value="png">PNG</option><option value="svg">SVG</option></select>
     <span class="sep"></span>
@@ -192,7 +213,7 @@
         <button class="tab" data-tab="data" data-types="data" role="tab" hidden>Data</button>
         <button class="tab" data-tab="objects" data-types="plane" role="tab">Shapes</button>
         <button class="tab" data-tab="functions" data-types="plane" role="tab">Equations</button>
-        <button class="tab" data-tab="geometry" data-types="plane" role="tab">Geometry</button>
+        <button class="tab" data-tab="geometry" data-types="plane" data-course="middle high" role="tab">Geometry</button>
         <button class="tab" data-tab="line" data-types="numberline" role="tab" hidden>Number line</button>
         <button class="tab" data-tab="axes" data-types="plane,numberline,data" role="tab">Axes</button>
         <button class="tab" data-tab="test" data-types="plane,numberline,data" role="tab">Test</button>
@@ -203,8 +224,15 @@
         <!-- GRAPH -->
         <section class="pane" data-pane="graph">
           <div>
+            <h3 class="section-title">Start from a preset</h3>
+            <select id="presetSel" aria-label="Preset"></select>
+            <div class="row" style="margin-top:8px"><div><input class="in" id="presetName" type="text" placeholder="Name for a preset of this graph" maxlength="60"></div><div style="flex:none"><button class="btn small" type="button" data-act="presetSave">Save preset</button></div></div>
+            <div class="row tight" style="margin-top:6px"><button class="btn small" type="button" data-act="presetDelete" id="presetDel" hidden>Delete this preset</button></div>
+            <p class="hint" style="margin-top:6px">A preset replaces the whole graph (Undo brings it back). Your own presets are kept in this browser; “Save preset” keeps everything on the graph now, so it works as a template.</p>
+          </div>
+          <div>
             <h3 class="section-title">What are you making?</h3>
-            <div class="seg" data-seg="type"><button type="button" data-v="plane">Coordinate plane</button><button type="button" data-v="numberline">Number line</button><button type="button" data-v="paper">Graph paper</button><button type="button" data-v="data">Data display</button></div>
+            <div class="seg" data-seg="type"><button type="button" data-v="plane">Coordinate plane</button><button type="button" data-v="numberline">Number line</button><button type="button" data-v="paper">Graph paper</button><button type="button" data-v="data" data-course="middle high">Data display</button></div>
             <p class="hint" style="margin-top:6px" data-types="data" hidden>Bar, line, circle, picto-, histogram, dot, stem-and-leaf, box and scatter graphs from a list of data. Enter it on the Data tab.</p>
             <p class="hint" style="margin-top:6px" data-types="paper" hidden>Blank grid, dot and isometric paper for a whole page, or several small grids per page. Set it up on the Paper tab.</p>
             <p class="hint" style="margin-top:6px" data-types="numberline">Set up the line on the Number line tab. Your plane objects are kept, and come back if you switch again.</p>
@@ -330,6 +358,28 @@
   </div>
 </div>
 
+<dialog id="printDlg">
+  <h3>Print</h3>
+  <div class="row"><div><label class="lab" for="printPer">Graphs per page</label><select id="printPer"><option value="1">1 (real size)</option><option value="2">2</option><option value="4">4</option><option value="6">6</option></select></div>
+    <div><label class="lab" for="printContent">What to print</label><select id="printContent"><option value="question">The question</option><option value="key">The answer key</option><option value="pair">Question and key, alternating</option></select></div>
+    <div><label class="lab" for="printPage">Paper</label><select id="printPage"><option value="letter">US Letter</option><option value="a4">A4</option></select></div></div>
+  <p class="hint" style="margin-top:8px">One to a page prints at its real size. Several to a page are scaled down to fit. In the print box, choose “Margins: none” if your browser offers it, and turn off headers and footers.</p>
+  <div class="btns"><button class="btn" id="printCancel" type="button">Cancel</button><button class="btn primary" id="printOk" type="button">Print</button></div>
+</dialog>
+<dialog id="keysDlg">
+  <h3>Keyboard shortcuts</h3>
+  <table class="dt" style="width:100%"><tbody>
+    <tr><td><kbd>K</kbd></td><td>Switch between the answer key and the question</td></tr>
+    <tr><td><kbd>P</kbd></td><td>Place points: click on the graph to add one, drag to move (on a coordinate plane)</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Stop placing points</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td>Remove the point you last placed or dragged</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>Z</kbd> / <kbd>Y</kbd></td><td>Undo / redo</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>S</kbd></td><td>Save the graph as a file</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>P</kbd></td><td>Print the graph at its real size</td></tr>
+    <tr><td><kbd>?</kbd></td><td>Show this list</td></tr></tbody></table>
+  <p class="hint" style="margin-top:8px">The letter shortcuts stay quiet while you are typing in a box.</p>
+  <div class="btns"><button class="btn primary" id="keysOk" type="button">Close</button></div>
+</dialog>
 <dialog id="pasteDlg">
   <h3>Paste points from a spreadsheet</h3>
   <p class="hint" style="margin-bottom:10px">Copy cells in Excel or Google Sheets and paste them here. Two columns are <b>x</b> and <b>y</b>; with a third column
@@ -383,8 +433,8 @@ const FILLS = ['none', 'light', 'hatch'];
 const ARROWS = ['both', 'end', 'none'];
 const ORIGIN_LABELS = ['0', 'O', 'none'];
 const AXIS_POSITIONS = ['origin', 'edges'];
-const FORMATS = ['decimal', 'fraction', 'improper'];
-const FORMAT_NAMES = { decimal: 'Decimals', fraction: 'Fractions and mixed numbers', improper: 'Improper fractions' };
+const FORMATS = ['decimal', 'fraction', 'improper', 'pi'];
+const FORMAT_NAMES = { decimal: 'Decimals', fraction: 'Fractions and mixed numbers', improper: 'Improper fractions', pi: 'Multiples of π' };
 
 /* Show/hide tokens. `hidden` in the spec lists what the QUESTION version hides: these element tokens and/or object ids.
    The answer key always shows everything. */
@@ -587,7 +637,7 @@ function fracStr(v, markup, improper) {                                /* 1/2, 1
 /* Tick text. Fractions come back as {1/2} markup for the renderer; pass plain = true for text boxes and placeholders. */
 function fmtTick(v, ax, plain) {
   const f = ax.fmt || {};
-  let s = f.format === 'fraction' || f.format === 'improper' ? fracStr(v, !plain, f.format === 'improper') : null;
+  let s = f.format === 'fraction' || f.format === 'improper' ? fracStr(v, !plain, f.format === 'improper') : f.format === 'pi' ? piStr(v, !plain) : null;
   if (s === null) s = v.toFixed(f.decimals !== null && f.decimals !== undefined ? f.decimals : Math.max(decimals(ax.lo), decimals(ax.step)));
   if (/^-0(\.0+)?$/.test(s)) s = s.slice(1);
   return s.replace(/-/g, MINUS);
@@ -2100,7 +2150,8 @@ const kindOn = k => (OBJECT_KINDS[k] && OBJECT_KINDS[k].on) || 'plane';
 /* A number as written on a line: decimal, or a stacked fraction when the line's numbers are fractions. */
 function valText(v, ax) {
   const f = ax && ax.fmt && ax.fmt.format;
-  if (f && f !== 'decimal') { const s = fracStr(v, true, f === 'improper'); if (s !== null) return s.replace(/-/g, MINUS); }
+  if (f === 'pi') { const s = piStr(v, true); if (s !== null) return s.replace(/-/g, MINUS); }
+  else if (f && f !== 'decimal') { const s = fracStr(v, true, f === 'improper'); if (s !== null) return s.replace(/-/g, MINUS); }
   return fmtNum(v);
 }
 /* Vertical asymptotes: sign flips through infinity, or an undefined point with huge values on both sides. */
@@ -3976,6 +4027,75 @@ OBJECT_KINDS.arrow.todo = o => !xyOf(o.from) || !xyOf(o.to) ? 'give it a start a
 OBJECT_KINDS.note.todo = o => !o.text.trim() ? 'type the text.' : !xyOf(o.at) ? 'give it a position.' : '';
 OBJECT_KINDS.region.todo = o => o.vertices.filter(v => xyOf({ x: v[0], y: v[1] })).length < 3 ? 'give it at least three corners.' : '';
 
+/* ==========================================================================
+   Phase 7: workflow and comfort. The pure parts (presets, recents, copies, sheets, courses) live here so they can be tested.
+   ========================================================================== */
+/* ---------- multiples of π on an axis (trig: 0 to 2π in steps of π/6) ---------- */
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+function piStr(v, markup) {
+  if (Math.abs(v) < 1e-12) return '0';
+  const k = v / Math.PI;
+  for (const d of [1, 2, 3, 4, 6, 8, 12]) {
+    const n = Math.round(k * d);
+    if (n === 0 || Math.abs(k * d - n) > 1e-9) continue;
+    const a = Math.abs(n), g = gcd(a, d), nn = a / g, dd = d / g, top = nn === 1 ? 'π' : nn + 'π', sign = n < 0 ? '-' : '';
+    return sign + (dd === 1 ? top : markup ? '{' + top + '/' + dd + '}' : top + '/' + dd);
+  }
+  return null;
+}
+
+/* ---------- built-in presets ---------- */
+const BUILTIN_PRESETS = {
+  fourQuad: { name: 'Blank four-quadrant grid, −10 to 10', course: 'all', make: () => { const s = blankSpec(); Object.assign(s.x, { min: -10, max: 10, step: 1 }); Object.assign(s.y, { min: -10, max: 10, step: 1 }); return normalize(s); } },
+  oneQuad: { name: 'One-quadrant grid, 0 to 20', course: 'all', make: () => { const s = blankSpec(); s.quadrants = 1; Object.assign(s.x, { min: 0, max: 20, step: 2 }); Object.assign(s.y, { min: 0, max: 20, step: 2 }); return normalize(s); } },
+  intLine: { name: 'Integer number line, −10 to 10', course: 'all', make: () => applyLinePreset(blankSpec(), 'integers') },
+  fracLine: { name: 'Fraction number line, 0 to 1', course: 'all', make: () => applyLinePreset(blankSpec(), 'fractions') },
+  trig: { name: 'Trig: 0 to 2π with π/6 ticks', course: 'high calculus', make: () => {
+    const s = blankSpec(); s.quadrants = 4;
+    Object.assign(s.x, { min: 0, max: 2 * Math.PI, step: Math.PI / 6, format: 'pi', minorPerMajor: 1, label: 'x (radians)' });
+    Object.assign(s.y, { min: -1.5, max: 1.5, step: .5, minorPerMajor: 1 });
+    return normalize(s);
+  } }
+};
+
+/* ---------- copies and recent graphs ---------- */
+/* q4 -> q4-2 -> q4-3: a copy never overwrites the file the original was saved to. */
+function copyName(spec) {
+  const base = (spec.name || spec.title || 'graph').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'graph', m = /^(.*?)-(\d+)$/.exec(base);
+  return m ? m[1] + '-' + (+m[2] + 1) : base + '-2';
+}
+function duplicateSpec(spec) { const s = clone(spec); s.name = copyName(spec); return normalize(s); }
+/* A recent graph is remembered by its file name and title, newest first, at most `max`. */
+function recentEntry(spec, now) {
+  const json = serialize(spec);
+  return { key: spec.type + '|' + (spec.name || '') + '|' + (spec.title || ''), label: spec.title || spec.name || TYPE_NAMES[spec.type], type: spec.type, savedAt: now || 0, json };
+}
+function pushRecent(list, entry, max) {
+  if (entry.json.length > 250000) return list;                                       // too big to keep in a browser store
+  return [entry, ...arr(list).filter(e => e && e.key !== entry.key)].slice(0, max || 8);
+}
+const blankish = spec => !spec.objects.length && !spec.title && spec.type === 'plane';   // nothing worth remembering
+
+/* ---------- courses: which tool groups show ---------- */
+const COURSES = { all: 'Everything', middle: 'Middle school (grades 6–9)', high: 'High school', calculus: 'Calculus' };
+const courseShows = (course, list) => course === 'all' || !list || String(list).split(/\s+/).includes(course);
+
+/* ---------- print sheets: several copies of the question and / or key on one page, never enlarged ---------- */
+const SHEET_PER = { 1: [1, 1], 2: [1, 2], 4: [2, 2], 6: [2, 3] };
+function renderSheet(spec, o) {
+  o = Object.assign({ per: 1, content: 'question', page: 'letter', margin: 10 }, o);
+  const pg = pageMM({ page: o.page, orient: 'portrait' }), [cols, rows] = SHEET_PER[o.per] || SHEET_PER[1], M = o.margin, gap = 6;
+  const cw = (pg.w - 2 * M - (cols - 1) * gap) / cols, ch = (pg.h - 2 * M - (rows - 1) * gap) / rows, n = cols * rows;
+  const versions = Array.from({ length: n }, (_, i) => o.content === 'pair' ? (i % 2 ? 'key' : 'question') : o.content);
+  const body = [];
+  versions.forEach((v, i) => {
+    const svg = renderSVG(spec, { version: v, background: 'none', id: 'sh' + i }), m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg), gw = +m[1], gh = +m[2];
+    const k = Math.min(cw / gw, ch / gh, 1), w = gw * k, h = gh * k, c = i % cols, r = Math.floor(i / cols);
+    body.push(nestSVG(svg, M + c * (cw + gap) + (cw - w) / 2, M + r * (ch + gap), w, h));
+  });
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${pg.w}mm" height="${pg.h}mm" viewBox="0 0 ${pg.w} ${pg.h}" font-family="${esc(FONT)}"><rect width="${pg.w}" height="${pg.h}" fill="#fff"/>${body.join('')}</svg>`;
+}
+
 /* The page size actually drawn (a locked physical scale makes the page follow the grid). */
 function svgSize(spec) {
   const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(renderSVG(spec));
@@ -4010,7 +4130,7 @@ function pngWithDpi(u8, dpi) {
 
   /* ---------- state: the spec is the truth; view/pick/tab are UI-only ---------- */
   let spec = sampleSpec();
-  const state = { variantSeed: 1, tag: '', view: 'key', pick: false, edit: false, tab: 'graph', size: null, outside: [], issues: [], geom: {}, printJob: null };
+  const state = { sel: null, variantSeed: 1, tag: '', view: 'key', pick: false, edit: false, tab: 'graph', size: null, outside: [], issues: [], geom: {}, printJob: null };
   const hist = [JSON.stringify(spec)];
   let idx = 0, lastKey = null, lastT = 0;
 
@@ -4210,15 +4330,15 @@ function pngWithDpi(u8, dpi) {
     const regions = of('region').map(([o, i]) => `<div class="card">${head(i, 'Lettered region')}<div class="row"><div style="flex:none;width:80px"><label class="lab">Letter</label><input type="text" maxlength="3" data-bind="objects.${i}.label"></div>
         <div><label class="lab">Fill</label><select data-bind="objects.${i}.fill">${optList({ none: 'None', light: 'Light grey', hatch: 'Hatched' })}</select></div><div><label class="lab">Outline</label><select data-bind="objects.${i}.dash">${optList(DASH_NAMES)}</select></div></div>
         <div><label class="lab">Corners (x, y — one per line)</label><textarea class="in" rows="4" data-dregion="${i}" spellcheck="false" style="width:100%;font-family:var(--mono)">${esc(o.vertices.map(v => cellStr(v[0]) + ', ' + cellStr(v[1])).join('\n'))}</textarea></div></div>`).join('');
-    const sec = (title, k, act, btn, hint) => `<div><h3 class="section-title">${title}</h3><button class="btn small" type="button" data-act="${act}">+ ${btn}</button><p class="hint" style="margin:6px 0">${hint}</p><div style="display:grid;gap:10px">${cards[k]}</div></div>`;
+    const sec = (title, k, act, btn, hint, course) => `<div${course ? ` data-course="${course}"` : ''}><h3 class="section-title">${title}</h3><button class="btn small" type="button" data-act="${act}">+ ${btn}</button><p class="hint" style="margin:6px 0">${hint}</p><div style="display:grid;gap:10px">${cards[k]}</div></div>`;
     $('#geometryPane').innerHTML =
       `<p class="hint">These work on shapes you have drawn on the Shapes tab (or on the image of a transformation), and follow them when they change. Hide one in the question on the Test tab, under “Individual points and shapes”. The text they write beneath the graph is hidden with “Notation”, and can be replaced by an answer line.</p>` +
       sec('Symmetry', 'symmetry', 'addSymmetry', 'Symmetry', 'Lines of symmetry and the order of rotational symmetry, worked out from the shape. A line that runs along an axis is hidden by the axis; move the shape off centre to see it.') +
       sec('Area and perimeter', 'areacount', 'addAreacount', 'Area and perimeter', 'Shades the unit squares inside (exact for shapes drawn along gridlines). A slanted side gives an approximate perimeter.') +
       sec('Pythagorean theorem', 'pythag', 'addPythag', 'Squares on the sides', 'Draws a square on each side of a triangle with its area, and marks a right angle.') +
-      sec('Distance and midpoint', 'measure', 'addMeasure', 'Distance and midpoint', 'Pick two points. Show the right triangle with Δx and Δy, the midpoint, and the working for the distance.') +
+      sec('Distance and midpoint', 'measure', 'addMeasure', 'Distance and midpoint', 'Pick two points. Show the right triangle with Δx and Δy, the midpoint, and the working for the distance.', 'high calculus') +
       sec('Right angles and equal sides', 'mark', 'addMark', 'Marks', 'Right-angle squares and equal-length tick marks (one tick for the first pair of equal sides, two for the next, …).') +
-      sec('Circles', 'circle', 'addCircle', 'Circle', 'Centre and radius on the grid.') +
+      sec('Circles', 'circle', 'addCircle', 'Circle', 'Centre and radius on the grid.', 'high calculus') +
       `<div><h3 class="section-title">Annotations</h3><div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="addArrow">+ Arrow</button><button class="btn small" type="button" data-act="addNote">+ Text note</button><button class="btn small" type="button" data-act="addRegion">+ Lettered region</button></div>
         <p class="hint" style="margin:6px 0">Arrows and notes point things out; lettered regions (A, B, C…) are for “which section…” questions. Hide any of them in the question by name.</p><div style="display:grid;gap:10px">${arrows}${notes}${regions}</div></div>`;
   }
@@ -4303,8 +4423,8 @@ function pngWithDpi(u8, dpi) {
         <p class="hint" style="margin:8px 0">Calculate y from an equation, or type both columns. Tick “Blank” to leave a cell empty in the question. Hiding the equation and blanking the y-values gives “complete the table and graph”.</p>
         <div style="display:grid;gap:10px">${tables}</div></div>
       <div><h3 class="section-title">Lines, intersections and marks</h3>
-        <div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="addRelated">+ Parallel / perpendicular line</button><button class="btn small" type="button" data-act="addIntersect">+ Intersection</button>
-          <button class="btn small" type="button" data-act="addGuide">+ Guide lines</button><button class="btn small" type="button" data-act="addVlt">+ Vertical line test</button></div>
+        <div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="addRelated">+ Parallel / perpendicular line</button><button class="btn small" type="button" data-act="addIntersect" data-course="high calculus">+ Intersection</button>
+          <button class="btn small" type="button" data-act="addGuide">+ Guide lines</button><button class="btn small" type="button" data-act="addVlt" data-course="high calculus">+ Vertical line test</button></div>
         <div style="display:grid;gap:10px;margin-top:10px">${rels}${inter}${guides}${vlts}</div></div>`;
   }
 
@@ -4412,7 +4532,7 @@ function pngWithDpi(u8, dpi) {
         <p class="hint" style="margin-top:6px">Sets the range, step and number format (and rows for a double line). It clears the marks below; Undo brings them back.</p></div>
       <div><h3 class="section-title">Marks on the line</h3>
         <div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="addNlPoint">+ Point</button><button class="btn small" type="button" data-act="addIneq">+ Inequality</button>
-          <button class="btn small" type="button" data-act="addHops">+ Hops</button><button class="btn small" type="button" data-act="addSign">+ Sign chart</button></div>
+          <button class="btn small" type="button" data-act="addHops">+ Hops</button><button class="btn small" type="button" data-act="addSign" data-course="high calculus">+ Sign chart</button></div>
         <p class="hint" style="margin:8px 0">Filled dots include the number, open dots don’t. Hide any mark, or the notation, in the question on the Test tab.</p>
         <div style="display:grid;gap:10px">${pts}${ineqs}${hops}${signs}</div></div>
       <div><h3 class="section-title">Layout</h3>
@@ -4504,6 +4624,7 @@ function pngWithDpi(u8, dpi) {
     $$('[data-types]').forEach(el => { el.hidden = !el.dataset.types.split(',').includes(spec.type); });
     { const t = $('.tab.active'); if (t && t.hidden) $('.tab[data-tab="graph"]').click(); }
     if (isNL(spec) || spec.mc.on) state.edit = false;
+    applyCourse();
     $$('[data-showif]').forEach(el => { el.hidden = !getPath(spec, el.dataset.showif); });
     $$('[data-showif-not]').forEach(el => { el.hidden = !!getPath(spec, el.dataset.showifNot); });
     $$('[data-eqerr]').forEach(el => { const o = spec.objects[+el.dataset.eqerr]; el.textContent = o && o.expr.trim() ? parseEquation(o.expr).error || '' : ''; });
@@ -4604,6 +4725,52 @@ function pngWithDpi(u8, dpi) {
     spec.objects.push(makeObject(spec, kind, kind === 'polygon' ? { vertices: tri, labels: labs } : { vertices: tri.slice(0, 2), labels: labs.slice(0, 2) }));
     commit(null, true);
   }
+
+  /* ---------- course mode, recent graphs, presets: small conveniences kept in this browser ---------- */
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('mathgraphmaker.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('mathgraphmaker.' + k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  };
+  let course = store.get('course', 'all'); if (!COURSES[course]) course = 'all';
+  function applyCourse() {
+    $$('[data-course]').forEach(el => {
+      const off = !courseShows(course, el.dataset.course);
+      if (el.tagName === 'OPTION') { el.hidden = off; el.disabled = off; } else el.classList.toggle('course-off', off);
+    });
+    const t = $('.tab.active'); if (t && t.classList.contains('course-off')) $('.tab[data-tab="graph"]').click();
+  }
+  function markCourseOptions() { $$('#axesPane option[value="pi"]').forEach(o => { o.dataset.course = 'high calculus'; }); }
+  function setCourse(c) { course = c; store.set('course', c); buildAxes(); markCourseOptions(); buildPresets(); rebuildStructure(); }
+  const relTime = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
+  function remember() { if (blankish(spec)) return; store.set('recent', pushRecent(store.get('recent', []), recentEntry(spec, Date.now()), 8)); renderRecent(); }
+  function renderRecent() {
+    const list = store.get('recent', []), box = $('#recentList');
+    box.innerHTML = list.length ? list.map((e, i) => `<button class="btn small" type="button" data-recent="${i}" title="${esc(TYPE_NAMES[e.type] || '')}">${esc(e.label)} <span class="hint" style="display:inline">· ${relTime(e.savedAt)}</span></button>`).join('') : '<p class="hint">Graphs you save, export or copy show up here. The saved files are the real copies.</p>';
+  }
+  function buildPresets() {
+    const user = store.get('presets', []), opt = (v, t) => `<option value="${esc(v)}">${esc(t)}</option>`;
+    $('#presetSel').innerHTML = '<option value="">Choose a preset…</option><optgroup label="Built in">' + Object.keys(BUILTIN_PRESETS).filter(k => courseShows(course, BUILTIN_PRESETS[k].course)).map(k => opt('b:' + k, BUILTIN_PRESETS[k].name)).join('') + '</optgroup>' +
+      (user.length ? '<optgroup label="Yours">' + user.map(u => opt('u:' + u.id, u.name)).join('') + '</optgroup>' : '');
+    $('#presetDel').hidden = true;
+  }
+  function applyPreset(v) {
+    const [kind, id] = [v.slice(0, 1), v.slice(2)];
+    if (kind === 'b' && BUILTIN_PRESETS[id]) { remember(); spec = BUILTIN_PRESETS[id].make(); commit(null, true); toast(BUILTIN_PRESETS[id].name + '. Undo brings back what you had.', 'ok'); }
+    else if (kind === 'u') { const u = store.get('presets', []).find(x => x.id === id); if (!u) return; try { spec = parseFile(u.json); } catch (e) { return toast('That preset could not be read.', 'err'); } remember(); commit(null, true); toast('Preset “' + u.name + '”. Undo brings back what you had.', 'ok'); }
+  }
+  async function copyImage() {
+    try {
+      if (!navigator.clipboard || !window.ClipboardItem) throw new Error('nosupport');
+      const blob = await makePNG(state.view);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      remember(); toast('Copied. Paste it into Word or Docs.', 'ok');
+    } catch (err) { toast('This browser will not copy pictures from a local file. Use Export PNG instead.', 'err'); }
+  }
+  function importText(text) {
+    if (spec.type === 'plane') { const n = importPoints(spec, parseTable(text), false); if (n < 0) return toast('Nothing to import: the file needs two columns, x and y.', 'err'); spec = normalize(spec); commit(null, true); toast('Added ' + n + ' point' + (n === 1 ? '' : 's') + '.', 'ok'); }
+    else if (spec.type === 'data') { const r = dataFromPaste(spec.data.kind, text); if (r.error) return toast(r.error, 'err'); Object.assign(spec.data, r.data); spec = normalize(spec); commit(null, true); toast('Data replaced. ' + (r.note || 'Undo brings back the old data.'), 'ok'); }
+    else toast('CSV import works for the points of a coordinate plane and for data displays.', 'err');
+  }
   const readLook = () => { try { const t = localStorage.getItem('mathgraphmaker.testLook'); return t ? JSON.parse(t) : null; } catch (e) { return null; } };
   async function exportVersions(n) {
     const keep = spec;
@@ -4693,9 +4860,9 @@ function pngWithDpi(u8, dpi) {
     if (!blob) throw new Error('The browser could not create the PNG.');
     return new Blob([pngWithDpi(new Uint8Array(await blob.arrayBuffer()), 300)], { type: 'image/png' });
   }
-  const exportSVG = () => download(slug() + suffix(state.view) + '.svg', makeSVG(state.view));
+  const exportSVG = () => { remember(); download(slug() + suffix(state.view) + '.svg', makeSVG(state.view)); };
   async function exportPNG() {
-    try { download(slug() + suffix(state.view) + '.png', await makePNG(state.view)); }
+    try { remember(); download(slug() + suffix(state.view) + '.png', await makePNG(state.view)); }
     catch (err) { toast(err.message || 'PNG export failed.', 'err'); }
   }
   async function exportPair() {                                     // question first, then key, sharing one base name
@@ -4708,7 +4875,7 @@ function pngWithDpi(u8, dpi) {
       toast('Downloaded ' + slug() + '-q.' + fmt + ' and ' + slug() + '-key.' + fmt, 'ok');
     } catch (err) { toast(err.message || 'Export failed.', 'err'); }
   }
-  function saveJSON() { download(slug() + '.mathgraph.json', new Blob([serialize(spec)], { type: 'application/json' })); toast('Saved ' + slug() + '.mathgraph.json', 'ok'); }
+  function saveJSON() { remember(); download(slug() + '.mathgraph.json', new Blob([serialize(spec)], { type: 'application/json' })); toast('Saved ' + slug() + '.mathgraph.json', 'ok'); }
   function start(next) { spec = next; commit(null, true); }
   async function openFile(file) {
     try { start(parseFile(await file.text())); toast('Opened ' + file.name, 'ok'); }
@@ -4811,6 +4978,19 @@ function pngWithDpi(u8, dpi) {
       if (r.error) return toast(r.error, 'err');
       Object.assign(spec.data, r.data); spec = normalize(spec); commit(null, true); toast('Data replaced. ' + (r.note || 'Undo brings back the old data.'), 'ok');
     }
+    else if (a === 'duplicate') { remember(); spec = duplicateSpec(spec); commit(null, true); $('#moreMenu').open = false; toast('A copy: “' + spec.name + '”. The first file is not touched; change what you need and save.', 'ok'); }
+    else if (a === 'printDlg') { $('#moreMenu').open = false; $('#printDlg').showModal(); }
+    else if (a === 'copyImage') { $('#moreMenu').open = false; copyImage(); }
+    else if (a === 'importCsv') { $('#moreMenu').open = false; $('#csvIn').click(); }
+    else if (a === 'shortcuts') { $('#moreMenu').open = false; $('#keysDlg').showModal(); }
+    else if (a === 'presetSave') {
+      const name = $('#presetName').value.trim(); if (!name) return toast('Give the preset a name first.', 'err');
+      const list = store.get('presets', []).filter(u => u.name !== name); list.push({ id: String(Date.now()), name, json: serialize(spec) });
+      if (!store.set('presets', list.slice(-30))) return toast('This browser will not keep presets (private window?).', 'err');
+      $('#presetName').value = ''; buildPresets(); toast('Preset “' + name + '” saved.', 'ok');
+    }
+    else if (a === 'presetDelete') { const id = $('#presetSel').value.slice(2); store.set('presets', store.get('presets', []).filter(u => u.id !== id)); buildPresets(); toast('Preset deleted.', 'ok'); }
+    else if (b.dataset.recent !== undefined) { const e = store.get('recent', [])[+b.dataset.recent]; if (e) { try { const next = parseFile(e.json); remember(); spec = next; commit(null, true); $('#moreMenu').open = false; toast('Opened “' + e.label + '”. Undo brings back what you had.', 'ok'); } catch (err) { toast('That graph could not be read.', 'err'); } } }
     else if (a === 'addArrow') addObj('arrow', { from: { x: -4, y: 4 }, to: { x: -1, y: 1 } });
     else if (a === 'addNote') addObj('note', { text: 'Note', at: { x: 3, y: 4 }, box: true });
     else if (a === 'addRegion') { const used = new Set(spec.objects.filter(o => o.kind === 'region').map(o => o.label)); addObj('region', { vertices: [[1, 1], [5, 1], [5, 5]], label: 'ABCDEFGH'.split('').find(l => !used.has(l)) || '', fill: 'light' }); }
@@ -4890,10 +5070,22 @@ function pngWithDpi(u8, dpi) {
     if (n < 0) return toast('Nothing to import: paste at least two columns (x and y).', 'err');
     spec = normalize(spec); commit(null, true); $('#pasteDlg').close(); toast('Added ' + n + ' point' + (n === 1 ? '' : 's') + '.', 'ok');
   };
-  $('#newBtn').onclick = () => { start(blankSpec()); toast('New graph. Undo brings the old one back.'); };
+  $('#newBtn').onclick = () => { remember(); start(blankSpec()); toast('New graph. Undo brings the old one back.'); };
   $('#openBtn').onclick = () => $('#fileIn').click();
   $('#fileIn').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) openFile(f); };
   $('#saveBtn').onclick = saveJSON;
+  $('#presetSel').addEventListener('change', e => { const v = e.target.value; $('#presetDel').hidden = !v.startsWith('u:'); if (v.startsWith('b:')) { applyPreset(v); e.target.value = ''; } else if (v.startsWith('u:')) applyPreset(v); });
+  $('#courseSel').innerHTML = Object.keys(COURSES).map(k => `<option value="${k}">${esc(COURSES[k])}</option>`).join(''); $('#courseSel').value = course;
+  $('#courseSel').addEventListener('change', e => setCourse(e.target.value));
+  $('#csvIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) f.text().then(importText); });
+  document.addEventListener('click', e => { const m = $('#moreMenu'); if (m.open && !m.contains(e.target)) m.open = false; });
+  $('#printCancel').onclick = () => $('#printDlg').close();
+  $('#printOk').onclick = () => {
+    state.printJob = renderSheet(spec, { per: +$('#printPer').value, content: $('#printContent').value, page: $('#printPage').value });
+    $('#printDlg').close(); remember(); setTimeout(() => window.print(), 50);
+  };
+  $('#keysOk').onclick = () => $('#keysDlg').close();
+  window.addEventListener('pagehide', () => { try { remember(); } catch (e) { } });
   $('#undoBtn').onclick = () => goto(idx - 1);
   $('#redoBtn').onclick = () => goto(idx + 1);
   $('#svgBtn').onclick = exportSVG;
@@ -4926,13 +5118,14 @@ function pngWithDpi(u8, dpi) {
     if (!d.inside) return;
     if (spec.objects.length >= MAX_OBJECTS) return toast('Object limit reached.', 'err');
     spec.objects.push(makeObject(spec, 'point', { label: nextLabels(spec, 1)[0], x: snapTo(d.x, g.ax), y: snapTo(d.y, g.ay) }));
+    state.sel = spec.objects[spec.objects.length - 1].id;
     commit(null, true);
   }
   $('#preview').addEventListener('pointerdown', e => {
     if (!state.edit || state.view !== 'key' || e.button !== 0) return;
     const vx = e.target.closest('[data-vx]'), pt = e.target.closest('[data-pt]');
-    if (vx) { e.preventDefault(); const [id, k] = vx.dataset.vx.split(':'); drag = { id, k: +k, saved: freezeAxes() }; }
-    else if (pt) { e.preventDefault(); drag = { id: pt.dataset.pt, k: null, saved: freezeAxes() }; }
+    if (vx) { e.preventDefault(); const [id, k] = vx.dataset.vx.split(':'); drag = { id, k: +k, saved: freezeAxes() }; state.sel = id; }
+    else if (pt) { e.preventDefault(); drag = { id: pt.dataset.pt, k: null, saved: freezeAxes() }; state.sel = pt.dataset.pt; }
     else addPointAt(e);
   });
   document.addEventListener('pointermove', e => {
@@ -4953,8 +5146,11 @@ function pngWithDpi(u8, dpi) {
   });
 
   /* ---------- print: Ctrl+P prints the graph you are editing at its real size ---------- */
-  window.addEventListener('beforeprint', () => { $('#printSheet').innerHTML = `<div class="pg">${renderSVG(spec, { version: state.view, id: 'pp' })}</div>`; });
-  window.addEventListener('afterprint', () => { $('#printSheet').innerHTML = ''; });
+  window.addEventListener('beforeprint', () => {
+    $('#printSheet').innerHTML = state.printJob ? `<div class="pg">${state.printJob}</div>` : `<div class="pg">${renderSVG(spec, { version: state.view, id: 'pp' })}</div>`;
+    if (state.printJob) { const st = document.createElement('style'); st.id = 'sheetPage'; st.textContent = '@media print{@page{margin:0}#printSheet{gap:0}}'; document.head.appendChild(st); }      // a sheet carries its own margins
+  });
+  window.addEventListener('afterprint', () => { $('#printSheet').innerHTML = ''; state.printJob = null; const st = $('#sheetPage'); if (st) st.remove(); });
 
   /* ---------- keyboard shortcuts (never while typing in a box, except save) ---------- */
   const typing = t => t && (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' ||
@@ -4966,10 +5162,16 @@ function pngWithDpi(u8, dpi) {
     if (typing(e.target)) return;                                                     // undo/redo belong to the text box while typing
     if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); goto(idx - 1); return; }
     if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); goto(idx + 1); return; }
+    if (mod || e.altKey) return;
+    if (k === 'k' && !$('#viewSeg').classList.contains('course-off') && $('#viewSeg').offsetParent !== null) { $('#viewSeg [data-view="' + (state.view === 'key' ? 'question' : 'key') + '"]').click(); return; }
+    if (k === 'p' && spec.type === 'plane' && !spec.mc.on) { $('#editTool').click(); return; }
+    if (k === 'escape' && state.edit) { $('#editTool').click(); return; }
+    if ((k === 'delete' || k === 'backspace') && state.sel) { const o = spec.objects.find(x => x.id === state.sel); state.sel = null; if (o) { e.preventDefault(); removeObject(spec, o.id); commit(null, true); toast('Removed ' + objName(o, spec.objects) + '. Undo brings it back.', 'ok'); } return; }
+    if (e.key === '?') { $('#keysDlg').showModal(); }
   });
 
   /* ---------- go ---------- */
-  buildStatic(); buildAxes(); buildStyle(); buildPaperPresets(); rebuildStructure();
+  buildStatic(); buildAxes(); markCourseOptions(); buildStyle(); buildPaperPresets(); buildPresets(); renderRecent(); rebuildStructure();
 })();
 </script>
 </body>
