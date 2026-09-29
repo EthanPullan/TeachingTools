@@ -65,6 +65,8 @@
   #chart .alt{background:var(--panel-2);}
   #chart .diag{background:var(--accent-soft);color:var(--accent-deep);font-weight:700;
     box-shadow:inset 0 0 0 1px var(--accent);}
+  #chart.no-squares .diag{background:#fff;color:inherit;font-weight:500;box-shadow:inset 0 0 0 1px var(--line);}
+  #chart.no-squares .diag.alt{background:var(--panel-2);}
   #chart .head{background:var(--board);color:#fff;font-weight:700;box-shadow:none;}
   #chart .hl{background:var(--together-soft);box-shadow:inset 0 0 0 1px var(--together);}
   #chart .head.hl{background:var(--accent);color:var(--ink);}
@@ -104,6 +106,7 @@
     <div class="brand"><span class="mark"></span>Multiplication Chart <small>n × n times table</small></div>
     <label class="field">Size <input id="n" type="number" min="2" max="30" value="12" aria-label="Chart size n"></label>
     <label class="check"><input id="hover" type="checkbox" checked> Highlight row &amp; column</label>
+    <label class="check"><input id="squares" type="checkbox" checked> Highlight perfect squares</label>
     <div class="spacer"></div>
     <button class="btn" id="print" type="button"><span class="ic">🖨</span>Print</button>
     <button class="btn primary" id="fullscreen" type="button"><span class="ic">⛶</span>Fullscreen</button>
@@ -137,8 +140,7 @@
         else if (r === 0 || c === 0) { d.textContent = r || c; d.className = 'head'; }
         else {
           d.textContent = r * c;
-          if (r === c) d.className = 'diag';
-          else if (r % 2) d.className = 'alt';
+          d.className = (r === c ? 'diag' : '') + (r % 2 ? ' alt' : '');
         }
         frag.appendChild(d);
       }
@@ -163,6 +165,8 @@
   });
   chart.addEventListener('mouseleave', () => setHighlight());
   hoverBox.addEventListener('change', () => setHighlight());
+  const squaresBox = document.getElementById('squares');
+  squaresBox.addEventListener('change', () => chart.classList.toggle('no-squares', !squaresBox.checked));
 
   nInput.addEventListener('input', () => {
     const v = parseInt(nInput.value, 10);
