@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graph Maker</title>
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+  [hidden]{display:none !important;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;white-space:nowrap;margin-right:6px;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+  .sep{width:1px;height:22px;background:var(--line);}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.danger{color:var(--danger);border-color:var(--danger-soft);background:#fff;}
+  .btn.danger:hover{background:var(--danger-soft);}
+  .btn.small{padding:5px 9px;font-size:12px;border-radius:7px;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:15px;line-height:1;}
+
+  .main{flex:1;display:flex;min-height:0;}
+  .panel{width:400px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;}
+  .tabs{display:flex;border-bottom:1px solid var(--line);}
+  .tab{flex:1;border:none;background:none;padding:11px 4px;cursor:pointer;font-weight:600;
+    font-size:12.5px;color:var(--muted);border-bottom:2px solid transparent;letter-spacing:.02em;}
+  .tab:hover{color:var(--ink);}
+  .tab.active{color:var(--board);border-bottom-color:var(--accent);}
+  .tabbody{flex:1;overflow:auto;padding:16px;}
+  .pane > * + *{margin-top:16px;}
+
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 9px;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;margin:0;}
+  .lab{display:block;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:5px;}
+  .in,select,input[type=number],input[type=text]{border:1px solid var(--line);border-radius:8px;
+    padding:7px 9px;background:var(--panel-2);width:100%;min-width:0;}
+  input[type=number]{font-family:var(--mono);}
+  .row{display:flex;gap:8px;align-items:flex-end;}
+  .row > *{flex:1;min-width:0;}
+  .row.tight > *{flex:none;}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;user-select:none;}
+  .check input{width:16px;height:16px;accent-color:var(--board);margin:0;flex:none;}
+  .check.sm{font-size:12px;color:var(--muted);}
+  .check.dis{opacity:.4;pointer-events:none;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fff;}
+  .card > * + *{margin-top:10px;}
+  .card h4{margin:0;font-size:13px;}
+
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:6px 12px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);}
+  .seg button + button{border-left:1px solid var(--line);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .types{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .types button{border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px 8px;cursor:pointer;
+    font-size:13px;font-weight:600;color:var(--ink);text-align:left;display:flex;gap:8px;align-items:center;}
+  .types button:hover{background:var(--panel-2);}
+  .types button.active{border-color:var(--board);box-shadow:0 0 0 2px var(--accent);}
+  .types .ic{font-size:18px;width:22px;text-align:center;}
+
+  .levels{display:grid;gap:8px;}
+  .level{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 11px;cursor:pointer;text-align:left;}
+  .level:hover{background:var(--panel-2);}
+  .level b{display:block;font-size:13px;color:var(--ink);}
+  .level span{font-size:12px;color:var(--muted);line-height:1.4;}
+  .level.active{border-color:var(--board);box-shadow:0 0 0 2px var(--accent);}
+  .pill{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:20px;padding:2px 9px;color:var(--muted);}
+  .pill.custom{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep);}
+
+  .vis{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;}
+  .vis .full{grid-column:1 / -1;}
+  .vis .head{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+
+  /* data table */
+  .tblwrap{overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:52vh;}
+  table.dt{border-collapse:separate;border-spacing:0;font-size:13px;min-width:100%;}
+  .dt th,.dt td{padding:0;border-bottom:1px solid var(--line);border-right:1px solid var(--line);background:#fff;}
+  .dt th:last-child,.dt td:last-child{border-right:none;}
+  .dt thead th{position:sticky;background:#fff;z-index:1;}
+  .dt thead tr:first-child th{top:0;}
+  .dt thead tr.units th{top:35px;background:var(--panel-2);}
+  .dt .ix{width:30px;min-width:30px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px;background:var(--panel-2);}
+  .dt input{border:none;border-radius:0;background:transparent;width:100%;min-width:74px;padding:8px 8px;font-family:var(--mono);font-size:12.5px;}
+  .dt thead input{font-family:var(--sans);font-weight:600;}
+  .dt tr.units input{font-size:11.5px;color:var(--muted);}
+  .dt input:focus{background:var(--accent-soft);outline:none;box-shadow:inset 0 0 0 2px var(--accent);}
+  .dt input.bad{background:var(--danger-soft);color:var(--danger);}
+  .dt input.hid{text-decoration:line-through;color:var(--muted);background:var(--panel-2);}
+  .dt .sh{display:flex;align-items:center;}
+  .dt td.act,.dt th.act{width:26px;min-width:26px;text-align:center;}
+  .dt .muted{color:var(--muted);text-align:center;}
+  .xbtn{border:none;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:2px 6px;border-radius:6px;}
+  .xbtn:hover{color:var(--danger);background:var(--danger-soft);}
+
+  /* stage */
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--app-bg);}
+  .stage-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;background:var(--panel);border-bottom:1px solid var(--line);}
+  .canvas-scroll{flex:1;overflow:auto;padding:22px 16px;display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .paper{background:#fff;box-shadow:var(--shadow);border:1px solid var(--line);max-width:100%;line-height:0;flex:none;}
+  .paper svg{display:block;max-width:100%;height:auto;}
+  .paper.pick svg [data-pt]:hover{opacity:.55;}
+  .caption{margin:0;font-size:12px;color:var(--muted);text-align:center;}
+  .statusbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px;min-height:38px;
+    border-top:1px solid var(--line);background:var(--panel);font-size:12.5px;color:var(--muted);}
+  .statusbar b{font-family:var(--mono);font-weight:600;color:var(--ink);}
+  .statusbar .warn{color:var(--danger);font-weight:600;}
+  .statusbar .dotline{width:1px;height:18px;background:var(--line);}
+
+  dialog{border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:0 8px 24px rgba(20,40,33,.25);width:min(560px,92vw);}
+  dialog::backdrop{background:rgba(20,40,33,.35);}
+  dialog h3{margin:0 0 10px;font-size:15px;}
+  dialog textarea{width:100%;height:170px;border:1px solid var(--line);border-radius:9px;padding:9px 10px;
+    background:var(--panel-2);font-family:var(--mono);font-size:12.5px;resize:vertical;}
+  dialog .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
+
+  .toast-wrap{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:1000;
+    display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;}
+  .toast{background:var(--ink);color:#fff;padding:10px 15px;border-radius:10px;font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,560px);
+    border-left:3px solid var(--accent);animation:tin .2s ease both;}
+  .toast.err{border-left-color:var(--danger);} .toast.ok{border-left-color:var(--ok);}
+  @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  @media (max-width:880px){
+    .main{flex-direction:column;}
+    .panel{width:100%;max-height:46vh;border-right:none;border-bottom:1px solid var(--line);}
+    .brand small{display:none;}
+  }
+  @media print{
+    @page{margin:12mm;}
+    body{background:#fff;} .app{display:block;height:auto;}
+    .toolbar,.panel,.stage-bar,.statusbar,.toast-wrap,.caption{display:none !important;}
+    .main,.stage,.canvas-scroll{display:block;padding:0;overflow:visible;}
+    .paper{box-shadow:none;border:none;}
+  }
+  @media (prefers-reduced-motion:reduce){ .btn:active{transform:none;} .toast{animation:none;} *{scroll-behavior:auto;} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Graph Maker <small>graphs for tests</small></div>
+    <button class="btn small" id="newBtn" type="button" title="Start a new blank graph (you can undo this)">New</button>
+    <button class="btn small" id="openBtn" type="button">Open…</button>
+    <button class="btn small" id="saveBtn" type="button" title="Save this graph as a .json file">Save</button>
+    <span class="sep"></span>
+    <button class="btn small" id="undoBtn" type="button" title="Undo">↶ Undo</button>
+    <button class="btn small" id="redoBtn" type="button" title="Redo">↷ Redo</button>
+    <div class="spacer"></div>
+    <label class="check" title="Export PNG/SVG without a white background"><input type="checkbox" id="transparent"> Transparent background</label>
+    <button class="btn" id="svgBtn" type="button">Export SVG</button>
+    <button class="btn primary" id="pngBtn" type="button">Export PNG · 300 DPI</button>
+  </header>
+
+  <div class="main">
+    <aside class="panel">
+      <nav class="tabs" id="tabs" role="tablist">
+        <button class="tab active" data-tab="graph" role="tab">Graph</button>
+        <button class="tab" data-tab="data" role="tab">Data</button>
+        <button class="tab" data-tab="axes" role="tab">Axes</button>
+        <button class="tab" data-tab="test" role="tab">Test</button>
+        <button class="tab" data-tab="style" role="tab">Style</button>
+      </nav>
+      <div class="tabbody">
+
+        <!-- GRAPH -->
+        <section class="pane" data-pane="graph">
+          <div>
+            <h3 class="section-title">Graph type</h3>
+            <div class="types" id="types"></div>
+          </div>
+          <div>
+            <label class="lab" for="title">Title</label>
+            <input class="in" id="title" type="text" data-bind="title" placeholder="e.g. Temperature of Water Over Time">
+          </div>
+          <div data-show="coordinate">
+            <h3 class="section-title">Grid layout</h3>
+            <div class="seg" data-seg="quadrants">
+              <button type="button" data-v="1">One quadrant</button>
+              <button type="button" data-v="4">Four quadrants</button>
+            </div>
+            <p class="hint" style="margin-top:8px">Coordinate grids keep square cells, so a 10 × 10 grid stays 10 × 10 squares.</p>
+          </div>
+          <div>
+            <h3 class="section-title">Printed size</h3>
+            <select id="sizePreset" aria-label="Size preset"></select>
+            <div class="row" style="margin-top:8px">
+              <div><label class="lab" for="sizeW">Width (mm)</label><input id="sizeW" type="number" min="20" max="400" step="1"></div>
+              <div><label class="lab" for="sizeH">Height (mm)</label><input id="sizeH" type="number" min="20" max="400" step="1"></div>
+            </div>
+            <p class="hint" style="margin-top:8px">Sizes are real print sizes. Full and half width fit a letter or A4 test with normal margins.</p>
+          </div>
+          <div>
+            <label class="lab" for="legend">Legend position</label>
+            <select id="legend" data-bind="legend">
+              <option value="right">Right</option><option value="top">Top</option><option value="bottom">Bottom</option>
+              <option value="inside">Inside the graph</option><option value="none">No legend</option>
+            </select>
+            <p class="hint" style="margin-top:6px">The legend appears when there are two or more series.</p>
+          </div>
+        </section>
+
+        <!-- DATA -->
+        <section class="pane" data-pane="data" hidden>
+          <div class="row tight" style="flex-wrap:wrap">
+            <button class="btn small" id="addRow" type="button">+ Row</button>
+            <button class="btn small" id="addSeries" type="button">+ Series</button>
+            <button class="btn small" id="pasteBtn" type="button">Paste from spreadsheet…</button>
+          </div>
+          <div class="tblwrap" id="tblwrap"></div>
+          <p class="hint" data-show="bar" hidden>Bar graphs: the first column holds the category names; each series is a set of bars.</p>
+          <p class="hint">You can also paste straight into a cell: a block copied from Excel or Google Sheets fills in from that cell. Enter moves down. Red cells aren’t numbers and are left off the graph.</p>
+        </section>
+
+        <!-- AXES -->
+        <section class="pane" data-pane="axes" hidden id="axesPane"></section>
+
+        <!-- TEST -->
+        <section class="pane" data-pane="test" hidden id="testPane"></section>
+
+        <!-- STYLE -->
+        <section class="pane" data-pane="style" hidden id="stylePane"></section>
+
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="stage-bar">
+        <div class="seg" id="viewSeg" role="group" aria-label="Preview version">
+          <button type="button" data-view="key" class="active">Answer key</button>
+          <button type="button" data-view="question">Question</button>
+        </div>
+        <span class="hint" id="viewHint"></span>
+      </div>
+      <div class="canvas-scroll">
+        <div class="paper" id="preview"></div>
+        <p class="caption" id="caption"></p>
+      </div>
+      <div class="statusbar" id="status"></div>
+    </section>
+  </div>
+</div>
+
+<dialog id="pasteDlg">
+  <h3>Paste from a spreadsheet</h3>
+  <p class="hint" style="margin-bottom:10px">Copy cells in Excel or Google Sheets and paste them here. This replaces the table.
+    A header row like <b>Time (min)</b> fills in the axis label and unit. For coordinate grids and scatter plots,
+    a first column of names (A, B, C…) becomes point labels.</p>
+  <textarea id="pasteText" placeholder="Paste here…" spellcheck="false"></textarea>
+  <div class="btns">
+    <button class="btn" id="pasteCancel" type="button">Cancel</button>
+    <button class="btn primary" id="pasteOk" type="button">Replace table</button>
+  </div>
+</dialog>
+<input type="file" id="fileIn" accept=".json,application/json" hidden>
+<div class="toast-wrap" id="toasts" aria-live="polite"></div>
+<script id="core">
+/* ==========================================================================
+   CORE — pure functions, no DOM. Everything the tool "knows" lives here:
+   the spec schema, nice-number axis maths, paste parsing and the SVG renderer.
+   graph-maker.test.js loads this block on its own and tests it in Node.
+   ========================================================================== */
+const SPEC_VERSION = 1;
+
+/* ---------- constants ---------- */
+const TYPES = ['coordinate', 'line', 'scatter', 'bar'];
+const TYPE_NAMES = { coordinate: 'Coordinate grid', line: 'Line graph', scatter: 'Scatter plot', bar: 'Bar graph' };
+const LABELLED_TYPES = ['coordinate', 'scatter'];           // types with a per-point Label column
+const SIZES = {                                             // real units: millimetres
+  full:    { w: 165, h: 105, name: 'Full width' },
+  half:    { w: 82,  h: 68,  name: 'Half width' },
+  quarter: { w: 40,  h: 36,  name: 'Quarter width' }
+};
+const MARKERS = ['circle', 'square', 'triangle', 'diamond', 'cross', 'plus', 'ring'];
+const MARKER_NAMES = { circle: '● Circle', square: '■ Square', triangle: '▲ Triangle', diamond: '◆ Diamond',
+                       cross: '✕ Cross', plus: '＋ Plus', ring: '○ Open circle' };
+const DASHES = { solid: '', dashed: '2.6 1.3', dotted: '0.7 1', dashdot: '2.6 1 0.7 1' };
+const DASH_NAMES = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', dashdot: 'Dash-dot' };
+const HATCHES = ['grey', 'diag', 'dots', 'diagr', 'horiz', 'cross', 'vert', 'black', 'white'];
+const HATCH_NAMES = { grey: 'Light grey', diag: 'Diagonal /', dots: 'Dots', diagr: 'Diagonal \\', horiz: 'Horizontal',
+                      cross: 'Cross-hatch', vert: 'Vertical', black: 'Solid black', white: 'Plain white' };
+const PALETTE = ['#0072b2', '#d55e00', '#009e73', '#cc79a7', '#e69f00', '#56b4e9', '#7a5195', '#666666'];
+const MAX_SERIES = 8, MAX_ROWS = 500;
+const LEGENDS = ['right', 'top', 'bottom', 'inside', 'none'];
+const FONT = "Arial, Helvetica, 'Liberation Sans', sans-serif";   // system fonts only
+
+/* Show/hide tokens. `hidden` in the spec lists what the QUESTION version hides;
+   the answer key always shows everything. */
+const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'legend', 'pointLabels', 'data'];
+const BLANK_TOKENS = ['title', 'xTitle', 'yTitle', 'units'];
+const SCAFFOLD_LEVELS = ['complete', 'labels', 'axes', 'blank'];
+const SCAFFOLD = {   // visibility presets over the same spec — not separate code paths
+  complete: [],
+  labels:   ['data'],
+  axes:     ['data', 'legend', 'title', 'xTitle', 'yTitle', 'units'],
+  blank:    ['data', 'legend', 'title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks']
+};
+
+/* ---------- small helpers ---------- */
+const clean = v => { const n = +Number(v).toPrecision(12); return Object.is(n, -0) ? 0 : n; };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const f3 = v => +Number(v).toFixed(3);
+const isBlank = v => v === null || v === undefined || v === '';
+
+/* Strict number parse: NaN for anything that isn't plainly a number. */
+function parseNum(v) {
+  if (typeof v === 'number') return v;
+  if (v === null || v === undefined) return NaN;
+  const s = String(v).trim().replace(/−/g, '-');
+  return /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s) ? Number(s) : NaN;
+}
+
+/* A table cell is null, a finite number, or a (non-numeric) string. */
+function cellFromText(s, asText) {
+  const t = String(s).trim();
+  if (t === '') return null;
+  if (asText) return t;
+  const n = parseNum(t);
+  return Number.isNaN(n) ? t : n;
+}
+function cellClean(v) {
+  if (isBlank(v)) return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  return String(v);
+}
+
+/* ---------- Helvetica/Arial text widths (per 1000 em, chars 32–126) ---------- */
+const HW = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,
+  556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,
+  667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,
+  278,278,278,469,556,333,
+  556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,
+  334,260,334,584];
+function textW(s, fs, bold) {
+  let w = 0;
+  for (const ch of String(s)) { const c = ch.charCodeAt(0); w += (c >= 32 && c <= 126) ? HW[c - 32] : 600; }
+  return w / 1000 * fs * (bold ? 1.07 : 1);
+}
+function fitText(s, maxW, fs, bold) {
+  s = String(s);
+  if (textW(s, fs, bold) <= maxW) return s;
+  while (s.length > 1 && textW(s + '…', fs, bold) > maxW) s = s.slice(0, -1);
+  return s + '…';
+}
+function wrapText(s, maxW, fs, bold, maxLines) {
+  const words = String(s).split(/\s+/).filter(Boolean);
+  const lines = []; let cur = '';
+  for (let w of words) {
+    while (textW(w, fs, bold) > maxW && w.length > 1) {          // break an over-long word
+      let k = w.length - 1; while (k > 1 && textW(w.slice(0, k), fs, bold) > maxW) k--;
+      if (cur) { lines.push(cur); cur = ''; }
+      lines.push(w.slice(0, k)); w = w.slice(k);
+    }
+    const t = cur ? cur + ' ' + w : w;
+    if (textW(t, fs, bold) <= maxW || !cur) cur = t; else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { const rest = lines.slice(maxLines - 1).join(' '); lines.length = maxLines - 1; lines.push(fitText(rest, maxW, fs, bold)); }
+  return lines.length ? lines : [''];
+}
+
+/* ==========================================================================
+   Nice numbers (steps of 1, 2 or 5 × 10ⁿ)
+   ========================================================================== */
+function niceStep(raw) {
+  if (!(raw > 0) || !isFinite(raw)) return 1;
+  const e = Math.floor(Math.log10(raw));
+  const f = raw / 10 ** e;
+  const nf = f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10;
+  return clean(nf * 10 ** e);
+}
+/* Smallest 1/2/5 x 10^n that is at least `raw` — for "no closer than this" rules. */
+function niceCeil(raw) {
+  if (!(raw > 0) || !isFinite(raw)) return 1;
+  const e = Math.floor(Math.log10(raw)), f = raw / 10 ** e;
+  return clean((f <= 1 + 1e-9 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * 10 ** e);
+}
+function niceRange(min, max, target) {
+  if (!(max > min)) max = min + 1;
+  const step = niceStep((max - min) / Math.max(1, target));
+  let lo = clean(Math.floor(min / step + 1e-9) * step);
+  let hi = clean(Math.ceil(max / step - 1e-9) * step);
+  if (hi <= lo) hi = clean(lo + step);
+  return { lo, hi, step };
+}
+/* One axis: data extent + optional manual min/max/step (null = auto) → lo/hi/step. */
+function resolveAxis(a, ext, o) {
+  let dLo, dHi;
+  if (o.mode === 'four') {
+    const m = ext ? Math.max(Math.abs(ext.min), Math.abs(ext.max)) : 0;
+    dHi = m > 0 ? m : 10; dLo = -dHi;
+  } else if (o.mode === 'one') {
+    dLo = 0; dHi = ext && ext.max > 0 ? ext.max : 10;
+  } else {
+    dLo = ext ? ext.min : 0; dHi = ext ? ext.max : 10;
+    if (o.forceZero) { dLo = Math.min(dLo, 0); dHi = Math.max(dHi, 0); }
+    else if (dLo > 0 && dLo <= 0.5 * dHi) dLo = 0;          // start at zero unless the data sit well above it
+  }
+  let tLo = a.min !== null ? a.min : dLo;
+  let tHi = a.max !== null ? a.max : dHi;
+  if (!(tHi > tLo)) tHi = tLo + 1;
+  let step = a.step > 0 ? a.step : niceStep((tHi - tLo) / Math.max(3, o.target));
+  if ((tHi - tLo) / step > 200) step = niceStep((tHi - tLo) / 20);
+  const lo = a.min !== null ? a.min : clean(Math.floor(tLo / step + 1e-9) * step);
+  let hi = a.max !== null ? a.max : clean(Math.ceil(tHi / step - 1e-9) * step);
+  if (!(hi > lo)) hi = clean(lo + step);
+  return { lo, hi, step, minor: a.minorPerMajor };
+}
+function ticks(ax) {
+  const out = [], n = Math.round((ax.hi - ax.lo) / ax.step + 1e-9);
+  for (let i = 0; i <= n; i++) { const v = clean(ax.lo + i * ax.step); if (v <= ax.hi + ax.step * 1e-9) out.push(v); }
+  return out;
+}
+function decimals(v) {
+  const s = String(clean(v));
+  if (/e-/.test(s)) return 6;
+  const i = s.indexOf('.');
+  return i < 0 ? 0 : Math.min(6, s.length - i - 1);
+}
+/* Index of the tick that thinned labels line up on: zero when the axis crosses it, else the first tick. */
+function anchorIndex(ax) {
+  const i = Math.round((0 - ax.lo) / ax.step);
+  return i >= 0 && Math.abs(ax.lo + i * ax.step) < ax.step * 1e-6 && ax.lo + i * ax.step <= ax.hi ? i : 0;
+}
+function fmtTick(v, ax) {
+  const d = Math.max(decimals(ax.lo), decimals(ax.step));
+  let s = v.toFixed(d);
+  if (/^-0(\.0+)?$/.test(s)) s = s.slice(1);
+  return s.replace('-', '−');
+}
+
+/* ==========================================================================
+   Spec: defaults, normalisation (the one place the schema is defined), files
+   ========================================================================== */
+function newSeries(k) {
+  return { name: 'Series ' + (k + 1), marker: MARKERS[k % MARKERS.length],
+           dash: Object.keys(DASHES)[k % 4], hatch: HATCHES[k % 8] };
+}
+function emptyRow(spec) { return { x: null, ys: spec.series.map(() => null), label: '' }; }
+
+function blankSpec() {
+  const spec = {
+    specVersion: SPEC_VERSION, type: 'line', title: '', size: { preset: 'full' }, quadrants: 4,
+    x: { label: '', unit: '', min: null, max: null, step: null, minorPerMajor: 2 },
+    y: { label: '', unit: '', min: null, max: null, step: null, minorPerMajor: 2 },
+    axes: 'edges', grid: { major: true, minor: true }, legend: 'right',
+    series: [newSeries(0)], rows: [], hidden: [], blanks: [],
+    style: { colour: false, lineMarkers: true }
+  };
+  for (let i = 0; i < 6; i++) spec.rows.push(emptyRow(spec));
+  return normalize(spec);
+}
+function sampleSpec() {
+  const spec = blankSpec();
+  spec.title = 'Temperature of Water Over Time';
+  spec.x.label = 'Time'; spec.x.unit = 'min';
+  spec.y.label = 'Temperature'; spec.y.unit = '°C';
+  spec.series = [Object.assign(newSeries(0), { name: 'Beaker A' }), Object.assign(newSeries(1), { name: 'Beaker B' })];
+  const A = [20, 27, 35, 42, 50, 57, 63, 70, 74, 78, 80], B = [20, 24, 29, 33, 38, 42, 46, 49, 53, 56, 58];
+  spec.rows = A.map((a, i) => ({ x: i, ys: [a, B[i]], label: '' }));
+  return normalize(spec);
+}
+
+/* normalize(anything) → a complete, valid spec with keys in a fixed order.
+   Idempotent, so save → load → save gives byte-identical JSON. */
+function normalize(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const str = (v, d) => typeof v === 'string' ? v : d;
+  const pick = (v, list, d) => list.includes(v) ? v : d;
+  const numOrNull = v => (v === null || v === undefined || v === '' || !Number.isFinite(+v)) ? null : +v;
+  const int = (v, a, b, d) => Number.isFinite(+v) && v !== null && v !== '' ? clamp(Math.round(+v), a, b) : d;
+  const bool = (v, d) => typeof v === 'boolean' ? v : d;
+  const axis = a => {
+    a = a && typeof a === 'object' ? a : {};
+    const step = numOrNull(a.step);
+    return { label: str(a.label, ''), unit: str(a.unit, ''), min: numOrNull(a.min), max: numOrNull(a.max),
+             step: step > 0 ? step : null, minorPerMajor: int(a.minorPerMajor, 1, 10, 2) };
+  };
+  const sz = r.size && typeof r.size === 'object' ? r.size : {};
+  const size = sz.preset === 'custom'
+    ? { preset: 'custom', w: clamp(numOrNull(sz.w) ?? 165, 20, 400), h: clamp(numOrNull(sz.h) ?? 105, 20, 400) }
+    : { preset: pick(sz.preset, Object.keys(SIZES), 'full') };
+
+  let series = (Array.isArray(r.series) ? r.series : []).slice(0, MAX_SERIES).map((s, k) => {
+    s = s && typeof s === 'object' ? s : {};
+    return { name: str(s.name, 'Series ' + (k + 1)), marker: pick(s.marker, MARKERS, MARKERS[k % MARKERS.length]),
+             dash: pick(s.dash, Object.keys(DASHES), Object.keys(DASHES)[k % 4]), hatch: pick(s.hatch, HATCHES, HATCHES[k % 8]) };
+  });
+  if (!series.length) series = [newSeries(0)];
+  const nS = series.length;
+  const rows = (Array.isArray(r.rows) ? r.rows : []).slice(0, MAX_ROWS).map(row => {
+    row = row && typeof row === 'object' ? row : {};
+    const ys = Array.isArray(row.ys) ? row.ys : [];
+    return { x: cellClean(row.x), ys: series.map((_, j) => cellClean(ys[j])), label: str(row.label, '') };
+  });
+  if (!rows.length) rows.push({ x: null, ys: series.map(() => null), label: '' });
+
+  const seen = new Set();
+  const hidden = (Array.isArray(r.hidden) ? r.hidden : []).filter(t => {
+    if (typeof t !== 'string' || seen.has(t)) return false;
+    let m, ok = ELEMENT_TOKENS.includes(t);
+    if ((m = /^series:(\d+)$/.exec(t))) ok = +m[1] < nS;
+    else if ((m = /^pt:(\d+):(\d+)$/.exec(t))) ok = +m[1] < nS && +m[2] < rows.length;
+    if (ok) seen.add(t);
+    return ok;
+  });
+  const blanks = [...new Set(Array.isArray(r.blanks) ? r.blanks : [])].filter(t => BLANK_TOKENS.includes(t));
+  const grid = r.grid && typeof r.grid === 'object' ? r.grid : {};
+  const style = r.style && typeof r.style === 'object' ? r.style : {};
+  return {
+    specVersion: SPEC_VERSION,
+    type: pick(r.type, TYPES, 'line'),
+    title: str(r.title, ''),
+    size,
+    quadrants: r.quadrants === 1 ? 1 : 4,
+    x: axis(r.x), y: axis(r.y),
+    axes: pick(r.axes, ['edges', 'origin'], 'edges'),
+    grid: { major: bool(grid.major, true), minor: bool(grid.minor, true) },
+    legend: pick(r.legend, LEGENDS, 'right'),
+    series, rows, hidden, blanks,
+    style: { colour: bool(style.colour, false), lineMarkers: bool(style.lineMarkers, true) }
+  };
+}
+
+/* Older files get migrated here as the schema grows (nothing to do for v1). */
+function migrate(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.specVersion !== 'number') throw new Error('This file is not a Graph Maker graph.');
+  if (raw.specVersion > SPEC_VERSION) throw new Error('This graph was saved by a newer version of the tool (specVersion ' + raw.specVersion + ').');
+  return raw;
+}
+const serialize = spec => JSON.stringify(normalize(spec), null, 2);
+const parseFile = text => normalize(migrate(JSON.parse(text)));
+
+function sizeMM(size) {
+  if (size.preset === 'custom') return { w: size.w, h: size.h };
+  const s = SIZES[size.preset] || SIZES.full;
+  return { w: s.w, h: s.h };
+}
+const mmToPx = (mm, dpi) => Math.round(mm / 25.4 * dpi);
+
+function scaffoldLevel(spec) {
+  const h = [...spec.hidden].sort().join('|');
+  return SCAFFOLD_LEVELS.find(k => [...SCAFFOLD[k]].sort().join('|') === h) || 'custom';
+}
+/* Removing series i (kind 'series') or row i (kind 'row') must renumber the tokens that point at them. */
+function dropIndex(spec, kind, idx) {
+  spec.hidden = spec.hidden.flatMap(t => {
+    let m;
+    if ((m = /^series:(\d+)$/.exec(t))) {
+      if (kind !== 'series') return [t];
+      const s = +m[1]; return s === idx ? [] : [s > idx ? 'series:' + (s - 1) : t];
+    }
+    if ((m = /^pt:(\d+):(\d+)$/.exec(t))) {
+      let s = +m[1], r = +m[2];
+      if (kind === 'series') { if (s === idx) return []; if (s > idx) s--; }
+      else { if (r === idx) return []; if (r > idx) r--; }
+      return ['pt:' + s + ':' + r];
+    }
+    return [t];
+  });
+}
+
+/* ==========================================================================
+   Spreadsheet paste (tab-separated, as copied from Excel / Google Sheets)
+   ========================================================================== */
+function parseTSV(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  text = String(text).replace(/\r\n?/g, '\n');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"' && cell === '') q = true;
+    else if (c === '\t') { row.push(cell); cell = ''; }
+    else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+const hasLabelCol = spec => LABELLED_TYPES.includes(spec.type);
+/* Table columns in display order: [Label] X Y1 Y2 … */
+function tableCols(spec) {
+  return [...(hasLabelCol(spec) ? [{ k: 'label' }] : []), { k: 'x' }, ...spec.series.map((_, i) => ({ k: 'y', i }))];
+}
+function splitUnit(h) {
+  const m = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(String(h).trim());
+  return m ? { name: m[1].trim(), unit: m[2].trim() } : { name: String(h).trim(), unit: '' };
+}
+
+/* Paste a block at (r0,c0) like a spreadsheet would: overwrite cells, grow rows and series as needed. */
+function pasteGrid(spec, grid, r0, c0) {
+  const cols = tableCols(spec), asText = spec.type === 'bar';
+  let ignored = 0;
+  grid.forEach((line, i) => {
+    const r = r0 + i;
+    if (r >= MAX_ROWS) { ignored += line.length; return; }
+    while (spec.rows.length <= r) spec.rows.push(emptyRow(spec));
+    line.forEach((txt, j) => {
+      const c = c0 + j;
+      while (c >= cols.length) {
+        if (spec.series.length >= MAX_SERIES) { ignored++; return; }
+        spec.series.push(newSeries(spec.series.length));
+        spec.rows.forEach(rw => rw.ys.push(null));
+        cols.push({ k: 'y', i: spec.series.length - 1 });
+      }
+      const col = cols[c], row = spec.rows[r];
+      if (col.k === 'label') row.label = txt.trim();
+      else if (col.k === 'x') row.x = cellFromText(txt, asText);
+      else row.ys[col.i] = cellFromText(txt, false);
+    });
+  });
+  return { ignored };
+}
+
+/* Replace the whole table from a pasted block. Recognises a header row, "Name (unit)" headers,
+   and (for coordinate/scatter) a leading text column of point labels. */
+function importGrid(spec, grid) {
+  grid = grid.filter(r => r.some(c => String(c).trim() !== ''));
+  if (!grid.length) return false;
+  const width = Math.max(...grid.map(r => r.length));
+  grid = grid.map(r => { r = r.slice(); while (r.length < width) r.push(''); return r; });
+  const asText = spec.type === 'bar';
+  const isNum = t => !Number.isNaN(parseNum(t));
+  const labelCol = hasLabelCol(spec) && width >= 3 && grid.every(r => r[0].trim() !== '' && !isNum(r[0]));
+  const xi = labelCol ? 1 : 0;
+  const yCols = []; for (let c = xi + 1; c < width && yCols.length < MAX_SERIES; c++) yCols.push(c);
+  if (!yCols.length) return false;
+  const numericCols = asText ? yCols : [xi, ...yCols];
+  const header = grid[0].some((t, c) => numericCols.includes(c) && t.trim() !== '' && !isNum(t));
+  const body = (header ? grid.slice(1) : grid).slice(0, MAX_ROWS);
+
+  const old = spec.series;
+  const series = yCols.map((c, k) => {
+    const s = Object.assign(newSeries(k), old[k] ? { marker: old[k].marker, dash: old[k].dash, hatch: old[k].hatch } : {});
+    if (header) s.name = splitUnit(grid[0][c]).name || s.name; else if (old[k]) s.name = old[k].name;
+    return s;
+  });
+  if (header) {
+    const hx = splitUnit(grid[0][xi]);
+    if (hx.name) { spec.x.label = hx.name; spec.x.unit = hx.unit; }
+    const units = yCols.map(c => splitUnit(grid[0][c]));
+    const u = units.find(h => h.unit);
+    if (u) spec.y.unit = u.unit;
+    if (yCols.length === 1 && units[0].name) spec.y.label = units[0].name;
+  }
+  spec.series = series;
+  spec.rows = body.map(row => ({
+    x: cellFromText(row[xi], asText),
+    ys: yCols.map(c => cellFromText(row[c], false)),
+    label: labelCol ? row[0].trim() : ''
+  }));
+  if (!spec.rows.length) spec.rows.push(emptyRow(spec));
+  spec.hidden = spec.hidden.filter(t => !/^(pt|series):/.test(t));    // old indices no longer mean anything
+  return true;
+}
+
+/* ==========================================================================
+   Analysis: spec → clean points/categories and resolved axes
+   ========================================================================== */
+function analyse(spec) {
+  const { w: W, h: H } = sizeMM(spec.size);
+  const isBar = spec.type === 'bar';
+  const pts = spec.series.map(() => []);       // numeric types: [{r,x,y,label}]
+  const cats = [];                             // bar: [{r,name,vals[]}]
+  spec.rows.forEach((row, r) => {
+    if (isBlank(row.x) && row.ys.every(isBlank)) return;
+    if (isBar) {
+      cats.push({ r, name: isBlank(row.x) ? '' : String(row.x),
+                  vals: row.ys.map(v => { const n = parseNum(v); return Number.isNaN(n) ? null : n; }) });
+    } else {
+      const x = parseNum(row.x);
+      row.ys.forEach((yv, j) => {
+        const y = parseNum(yv);
+        if (!Number.isNaN(x) && !Number.isNaN(y)) pts[j].push({ r, x, y, label: row.label });
+      });
+    }
+  });
+  if (spec.type === 'line') pts.forEach(p => p.sort((a, b) => a.x - b.x));   // stable: keeps table order for ties
+  const ext = arr => arr.length ? { min: Math.min(...arr), max: Math.max(...arr) } : null;
+  const all = pts.flat();
+  const extY = isBar ? ext(cats.flatMap(c => c.vals.filter(v => v !== null))) : ext(all.map(p => p.y));
+  const mode = spec.type === 'coordinate' ? (spec.quadrants === 1 ? 'one' : 'four') : null;
+  let ax, ay;
+  if (mode) {
+    /* A coordinate plane uses one range and one step on both axes so its squares are square. */
+    const M = Math.max(0, ...all.flatMap(p => [Math.abs(p.x), Math.abs(p.y)])) || 10;
+    const shared = mode === 'four' ? { min: -M, max: M } : { min: 0, max: M };
+    const mmPerUnit = Math.min(W - 30, H - 30) / (mode === 'four' ? 2 * M : M);
+    const step = spec.x.step || spec.y.step || niceCeil(3.5 / mmPerUnit);    // gridlines at least ~3.5 mm apart
+    ax = resolveAxis(Object.assign({}, spec.x, { step: spec.x.step || step }), shared, { target: 10, mode });
+    ay = resolveAxis(Object.assign({}, spec.y, { step: spec.y.step || step }), shared, { target: 10, mode });
+  } else {
+    const tx = clamp(Math.round((W - 30) / 12), 4, 40), ty = clamp(Math.round((H - 30) / 12), 4, 40);   // ~1 major tick per 12 mm
+    ax = isBar ? null : resolveAxis(spec.x, ext(all.map(p => p.x)), { target: tx });
+    ay = resolveAxis(spec.y, extY, { target: ty, forceZero: isBar });
+  }
+  return { W, H, isBar, pts, cats, ax, ay, mode };
+}
+const computeAxes = spec => { const a = analyse(spec); return { x: a.ax, y: a.ay }; };
+
+/* ==========================================================================
+   SVG renderer — the only renderer. Units are millimetres (viewBox = size in mm),
+   so text and line weights are real print sizes.
+   ========================================================================== */
+const FS = 3.2, FT = 2.8, FH = 4.2, PAD = 2.5, TICK = 1.1;
+
+function markerSVG(kind, cx, cy, r, col) {
+  const p = a => a.map(v => f3(v)).join(',');
+  switch (kind) {
+    case 'square':   return `<rect x="${f3(cx - r * .9)}" y="${f3(cy - r * .9)}" width="${f3(r * 1.8)}" height="${f3(r * 1.8)}" fill="${col}"/>`;
+    case 'triangle': return `<polygon points="${p([cx, cy - r * 1.25])} ${p([cx + r * 1.15, cy + r * .85])} ${p([cx - r * 1.15, cy + r * .85])}" fill="${col}"/>`;
+    case 'diamond':  return `<polygon points="${p([cx, cy - r * 1.3])} ${p([cx + r * 1.3, cy])} ${p([cx, cy + r * 1.3])} ${p([cx - r * 1.3, cy])}" fill="${col}"/>`;
+    case 'cross':    return `<path d="M${p([cx - r, cy - r])}L${p([cx + r, cy + r])}M${p([cx - r, cy + r])}L${p([cx + r, cy - r])}" stroke="${col}" stroke-width=".55" fill="none"/>`;
+    case 'plus':     return `<path d="M${p([cx - r * 1.2, cy])}L${p([cx + r * 1.2, cy])}M${p([cx, cy - r * 1.2])}L${p([cx, cy + r * 1.2])}" stroke="${col}" stroke-width=".55" fill="none"/>`;
+    case 'ring':     return `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(r * .9)}" fill="#fff" stroke="${col}" stroke-width=".5"/>`;
+    default:         return `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(r)}" fill="${col}"/>`;
+  }
+}
+/* Bar fills: hatch patterns keep series apart on a black-and-white photocopy. */
+function hatchFill(id, kind) {
+  const solid = { grey: '#a6a6a6', black: '#222', white: '#fff' };
+  if (solid[kind]) return { fill: solid[kind], def: '' };
+  const t = 1.5, sw = .32, m = t / 2;
+  const line = `<line x1="${m}" y1="0" x2="${m}" y2="${t}" stroke="#000" stroke-width="${sw}"/>`;
+  const hline = `<line x1="0" y1="${m}" x2="${t}" y2="${m}" stroke="#000" stroke-width="${sw}"/>`;
+  const pat = (inner, tf) => `<pattern id="${id}" width="${t}" height="${t}" patternUnits="userSpaceOnUse"${tf ? ` patternTransform="${tf}"` : ''}><rect width="${t}" height="${t}" fill="#fff"/>${inner}</pattern>`;
+  const inner = { diag: [line, 'rotate(45)'], diagr: [line, 'rotate(-45)'], vert: [line], horiz: [line, 'rotate(90)'],
+                  cross: [line + hline, 'rotate(45)'], dots: [`<circle cx="${m}" cy="${m}" r=".36"/>`] }[kind] || [line];
+  return { fill: `url(#${id})`, def: pat(inner[0], inner[1]) };
+}
+
+function legendLayout(names, pos, maxW) {
+  const symW = 7, gap = 1.6, rowH = FS * 1.55;
+  const cap = Math.max(12, maxW);
+  const items = names.map(n => { const nm = fitText(n, cap - symW - gap, FS); return { name: nm, w: symW + gap + textW(nm, FS) }; });
+  if (pos === 'right' || pos === 'inside') {
+    items.forEach((it, i) => { it.x = 0; it.y = i * rowH; });
+    return { w: Math.max(...items.map(i => i.w)), h: items.length * rowH, items, rowH, symW, gap };
+  }
+  let x = 0, y = 0, wMax = 0;                                       // top / bottom: flow left to right
+  items.forEach(it => {
+    if (x > 0 && x + it.w > cap) { x = 0; y += rowH; }
+    it.x = x; it.y = y; x += it.w + 4; wMax = Math.max(wMax, x - 4);
+  });
+  return { w: wMax, h: y + rowH, items, rowH, symW, gap };
+}
+
+/* o: { version:'key'|'question', ghost, hits, background:'white'|'none', px:{w,h}|null, id, xmlHeader } */
+function renderSVG(spec, o) {
+  o = Object.assign({ version: 'key', ghost: false, hits: false, background: 'white', px: null, id: 'g', xmlHeader: false }, o);
+  const A = analyse(spec);
+  const { W, H, isBar, pts, cats, ax, ay } = A;
+  const isQ = o.version === 'question';
+  const hid = new Set(isQ ? spec.hidden : []);
+  const blk = new Set(isQ ? spec.blanks : []);
+  const ghost = new Set(!isQ && o.ghost ? spec.hidden.filter(t => /^(pt|series):/.test(t)) : []);
+  const colour = spec.style.colour, nS = spec.series.length;
+  const out = [];
+
+  /* ----- tick labels ----- */
+  const xT = isBar ? [] : ticks(ax), yT = ticks(ay);
+  const xL = xT.map(v => fmtTick(v, ax)), yL = yT.map(v => fmtTick(v, ay));
+  const yLabW = Math.max(0, ...yL.map(s => textW(s, FT)));
+
+  /* ----- axis placement ----- */
+  const origin = spec.axes === 'origin';
+  const xAxisV = isBar ? clamp(0, ay.lo, ay.hi) : (origin ? clamp(0, ay.lo, ay.hi) : ay.lo);   // y-value where the x axis sits
+  const yAxisV = isBar ? null : (origin ? clamp(0, ax.lo, ax.hi) : ax.lo);                     // x-value where the y axis sits
+  const xAtBottom = isBar || xAxisV === ay.lo;
+  const yAtLeft = isBar || yAxisV === ax.lo;
+  const interior = !xAtBottom && !yAtLeft;
+
+  /* ----- what exists (space is reserved whether or not the question version hides it) ----- */
+  const axisHas = a => !!(a.label || a.unit);
+  const titleLines = spec.title ? wrapText(spec.title, W - 2 * PAD, FH, true, 2) : [];
+  const titleSp = spec.title ? titleLines.length * FH * 1.25 + 1.8 : 0;
+  const xTitleSp = axisHas(spec.x) ? FS * 1.35 + 1.4 : 0;
+  const yTitleSp = axisHas(spec.y) ? FS * 1.35 + 1.4 : 0;
+  const legendOn = nS >= 2 && spec.legend !== 'none';
+  const lpos = spec.legend;
+  const names = spec.series.map((s, j) => s.name || 'Series ' + (j + 1));
+  const legend = legendOn ? legendLayout(names, lpos, lpos === 'right' || lpos === 'inside' ? W * .32 : W - 2 * PAD) : null;
+  const legR = legendOn && lpos === 'right' ? legend.w + 3 : 0;
+  const legT = legendOn && lpos === 'top' ? legend.h + 2 : 0;
+  const legB = legendOn && lpos === 'bottom' ? legend.h + 2 : 0;
+
+  /* ----- margins → available plot rectangle ----- */
+  const halfFirst = xL.length ? textW(xL[0], FT) / 2 : 0, halfLast = xL.length ? textW(xL[xL.length - 1], FT) / 2 : 0;
+  const yTickSp = yAtLeft ? yLabW + TICK + 1.4 : halfFirst + .8;       // interior axis: just keep the title clear of the corner label
+  const L = PAD + yTitleSp + yTickSp;
+  const R = PAD + legR + halfLast;
+  const T = PAD + titleSp + legT + FT * .6;
+  let catLines = [], bandW = 0;
+  if (isBar) {
+    bandW = (W - L - R) / Math.max(1, cats.length);
+    catLines = cats.map(c => wrapText(c.name, Math.max(6, bandW - 1.2), FT, false, 3));
+  }
+  const xTickSp = xAtBottom ? TICK + 1.3 + (isBar ? Math.max(1, ...catLines.map(l => l.length)) : 1) * FT * 1.15 : FT * .5 + .8;
+  const B = PAD + xTickSp + xTitleSp + legB;
+  let x0 = L, x1 = W - R, y0 = T, y1 = H - B;
+  if (x1 - x0 < 12) x1 = x0 + 12;
+  if (y1 - y0 < 12) y1 = y0 + 12;
+  if (A.mode) {                                                     // coordinate grid: equal scale so squares stay square
+    const s = Math.min((x1 - x0) / (ax.hi - ax.lo), (y1 - y0) / (ay.hi - ay.lo));
+    const pw = s * (ax.hi - ax.lo), ph = s * (ay.hi - ay.lo);
+    x0 = x0 + ((x1 - x0) - pw) / 2; x1 = x0 + pw; y1 = y0 + ph;
+  }
+  const sx = v => x0 + (v - ax.lo) / (ax.hi - ax.lo) * (x1 - x0);
+  const sy = v => y1 - (v - ay.lo) / (ay.hi - ay.lo) * (y1 - y0);
+  const xAx = isBar ? x0 : sx(yAxisV), yAx = sy(xAxisV);
+
+  const txt = (x, y, s, opt) => {
+    opt = opt || {};
+    const rot = opt.rot ? ` transform="rotate(${opt.rot} ${f3(x)} ${f3(y)})"` : '';
+    return `<text x="${f3(x)}" y="${f3(y)}" font-size="${opt.fs || FS}" text-anchor="${opt.anchor || 'middle'}"${opt.bold ? ' font-weight="bold"' : ''}${rot}>${esc(s)}</text>`;
+  };
+
+  /* ----- gridlines ----- */
+  const minorPath = [], majorPath = [];
+  const gridLines = (axis, isX) => {
+    const m = axis.minor, n = Math.round((axis.hi - axis.lo) / (axis.step / m) + 1e-9);
+    for (let i = 0; i <= n; i++) {
+      const v = clean(axis.lo + i * axis.step / m), major = i % m === 0;
+      if (major ? !spec.grid.major : !spec.grid.minor) continue;
+      const d = isX ? `M${f3(sx(v))},${f3(y0)}V${f3(y1)}` : `M${f3(x0)},${f3(sy(v))}H${f3(x1)}`;
+      (major ? majorPath : minorPath).push(d);
+    }
+  };
+  if (!isBar) gridLines(ax, true);
+  gridLines(ay, false);
+  if (minorPath.length) out.push(`<path d="${minorPath.join('')}" stroke="#c4c4c4" stroke-width=".12" fill="none"/>`);
+  if (majorPath.length) out.push(`<path d="${majorPath.join('')}" stroke="#8c8c8c" stroke-width=".22" fill="none"/>`);
+
+  /* ----- axis lines / frame ----- */
+  if (!origin) out.push(`<rect x="${f3(x0)}" y="${f3(y0)}" width="${f3(x1 - x0)}" height="${f3(y1 - y0)}" fill="none" stroke="#555" stroke-width=".3"/>`);
+  out.push(`<path d="M${f3(x0)},${f3(yAx)}H${f3(x1)}M${f3(xAx)},${f3(y0)}V${f3(y1)}" stroke="#000" stroke-width=".5" fill="none"/>`);
+  if (origin && !isBar) {                                            // arrowheads on an axes-through-origin plane
+    out.push(`<path d="M${f3(x1 + .6)},${f3(yAx)}L${f3(x1 - 1.6)},${f3(yAx - .8)}V${f3(yAx + .8)}Z M${f3(xAx)},${f3(y0 - .6)}L${f3(xAx - .8)},${f3(y0 + 1.6)}H${f3(xAx + .8)}Z" fill="#000"/>`);
+  }
+  const tk = [];
+  const tin = origin ? TICK * .8 : 0, tout = origin ? TICK * .8 : TICK;
+  xT.forEach(v => tk.push(`M${f3(sx(v))},${f3(yAx - tin)}V${f3(yAx + tout)}`));
+  yT.forEach(v => tk.push(`M${f3(xAx - tout)},${f3(sy(v))}H${f3(xAx + tin)}`));
+  if (tk.length) out.push(`<path d="${tk.join('')}" stroke="#000" stroke-width=".35" fill="none"/>`);
+
+  /* ----- data (clipped to the plot) ----- */
+  const clipId = o.id + '-clip', defs = [];
+  const data = [], labels = [];
+  const hitAttr = (j, r) => o.hits ? ` data-pt="${j}:${r}" style="cursor:pointer"` : '';
+  const hit = (cx, cy) => o.hits ? `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="2.6" fill="transparent"/>` : '';
+  if (!hid.has('data')) spec.series.forEach((st, j) => {
+    if (hid.has('series:' + j)) return;
+    const col = colour ? PALETTE[j % PALETTE.length] : '#000';
+    const parts = [];
+    if (isBar) {
+      const groupW = bandW * .78, barW = groupW / nS, base = clamp(0, ay.lo, ay.hi);
+      const hf = colour ? { fill: col, def: '' } : hatchFill(`${o.id}-h${j}`, st.hatch);
+      if (hf.def) defs.push(hf.def);
+      cats.forEach((c, i) => {
+        const v = c.vals[j], tok = `pt:${j}:${c.r}`;
+        if (v === null || (hid.has(tok))) return;
+        const bx = x0 + i * bandW + (bandW - groupW) / 2 + j * barW;
+        const ya = sy(base), yb = sy(v);
+        parts.push(`<rect x="${f3(bx)}" y="${f3(Math.min(ya, yb))}" width="${f3(barW)}" height="${f3(Math.abs(ya - yb))}" fill="${hf.fill}" stroke="#000" stroke-width=".3"${ghost.has(tok) ? ' opacity=".3"' : ''}${hitAttr(j, c.r)}/>`);
+      });
+    } else {
+      const showLine = spec.type === 'line', showMk = spec.type !== 'line' || spec.style.lineMarkers;
+      const r = spec.type === 'coordinate' ? 1.55 : 1.35;
+      if (showLine) {                                               // hidden points break the line rather than being bridged
+        let run = [];
+        const flush = () => { if (run.length > 1) parts.push(`<polyline points="${run.join(' ')}" fill="none" stroke="${col}" stroke-width=".5" stroke-linejoin="round"${DASHES[st.dash] ? ` stroke-dasharray="${DASHES[st.dash]}"` : ''}/>`); run = []; };
+        pts[j].forEach(p => { if (hid.has(`pt:${j}:${p.r}`)) flush(); else run.push(`${f3(sx(p.x))},${f3(sy(p.y))}`); });
+        flush();
+      }
+      pts[j].forEach(p => {
+        const tok = `pt:${j}:${p.r}`;
+        if (hid.has(tok)) return;
+        const cx = sx(p.x), cy = sy(p.y), gh = ghost.has(tok) ? ' opacity=".3"' : '';
+        if (showMk || o.hits) parts.push(`<g${gh}${hitAttr(j, p.r)}>${showMk ? markerSVG(st.marker, cx, cy, r, col) : ''}${hit(cx, cy)}</g>`);
+        if (p.label && !hid.has('pointLabels') && LABELLED_TYPES.includes(spec.type) && p.x >= ax.lo && p.x <= ax.hi && p.y >= ay.lo && p.y <= ay.hi) {
+          const left = cx > x1 - 9;
+          labels.push(`<g${gh}>${txt(left ? cx - r - .9 : cx + r + .9, cy - r - .2, p.label, { anchor: left ? 'end' : 'start', bold: true })}</g>`);
+        }
+      });
+    }
+    data.push(`<g${ghost.has('series:' + j) ? ' opacity=".3"' : ''}>${parts.join('')}</g>`);
+  });
+  if (data.length) out.push(`<g clip-path="url(#${clipId})">${data.join('')}</g>`);
+  out.push(...labels);                                              // point labels sit outside the clip so edge points keep theirs
+
+  /* ----- tick labels ----- */
+  const halo = (x, y, s, anchor) => {            // white plate so labels drawn inside the plot stay legible over gridlines
+    const w = textW(s, FT) + .8, xs = anchor === 'end' ? x - w + .4 : x - w / 2;
+    return `<rect x="${f3(xs)}" y="${f3(y - FT * .85)}" width="${f3(w)}" height="${f3(FT * 1.05)}" fill="#fff"/>`;
+  };
+  const lab = [];
+  const skip0 = interior;
+  if (!hid.has('xTicks')) {
+    if (isBar) {
+      cats.forEach((c, i) => catLines[i].forEach((ln, k) => lab.push(txt(x0 + (i + .5) * bandW, y1 + TICK + 1.3 + FT * .9 + k * FT * 1.15, ln, { fs: FT }))));
+    } else {
+      const spacing = (x1 - x0) * ax.step / (ax.hi - ax.lo), kEvery = Math.max(1, Math.ceil((Math.max(...xL.map(s => textW(s, FT))) + 1.6) / spacing));
+      const anchor = anchorIndex(ax);
+      xT.forEach((v, i) => {
+        if ((i - anchor) % kEvery || (skip0 && v === 0)) return;
+        const y = yAx + TICK + 1.1 + FT * .8;
+        if (!xAtBottom) lab.push(halo(sx(v), y, xL[i], 'middle'));
+        lab.push(txt(sx(v), y, xL[i], { fs: FT }));
+      });
+    }
+  }
+  if (!hid.has('yTicks')) {
+    const spacing = (y1 - y0) * ay.step / (ay.hi - ay.lo), kEvery = Math.max(1, Math.ceil(FT * 1.25 / spacing));
+    const anchor = anchorIndex(ay);
+    yT.forEach((v, i) => {
+      if ((i - anchor) % kEvery || (skip0 && v === 0)) return;
+      const x = xAx - TICK - 1.1, y = sy(v) + FT * .35;
+      if (!yAtLeft) lab.push(halo(x, y, yL[i], 'end'));
+      lab.push(txt(x, y, yL[i], { fs: FT, anchor: 'end' }));
+    });
+  }
+  if (skip0 && !(hid.has('xTicks') && hid.has('yTicks'))) {           // one shared "0" at the origin
+    lab.push(halo(xAx - 1.3, yAx + FT * 1.1, '0', 'end'), txt(xAx - 1.3, yAx + FT * 1.1, '0', { fs: FT, anchor: 'end' }));
+  }
+  out.push(...lab);
+
+  /* ----- titles (with optional blank answer lines) ----- */
+  const under = (n) => '_'.repeat(Math.max(3, n));
+  const axisText = (a, key, maxLen) => {
+    if (!axisHas(a)) return '';
+    if (hid.has(key)) return blk.has(key) ? under(Math.min(24, Math.floor(maxLen * .6 / (FS * .556)))) : '';
+    const unit = a.unit ? (hid.has('units') ? (blk.has('units') ? '(' + under(7) + ')' : '') : '(' + a.unit + ')') : '';
+    return fitText([a.label, unit].filter(Boolean).join(' '), maxLen, FS);
+  };
+  const cxm = (x0 + x1) / 2;
+  if (spec.title) {
+    if (hid.has('title')) {
+      if (blk.has('title')) out.push(txt(cxm, PAD + FH, 'Title: ' + under(Math.min(24, Math.floor((W - 2 * PAD - textW('Title: ', FH, true)) / (FH * .556 * 1.07)))), { fs: FH, bold: true }));
+    } else titleLines.forEach((ln, k) => out.push(txt(cxm, PAD + FH * .95 + k * FH * 1.25, ln, { fs: FH, bold: true })));
+  }
+  const xt = axisText(spec.x, 'xTitle', x1 - x0), yt = axisText(spec.y, 'yTitle', y1 - y0);
+  if (xt) out.push(txt(cxm, y1 + xTickSp + FS * 1.05 + .3, xt));
+  if (yt) out.push(txt(x0 - yTickSp - 1.4, (y0 + y1) / 2, yt, { rot: -90 }));
+
+  /* ----- legend ----- */
+  if (legendOn && !hid.has('legend')) {
+    let lx, ly;
+    if (lpos === 'right') { lx = W - PAD - legend.w; ly = y0; }
+    else if (lpos === 'top') { lx = cxm - legend.w / 2; ly = PAD + titleSp; }
+    else if (lpos === 'bottom') { lx = cxm - legend.w / 2; ly = H - PAD - legend.h; }
+    else { lx = x1 - legend.w - 3.5; ly = y0 + 1.8; }
+    if (lpos === 'inside') out.push(`<rect x="${f3(lx - 1.5)}" y="${f3(ly - 1)}" width="${f3(legend.w + 3)}" height="${f3(legend.h + 1.6)}" fill="#fff" stroke="#555" stroke-width=".25"/>`);
+    legend.items.forEach((it, j) => {
+      const st = spec.series[j], col = colour ? PALETTE[j % PALETTE.length] : '#000';
+      const iy = ly + it.y + legend.rowH / 2, ix = lx + it.x, sw = legend.symW;
+      if (isBar) {
+        const hf = colour ? { fill: col } : hatchFill(`${o.id}-h${j}`, st.hatch);
+        out.push(`<rect x="${f3(ix)}" y="${f3(iy - 1.5)}" width="${sw - 1.5}" height="3" fill="${hf.fill}" stroke="#000" stroke-width=".25"/>`);
+      } else {
+        if (spec.type === 'line') out.push(`<line x1="${f3(ix)}" y1="${f3(iy)}" x2="${f3(ix + sw - 1.5)}" y2="${f3(iy)}" stroke="${col}" stroke-width=".5"${DASHES[st.dash] ? ` stroke-dasharray="${DASHES[st.dash]}"` : ''}/>`);
+        if (spec.type !== 'line' || spec.style.lineMarkers) out.push(markerSVG(st.marker, ix + (sw - 1.5) / 2, iy, 1.2, col));
+      }
+      out.push(txt(ix + sw + legend.gap, iy + FS * .35, it.name, { anchor: 'start' }));
+    });
+  }
+
+  /* ----- assemble ----- */
+  const pw = o.px ? o.px.w : W + 'mm', ph = o.px ? o.px.h : H + 'mm';
+  const name = spec.title && !hid.has('title') ? spec.title : 'Graph';       // never leak a hidden title through metadata
+  const head = (o.xmlHeader ? '<?xml version="1.0" encoding="UTF-8"?>\n' : '') +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${ph}" viewBox="0 0 ${W} ${H}" font-family="${esc(FONT)}" role="img" aria-label="${esc(name)}">`;
+  const bg = o.background === 'none' ? '' : `<rect width="${W}" height="${H}" fill="#fff"/>`;
+  return head + `<title>${esc(name)}</title>` +
+    `<defs><clipPath id="${clipId}"><rect x="${f3(x0 - 2)}" y="${f3(y0 - 2)}" width="${f3(x1 - x0 + 4)}" height="${f3(y1 - y0 + 4)}"/></clipPath>${defs.join('')}</defs>` +
+    bg + out.join('') + '</svg>';
+}
+
+/* ---------- PNG: stamp 300 DPI so Word places it at the real printed size ---------- */
+function crc32(u8) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) { crc ^= u8[i]; for (let k = 0; k < 8; k++) crc = (crc & 1) ? (crc >>> 1) ^ 0xEDB88320 : crc >>> 1; }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+function pngWithDpi(u8, dpi) {
+  const ppm = Math.round(dpi / 0.0254), chunk = new Uint8Array(21), dv = new DataView(chunk.buffer);
+  dv.setUint32(0, 9); chunk.set([0x70, 0x48, 0x59, 0x73], 4);      // "pHYs"
+  dv.setUint32(8, ppm); dv.setUint32(12, ppm); chunk[16] = 1;      // pixels per metre, unit = metre
+  dv.setUint32(17, crc32(chunk.subarray(4, 17)));
+  const out = new Uint8Array(u8.length + 21);
+  out.set(u8.subarray(0, 33)); out.set(chunk, 33); out.set(u8.subarray(33), 54);   // right after IHDR
+  return out;
+}
+</script>
+<script>
+/* ==========================================================================
+   UI — reads and writes the one `spec` object; every change goes through commit().
+   ========================================================================== */
+(function () {
+  'use strict';
+  const $ = (s, r) => (r || document).querySelector(s);
+  const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
+
+  /* ---------- state: the spec is the truth; view/pick/tab are UI-only ---------- */
+  let spec = sampleSpec();
+  const state = { view: 'key', pick: false, tab: 'graph' };
+  const hist = [JSON.stringify(spec)];
+  let idx = 0, lastKey = null, lastT = 0;
+
+  const LEVEL_INFO = {
+    complete: ['Complete graph', 'Everything visible. Use this for the answer key.'],
+    labels:   ['Axes and labels only', 'Title, axis labels and numbers stay; the data are hidden.'],
+    axes:     ['Axes without labels', 'Axis numbers stay; title, axis labels, units and legend are hidden.'],
+    blank:    ['Blank grid', 'Just the grid: no numbers, labels or data.']
+  };
+  const VIS_ROWS = [
+    ['title', 'Title', true], ['xTitle', 'X-axis title', true], ['yTitle', 'Y-axis title', true],
+    ['units', 'Units in axis titles', true], ['xTicks', 'X-axis numbers'], ['yTicks', 'Y-axis numbers'],
+    ['legend', 'Legend'], ['pointLabels', 'Point labels (A, B, C…)'], ['data', 'All data (every series)']
+  ];
+
+  const getPath = (o, p) => p.split('.').reduce((a, k) => a == null ? a : a[k], o);
+  const setPath = (o, p, v) => { const ks = p.split('.'); let a = o; for (let i = 0; i < ks.length - 1; i++) a = a[ks[i]]; a[ks[ks.length - 1]] = v; };
+
+  function toast(msg, kind) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + (kind || ''); el.textContent = msg;
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3600);
+  }
+
+  /* ---------- history: a stack of spec snapshots ---------- */
+  function commit(key, structural) {
+    const s = JSON.stringify(spec);
+    if (s !== hist[idx]) {
+      const now = Date.now();
+      if (key && key === lastKey && now - lastT < 1200 && idx === hist.length - 1) hist[idx] = s;   // merge a burst of typing
+      else { hist.length = idx + 1; hist.push(s); idx++; if (hist.length > 200) { hist.shift(); idx--; } }
+      lastKey = key; lastT = now;
+    }
+    structural ? rebuildStructure() : refresh();
+  }
+  function goto(i) {
+    if (i < 0 || i >= hist.length) return;
+    idx = i; spec = normalize(JSON.parse(hist[idx])); lastKey = null;
+    rebuildStructure();
+  }
+
+  /* ---------- structure builders (rebuilt only when rows/series/type change) ---------- */
+  const optList = (names, keys) => (keys || Object.keys(names)).map(k => `<option value="${k}">${esc(names[k])}</option>`).join('');
+
+  function buildTypes() {
+    const icons = { coordinate: '▦', line: '📈', scatter: '⁙', bar: '📊' };
+    $('#types').innerHTML = TYPES.map(t => `<button type="button" data-type="${t}"><span class="ic">${icons[t]}</span>${TYPE_NAMES[t]}</button>`).join('');
+    $('#sizePreset').innerHTML = Object.keys(SIZES).map(k => `<option value="${k}">${SIZES[k].name} — ${SIZES[k].w} × ${SIZES[k].h} mm</option>`).join('') + '<option value="custom">Custom size</option>';
+  }
+
+  function axisCard(k, title) {
+    const num = k === 'x' ? 'data-show="coordinate,line,scatter"' : '';
+    return `<div class="card"><h4>${title}</h4>
+      <div class="row">
+        <div><label class="lab">Label</label><input type="text" data-bind="${k}.label" placeholder="${k === 'x' ? 'e.g. Time' : 'e.g. Temperature'}"></div>
+        <div ${num}><label class="lab">Unit</label><input type="text" data-bind="${k}.unit" placeholder="e.g. ${k === 'x' ? 'min' : '°C'}"></div>
+      </div>
+      <div ${num}>
+        <div class="row">
+          <div><label class="lab">Min</label><input type="number" step="any" data-bind="${k}.min" data-auto="${k}.lo"></div>
+          <div><label class="lab">Max</label><input type="number" step="any" data-bind="${k}.max" data-auto="${k}.hi"></div>
+          <div><label class="lab">Step</label><input type="number" step="any" min="0" data-bind="${k}.step" data-auto="${k}.step"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label class="lab">Minor lines per step</label><input type="number" min="1" max="10" step="1" data-bind="${k}.minorPerMajor"></div>
+        </div>
+      </div></div>`;
+  }
+  function buildAxes() {
+    $('#axesPane').innerHTML = axisCard('x', 'X axis') + axisCard('y', 'Y axis') + `
+      <p class="hint">Blank Min / Max / Step use automatic “nice” values (shown in grey). Type a number to override any of them.</p>
+      <div><h3 class="section-title">Axes position</h3>
+        <div class="seg" data-seg="axes"><button type="button" data-v="edges">Along the edges</button><button type="button" data-v="origin">Through the origin</button></div></div>
+      <div><h3 class="section-title">Gridlines</h3>
+        <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="grid.major"> Major gridlines</label>
+        <label class="check"><input type="checkbox" data-bind="grid.minor"> Minor gridlines</label></div>`;
+  }
+
+  function buildTest() {
+    const rows = VIS_ROWS.filter(r => r[0] !== 'pointLabels' || LABELLED_TYPES.includes(spec.type)).map(([tok, name, blankable]) =>
+      `<label class="check"><input type="checkbox" data-vis="${tok}"> ${name}</label>` +
+      (blankable ? `<label class="check sm" data-blankwrap="${tok}"><input type="checkbox" data-blank="${tok}"> Answer line</label>` : '<span></span>')).join('');
+    const ser = spec.series.map((s, j) =>
+      `<label class="check"><input type="checkbox" data-vis="series:${j}"> <span data-text="series.${j}.name"></span></label><span></span>`).join('');
+    $('#testPane').innerHTML = `
+      <div><h3 class="section-title">Scaffold level <span class="pill" id="levelPill"></span></h3>
+        <div class="levels">${SCAFFOLD_LEVELS.map(k => `<button type="button" class="level" data-level="${k}"><b>${LEVEL_INFO[k][0]}</b><span>${LEVEL_INFO[k][1]}</span></button>`).join('')}</div>
+        <p class="hint" style="margin-top:8px">A level just picks what the <b>Question</b> version hides. Fine-tune below. The <b>Answer key</b> always shows everything.</p></div>
+      <div><h3 class="section-title">Shown in the question</h3>
+        <div class="vis"><span class="head">Item</span><span class="head">If hidden</span>${rows}</div>
+        <p class="hint" style="margin-top:8px">“Answer line” draws a blank (e.g. <b>Title: ________</b>) where a hidden label was.</p></div>
+      <div><h3 class="section-title">Series</h3><div class="vis">${ser}</div></div>
+      <div><h3 class="section-title">Individual points and bars <span class="pill" id="markPill"></span></h3>
+        <label class="check"><input type="checkbox" id="pick"> Click a point or bar in the preview to hide it</label>
+        <div class="row tight" style="margin-top:8px"><button class="btn small" type="button" data-act="showMarks">Show all points and bars</button></div>
+        <p class="hint" style="margin-top:8px">Hidden ones look faded in the Answer key and are left out of the Question.</p></div>`;
+    $('#pick').checked = state.pick;
+  }
+
+  function buildStyle() {
+    const isBar = spec.type === 'bar';
+    const cards = spec.series.map((s, j) => `<div class="card"><h4 data-text="series.${j}.name"></h4>
+      <div class="row">
+        <div><label class="lab">Name</label><input type="text" data-bind="series.${j}.name"></div>
+        ${isBar
+          ? `<div><label class="lab">Bar fill</label><select data-bind="series.${j}.hatch">${optList(HATCH_NAMES)}</select></div>`
+          : `<div><label class="lab">Marker</label><select data-bind="series.${j}.marker">${optList(MARKER_NAMES)}</select></div>`}
+        ${spec.type === 'line' ? `<div><label class="lab">Line</label><select data-bind="series.${j}.dash">${optList(DASH_NAMES)}</select></div>` : ''}
+      </div></div>`).join('');
+    $('#stylePane').innerHTML = `
+      <div><label class="check"><input type="checkbox" data-bind="style.colour"> Use colour</label>
+        <p class="hint" style="margin-top:6px">Off by default: graphs are black and white for photocopying. Series stay distinguishable without colour through marker shapes, dash patterns and hatched bar fills. With colour on, bars use solid colours.</p></div>
+      <div data-show="line"><label class="check"><input type="checkbox" data-bind="style.lineMarkers"> Show markers on lines</label></div>
+      <div><h3 class="section-title">Series</h3><div style="display:grid;gap:10px">${cards}</div></div>`;
+  }
+
+  /* ---------- data table ---------- */
+  const cellStr = v => v === null || v === undefined ? '' : String(v);
+  function badCell(col, v) {
+    if (isBlank(v)) return false;
+    if (col.k === 'label') return false;
+    if (col.k === 'x' && spec.type === 'bar') return false;
+    return Number.isNaN(parseNum(v));
+  }
+  function countBad() {
+    const cols = tableCols(spec); let n = 0;
+    spec.rows.forEach(r => cols.forEach(c => {
+      if (c.k === 'label') return;
+      if (badCell(c, c.k === 'x' ? r.x : r.ys[c.i])) n++;
+    }));
+    return n;
+  }
+  function buildTable() {
+    const cols = tableCols(spec), isBar = spec.type === 'bar', nS = spec.series.length;
+    let h = '<table class="dt"><thead><tr><th class="ix">#</th>';
+    cols.forEach(c => {
+      if (c.k === 'label') h += '<th><input class="in" value="Label" disabled aria-label="Point label column"></th>';
+      else if (c.k === 'x') h += `<th><input data-bind="x.label" placeholder="${isBar ? 'Category' : 'X name'}" aria-label="X column name"></th>`;
+      else h += `<th><div class="sh"><input data-bind="series.${c.i}.name" placeholder="Series" aria-label="Series ${c.i + 1} name"><button class="xbtn" type="button" data-act="delSeries" data-i="${c.i}" title="Remove this series" ${nS < 2 ? 'disabled hidden' : ''}>×</button></div></th>`;
+    });
+    h += '<th class="act"></th></tr><tr class="units"><th class="ix"></th>';
+    cols.forEach(c => {
+      if (c.k === 'label') h += '<th></th>';
+      else if (c.k === 'x') h += isBar ? '<th class="muted">—</th>' : '<th><input data-bind="x.unit" placeholder="unit" aria-label="X unit"></th>';
+      else if (c.i === 0) h += `<th colspan="${nS}"><input data-bind="y.unit" placeholder="unit (all series)" aria-label="Y unit"></th>`;
+    });
+    h += '<th class="act"></th></tr></thead><tbody>';
+    spec.rows.forEach((row, r) => {
+      h += `<tr><td class="ix">${r + 1}</td>`;
+      cols.forEach((c, ci) => {
+        const v = c.k === 'label' ? row.label : c.k === 'x' ? row.x : row.ys[c.i];
+        h += `<td><input data-r="${r}" data-c="${ci}" value="${esc(cellStr(v))}" inputmode="${c.k === 'label' || (c.k === 'x' && isBar) ? 'text' : 'decimal'}" autocomplete="off" aria-label="Row ${r + 1}, ${c.k === 'label' ? 'label' : c.k === 'x' ? 'x' : 'series ' + (c.i + 1)}" class="${badCell(c, v) ? 'bad' : ''}"></td>`;
+      });
+      h += `<td class="act"><button class="xbtn" type="button" data-act="delRow" data-i="${r}" title="Remove this row">×</button></td></tr>`;
+    });
+    $('#tblwrap').innerHTML = h + '</tbody></table>';
+  }
+
+  /* ---------- sync: push spec values into the controls ---------- */
+  const levelName = () => { const l = scaffoldLevel(spec); return l === 'custom' ? 'Custom' : LEVEL_INFO[l][0]; };
+  function syncControls() {
+    const auto = computeAxes(spec);
+    const active = document.activeElement;
+    $$('[data-bind]').forEach(el => {
+      const v = getPath(spec, el.dataset.bind);
+      if (el.type === 'checkbox') el.checked = !!v;
+      else if (el !== active) el.value = v === null || v === undefined ? '' : String(v);
+      if (el.dataset.auto) {
+        const [ak, af] = el.dataset.auto.split('.'), a = auto[ak];
+        el.placeholder = a ? String(af === 'step' ? a.step : fmtTick(a[af], a).replace('−', '-')) : '';
+      }
+    });
+    $$('[data-text]').forEach(el => { el.textContent = getPath(spec, el.dataset.text) || 'Series'; });
+    $$('[data-seg]').forEach(g => $$('button', g).forEach(b => b.classList.toggle('active', String(getPath(spec, g.dataset.seg)) === b.dataset.v)));
+    $$('[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === spec.type));
+    $$('[data-show]').forEach(el => { el.hidden = !el.dataset.show.split(',').includes(spec.type); });
+    const { w, h } = sizeMM(spec.size);
+    $('#sizePreset').value = spec.size.preset;
+    if (active !== $('#sizeW')) $('#sizeW').value = w;
+    if (active !== $('#sizeH')) $('#sizeH').value = h;
+    const hid = new Set(spec.hidden), level = scaffoldLevel(spec);
+    $$('[data-level]').forEach(b => b.classList.toggle('active', b.dataset.level === level));
+    const pill = $('#levelPill'); if (pill) { pill.textContent = levelName(); pill.classList.toggle('custom', level === 'custom'); }
+    $$('[data-vis]').forEach(el => { el.checked = !hid.has(el.dataset.vis); });
+    $$('[data-blank]').forEach(el => {
+      const t = el.dataset.blank; el.checked = spec.blanks.includes(t);
+      el.closest('label').classList.toggle('dis', !hid.has(t));
+    });
+    const marks = spec.hidden.filter(t => t.startsWith('pt:')).length;
+    const mp = $('#markPill'); if (mp) mp.textContent = marks ? marks + ' hidden' : 'none hidden';
+    $$('#tblwrap input[data-r]').forEach(el => {
+      const c = tableCols(spec)[+el.dataset.c];
+      el.classList.toggle('hid', c.k === 'y' && (hid.has('series:' + c.i) || hid.has(`pt:${c.i}:${el.dataset.r}`)));
+    });
+    $('#undoBtn').disabled = idx === 0; $('#redoBtn').disabled = idx === hist.length - 1;
+  }
+
+  function renderPreview() {
+    const { w, h } = sizeMM(spec.size);
+    const pick = state.pick && state.view === 'key';
+    $('#preview').innerHTML = renderSVG(spec, { version: state.view, ghost: true, hits: pick, px: { w: Math.round(w * 7.5), h: Math.round(h * 7.5) } });
+    $('#preview').classList.toggle('pick', pick);
+    $('#caption').textContent = state.view === 'key'
+      ? 'Answer key: everything is shown.'
+      : 'Question version: scaffold level “' + levelName() + '”.';
+    $('#viewHint').textContent = state.view === 'key' ? 'Editing the answer key; switch to Question to see what students get.' : 'This is what students get.';
+    $$('#viewSeg button').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
+  }
+  function renderStatus() {
+    const { w, h } = sizeMM(spec.size), bad = countBad();
+    $('#status').innerHTML = `<span><b>${w} × ${h}</b> mm</span><span class="dotline"></span>
+      <span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span><span class="dotline"></span>
+      <span>${TYPE_NAMES[spec.type]}</span>` +
+      (bad ? `<span class="dotline"></span><span class="warn">${bad} cell${bad === 1 ? ' isn’t a number and is' : 's aren’t numbers and are'} left off the graph</span>` : '');
+  }
+  function refresh() { syncControls(); renderPreview(); renderStatus(); }
+  function rebuildStructure() { buildTable(); buildTest(); buildStyle(); refresh(); }
+
+  /* ---------- actions ---------- */
+  function setType(t) {
+    if (t === spec.type) return;
+    const was = spec.type;
+    spec.type = t;
+    if (t === 'coordinate') { spec.axes = 'origin'; spec.grid.minor = false; }      // sensible defaults when entering / leaving a coordinate plane
+    else if (was === 'coordinate') { spec.axes = 'edges'; spec.grid.minor = true; }
+    commit(null, true);
+  }
+  function showQuestion() { if (state.view !== 'question') { state.view = 'question'; state.pick = false; const p = $('#pick'); if (p) p.checked = false; } }
+  function toggleToken(tok, on) {                  // on = should be HIDDEN
+    const i = spec.hidden.indexOf(tok);
+    if (on === undefined) on = i < 0;
+    if (on && i < 0) spec.hidden.push(tok); else if (!on && i >= 0) spec.hidden.splice(i, 1);
+  }
+  function addRow(focus) {
+    if (spec.rows.length >= MAX_ROWS) return toast('Row limit reached (' + MAX_ROWS + ').', 'err');
+    spec.rows.push(emptyRow(spec));
+    commit(null, true);
+    if (focus !== false) { const c = $$('#tblwrap tbody tr:last-child input')[0]; if (c) { c.focus(); c.scrollIntoView({ block: 'nearest' }); } }
+  }
+  function delRow(i) {
+    spec.rows.splice(i, 1); dropIndex(spec, 'row', i);
+    if (!spec.rows.length) spec.rows.push(emptyRow(spec));
+    commit(null, true);
+  }
+  function addSeries() {
+    if (spec.series.length >= MAX_SERIES) return toast('Series limit reached (' + MAX_SERIES + ').', 'err');
+    spec.series.push(newSeries(spec.series.length));
+    spec.rows.forEach(r => r.ys.push(null));
+    commit(null, true);
+    const th = $$('#tblwrap thead tr:first-child input[data-bind^="series."]').pop(); if (th) th.focus();
+  }
+  function delSeries(i) {
+    if (spec.series.length < 2) return;
+    spec.series.splice(i, 1); spec.rows.forEach(r => r.ys.splice(i, 1)); dropIndex(spec, 'series', i);
+    commit(null, true);
+  }
+
+  /* ---------- files ---------- */
+  const slug = () => (spec.title || 'graph').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'graph';
+  const versionSuffix = () => state.view === 'key' ? '-key' : '-q';
+  function download(name, blob) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  const bgOpt = () => $('#transparent').checked ? 'none' : 'white';
+  function exportSVG() {
+    const svg = renderSVG(spec, { version: state.view, background: bgOpt(), xmlHeader: true });
+    download(slug() + versionSuffix() + '.svg', new Blob([svg], { type: 'image/svg+xml' }));
+  }
+  async function exportPNG() {
+    try {
+      const { w, h } = sizeMM(spec.size), pw = mmToPx(w, 300), ph = mmToPx(h, 300);
+      const svg = renderSVG(spec, { version: state.view, background: bgOpt(), px: { w: pw, h: ph } });
+      const img = new Image();
+      await new Promise((ok, no) => { img.onload = ok; img.onerror = () => no(new Error('The browser could not draw the graph.')); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+      const cv = document.createElement('canvas'); cv.width = pw; cv.height = ph;
+      cv.getContext('2d').drawImage(img, 0, 0, pw, ph);
+      const blob = await new Promise(ok => cv.toBlob(ok, 'image/png'));
+      if (!blob) throw new Error('The browser could not create the PNG.');
+      const out = pngWithDpi(new Uint8Array(await blob.arrayBuffer()), 300);
+      download(slug() + versionSuffix() + '.png', new Blob([out], { type: 'image/png' }));
+    } catch (err) { toast(err.message || 'PNG export failed.', 'err'); }
+  }
+  function saveJSON() { download(slug() + '.graph.json', new Blob([serialize(spec)], { type: 'application/json' })); toast('Saved ' + slug() + '.graph.json', 'ok'); }
+  async function openFile(file) {
+    try { spec = parseFile(await file.text()); commit(null, true); toast('Opened ' + file.name, 'ok'); }
+    catch (err) { toast(err instanceof SyntaxError ? 'That file is not valid JSON.' : err.message, 'err'); }
+  }
+
+  /* ---------- events ---------- */
+  document.addEventListener('input', e => {
+    const t = e.target;
+    if (t.dataset.bind) {
+      let v;
+      if (t.type === 'checkbox') v = t.checked;
+      else if (t.type === 'number') { v = t.value.trim() === '' ? null : Number(t.value); if (v !== null && !Number.isFinite(v)) return; }
+      else v = t.value;
+      setPath(spec, t.dataset.bind, v);
+      spec = normalize(spec);
+      commit(t.dataset.bind);
+    } else if (t.dataset.r !== undefined) {                       // data-table cell
+      const col = tableCols(spec)[+t.dataset.c], row = spec.rows[+t.dataset.r];
+      if (col.k === 'label') row.label = t.value;
+      else if (col.k === 'x') row.x = cellFromText(t.value, spec.type === 'bar');
+      else row.ys[col.i] = cellFromText(t.value, false);
+      t.classList.toggle('bad', badCell(col, col.k === 'label' ? row.label : col.k === 'x' ? row.x : row.ys[col.i]));
+      commit('cell:' + t.dataset.r + ':' + t.dataset.c);
+    } else if (t.dataset.vis) {
+      toggleToken(t.dataset.vis, !t.checked); showQuestion(); commit(null);
+    } else if (t.dataset.blank) {
+      const i = spec.blanks.indexOf(t.dataset.blank);
+      if (t.checked && i < 0) spec.blanks.push(t.dataset.blank); else if (!t.checked && i >= 0) spec.blanks.splice(i, 1);
+      showQuestion(); commit(null);
+    } else if (t.id === 'pick') {
+      state.pick = t.checked; if (state.pick) state.view = 'key'; refresh();
+    } else if (t.id === 'sizePreset') {
+      spec.size = t.value === 'custom' ? { preset: 'custom', w: sizeMM(spec.size).w, h: sizeMM(spec.size).h } : { preset: t.value };
+      commit('size');
+    } else if (t.id === 'sizeW' || t.id === 'sizeH') {
+      const w = Number($('#sizeW').value), h = Number($('#sizeH').value);
+      if (w > 0 && h > 0) { spec.size = { preset: 'custom', w, h }; spec = normalize(spec); commit('size'); }
+    }
+  });
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return previewClick(e);
+    if (b.dataset.type) setType(b.dataset.type);
+    else if (b.dataset.level) { spec.hidden = [...SCAFFOLD[b.dataset.level]]; showQuestion(); commit(null); }
+    else if (b.dataset.view) { state.view = b.dataset.view; if (state.view !== 'key') { state.pick = false; const p = $('#pick'); if (p) p.checked = false; } refresh(); }
+    else if (b.dataset.tab) {
+      state.tab = b.dataset.tab;
+      $$('.tab').forEach(t => t.classList.toggle('active', t === b));
+      $$('.pane').forEach(p => { p.hidden = p.dataset.pane !== state.tab; });
+    }
+    else if (b.parentElement && b.parentElement.dataset.seg) {
+      const v = b.dataset.v; setPath(spec, b.parentElement.dataset.seg, /^\d+$/.test(v) ? Number(v) : v); commit(null);
+    }
+    else if (b.dataset.act === 'delRow') delRow(+b.dataset.i);
+    else if (b.dataset.act === 'delSeries') delSeries(+b.dataset.i);
+    else if (b.dataset.act === 'showMarks') { spec.hidden = spec.hidden.filter(t => !t.startsWith('pt:')); commit(null); }
+  });
+  function previewClick(e) {
+    const g = e.target.closest && e.target.closest('[data-pt]');
+    if (!g || !state.pick) return;
+    const [j, r] = g.dataset.pt.split(':');
+    toggleToken(`pt:${j}:${r}`); commit(null);
+  }
+
+  $('#tblwrap').addEventListener('paste', e => {
+    const t = e.target; if (t.dataset.r === undefined) return;
+    const text = e.clipboardData.getData('text');
+    if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return;          // a single value: let the browser paste it normally
+    e.preventDefault();
+    const res = pasteGrid(spec, parseTSV(text).filter((r, i, a) => i < a.length - 1 || r.some(c => c !== '')), +t.dataset.r, +t.dataset.c);
+    spec = normalize(spec); commit(null, true);
+    if (res.ignored) toast(res.ignored + ' pasted cell(s) didn’t fit and were ignored.', 'err');
+  });
+  $('#tblwrap').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.target.dataset.r === undefined) return;
+    e.preventDefault();
+    const r = +e.target.dataset.r, c = e.target.dataset.c;
+    if (r === spec.rows.length - 1) { addRow(false); }
+    const next = $(`#tblwrap input[data-r="${r + 1}"][data-c="${c}"]`);
+    if (next) { next.focus(); next.select(); }
+  });
+
+  $('#addRow').onclick = () => addRow();
+  $('#addSeries').onclick = addSeries;
+  $('#pasteBtn').onclick = () => { $('#pasteText').value = ''; $('#pasteDlg').showModal(); $('#pasteText').focus(); };
+  $('#pasteCancel').onclick = () => $('#pasteDlg').close();
+  $('#pasteOk').onclick = () => {
+    if (importGrid(spec, parseTSV($('#pasteText').value))) { spec = normalize(spec); commit(null, true); $('#pasteDlg').close(); toast('Table replaced with ' + spec.rows.length + ' rows.', 'ok'); }
+    else toast('Nothing to import: paste at least two columns.', 'err');
+  };
+  $('#newBtn').onclick = () => { spec = blankSpec(); commit(null, true); toast('New graph. Undo brings the old one back.'); };
+  $('#openBtn').onclick = () => $('#fileIn').click();
+  $('#fileIn').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) openFile(f); };
+  $('#saveBtn').onclick = saveJSON;
+  $('#undoBtn').onclick = () => goto(idx - 1);
+  $('#redoBtn').onclick = () => goto(idx + 1);
+  $('#svgBtn').onclick = exportSVG;
+  $('#pngBtn').onclick = exportPNG;
+
+  /* ---------- go ---------- */
+  buildTypes(); buildAxes(); rebuildStructure();
+})();
+</script>
+</body>
+</html>
