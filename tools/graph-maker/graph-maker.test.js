@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const G = vm.runInNewContext(core + `;({ niceStep, niceCeil, niceRange, resolveAxis, ticks, fmtTick, normalize, blankSpec, sampleSpec,
   serialize, parseFile, migrate, parseTSV, pasteGrid, importGrid, dropIndex, scaffoldLevel, SCAFFOLD, renderSVG, analyse,
-  computeAxes, textW, HW, crc32, pngWithDpi, sizeMM, mmToPx, parseNum, cellFromText, TYPES, MAX_SERIES, MAX_ROWS })`, {});
+  computeAxes, textW, HW, crc32, readability, snapValues, svgSize, fmtTick, SCAFFOLD_V1, pngWithDpi, sizeMM, mmToPx, parseNum, cellFromText, TYPES, MAX_SERIES, MAX_ROWS })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -92,7 +92,7 @@ test('normalize is idempotent and fixes bad input', () => {
   assert.equal(n1.x.step, null);
   assert.equal(n1.x.minorPerMajor, 10);
   assert.deepEqual(plain(G.normalize(n1)), plain(n1));
-  assert.equal(G.normalize(null).specVersion, 1);
+  assert.equal(G.normalize(null).specVersion, 2);
 });
 
 test('save -> load round-trip is byte-identical', () => {
@@ -105,7 +105,7 @@ test('save -> load round-trip is byte-identical', () => {
   const text1 = G.serialize(s);
   const text2 = G.serialize(G.parseFile(text1));
   assert.equal(text2, text1);
-  assert.equal(JSON.parse(text1).specVersion, 1);
+  assert.equal(JSON.parse(text1).specVersion, 2);
   for (const type of G.TYPES) {
     const t = G.sampleSpec(); t.type = type; t.quadrants = 1;
     const a = G.serialize(t);
@@ -275,7 +275,7 @@ test('bar graphs: categories, grouped bars, hidden bars', () => {
   let s = G.sampleSpec(); s.type = 'bar';
   s.rows = [{ x: 'Apples', ys: [12, 9], label: '' }, { x: 'Pears', ys: [7, 11], label: '' }];
   s = G.normalize(s);
-  const bars = svg => (svg.match(/<rect [^>]*stroke="#000" stroke-width="\.3"/g) || []).length;
+  const bars = svg => (svg.match(/<rect [^>]*stroke="#000" stroke-width="0\.3"/g) || []).length;
   const all = bars(G.renderSVG(s));
   assert.equal(all, 4);                                             // 2 categories x 2 series
   s.hidden = ['pt:1:0'];
@@ -299,4 +299,191 @@ test('sizes are real units and PNG pixel size follows 300 DPI', () => {
   assert.deepEqual(plain(G.sizeMM({ preset: 'full' })), { w: 165, h: 105 });
   assert.equal(G.mmToPx(165, 300), 1949);
   assert.equal(G.mmToPx(25.4, 300), 300);
+});
+
+/* ---------------------------- Phase 2 ---------------------------- */
+const ax = (o = {}) => ({ lo: 0, hi: 2, step: 0.5, minor: 2, fmt: { format: 'decimal', decimals: null, sigfigs: null, ...o } });
+
+test('tick formats: fractions, decimals, negatives, scientific, sig figs', () => {
+  assert.equal(G.fmtTick(0.5, ax({ format: 'fraction' })), '1/2');
+  assert.equal(G.fmtTick(1.5, ax({ format: 'fraction' })), '1 1/2');
+  assert.equal(G.fmtTick(0.75, ax({ format: 'fraction' })), '3/4');
+  assert.equal(G.fmtTick(2, ax({ format: 'fraction' })), '2');
+  assert.equal(G.fmtTick(0, ax({ format: 'fraction' })), '0');
+  assert.equal(G.fmtTick(-1.5, ax({ format: 'fraction' })), '\u22121 1/2');   // negative mixed number
+  assert.equal(G.fmtTick(-0.25, ax({ format: 'fraction' })), '\u22121/4');
+  assert.equal(G.fmtTick(1 / 3, ax({ format: 'fraction' })), '1/3');
+  assert.equal(G.fmtTick(0.123456, ax({ format: 'fraction' })), '0.1');        // no small denominator: falls back to the axis's decimals
+  assert.equal(G.fmtTick(-2, ax()), '\u22122.0');
+  assert.equal(G.fmtTick(1, ax({ decimals: 2 })), '1.00');
+  assert.equal(G.fmtTick(1234.5678, ax({ sigfigs: 3 })), '1230');
+  assert.equal(G.fmtTick(2.5, ax({ sigfigs: 3 })), '2.50');
+  assert.equal(G.fmtTick(0.004567, ax({ sigfigs: 2 })), '0.0046');
+  assert.equal(G.fmtTick(2500, ax({ format: 'sci' })), '2.5\u00d710^3');
+  assert.equal(G.fmtTick(0.00031, ax({ format: 'sci' })), '3.1\u00d710^-4'.replace('-', '\u2212') );
+  assert.equal(G.fmtTick(2500, ax({ format: 'sci', sigfigs: 3 })), '2.50\u00d710^3');
+  assert.equal(G.fmtTick(9999, ax({ format: 'sci', sigfigs: 2 })), '1.0\u00d710^4');   // rounding up carries into the exponent
+  assert.equal(G.fmtTick(-3000, ax({ format: 'sci' })), '\u22123\u00d710^3');
+});
+
+test('readability: finds values between gridlines and snaps them', () => {
+  const t = G.blankSpec();
+  t.rows = [{ x: 1, ys: [37], label: '' }, { x: 2, ys: [40], label: '' }];
+  t.y.step = 10; t.y.min = 0; t.y.max = 50; t.y.minorPerMajor = 2; t.x.step = 1; t.x.min = 0; t.x.max = 5; t.x.minorPerMajor = 1;
+  let r = G.readability(t);
+  assert.deepEqual(plain(r), [{ j: 0, r: 0, axis: 'y', value: 37 }]);   // 40 is on a gridline, 37 is not
+  t.grid.minor = false;                                              // minor lines off -> only multiples of 10 are readable
+  assert.equal(G.readability(t)[0].value, 37);
+  t.y.minorPerMajor = 5; t.grid.minor = true;                        // step 2 lines: 37 still off
+  assert.equal(G.readability(t).length, 1);
+  t.y.minorPerMajor = 10;                                            // step 1 lines: 37 fine
+  assert.equal(G.readability(t).length, 0);
+  t.y.minorPerMajor = 2;
+  assert.equal(G.snapValues(t), 1);
+  assert.equal(t.rows[0].ys[0], 35);                                 // nearest 5-gridline
+  assert.equal(G.readability(t).length, 0);
+  assert.equal(G.snapValues(t), 0);                                  // idempotent
+});
+
+test('readability: bar graphs check heights only; text cells are left alone', () => {
+  const s = G.blankSpec(); s.type = 'bar';
+  s.rows = [{ x: 'Apples', ys: [12.3], label: '' }, { x: 'Pears', ys: [8], label: '' }];
+  s.y.step = 2; s.y.minorPerMajor = 1; s.y.min = 0; s.y.max = 14;
+  assert.deepEqual(plain(G.readability(s).map(i => [i.r, i.value])), [[0, 12.3]]);
+  G.snapValues(s);
+  assert.deepEqual(plain(s.rows.map(r => [r.x, r.ys[0]])), [['Apples', 12], ['Pears', 8]]);
+});
+
+test('annotations and regions render, hide and renumber', () => {
+  const s = G.sampleSpec();
+  s.annotations = [{ kind: 'text', text: 'Boiling', x: 5, y: 60, x2: 0, y2: 0 },
+                   { kind: 'arrow', text: 'Melts here', x: 3, y: 30, x2: 4, y2: 50 },
+                   { kind: 'callout', text: 'Start', x: 1, y: 70, x2: 0, y2: 20 }];
+  s.regions = [{ from: 0, to: 4, label: 'A', shade: 'light' }, { from: 4, to: 10, label: 'B', shade: 'hatch' }];
+  s.hidden = [];
+  const key = G.renderSVG(s, { version: 'key' });
+  for (const w of ['Boiling', 'Melts here', 'Start']) assert.ok(key.includes('>' + w + '<'), w);
+  assert.ok(key.includes('>A<') && key.includes('>B<') && key.includes('-rg'));
+  assert.ok(key.includes('<polygon'));                               // arrowheads
+  s.hidden = ['ann:1', 'region:0'];
+  const q = G.renderSVG(s, { version: 'question' });
+  assert.ok(!q.includes('Melts here') && !q.includes('>A<') && q.includes('Boiling') && q.includes('>B<'));
+  s.hidden = ['annotations', 'regions'];
+  const q2 = G.renderSVG(s, { version: 'question' });
+  assert.ok(!q2.includes('Boiling') && !q2.includes('>B<'));
+  s.hidden = ['ann:0', 'ann:2', 'region:1'];
+  G.dropIndex(s, 'ann', 1); assert.deepEqual(plain(s.hidden), ['ann:0', 'ann:1', 'region:1']);
+  G.dropIndex(s, 'region', 0); assert.deepEqual(plain(s.hidden), ['ann:0', 'ann:1', 'region:0']);
+  const bad = G.normalize({ annotations: [{ kind: 'nope', x: 'a' }], regions: [{ shade: 'x' }], hidden: ['ann:0', 'ann:4', 'region:3'] });
+  assert.deepEqual(plain(bad.annotations[0]), { kind: 'text', text: '', x: 0, y: 0, x2: 0, y2: 0 });
+  assert.equal(bad.regions[0].shade, 'light');
+  assert.deepEqual(plain(bad.hidden), ['ann:0']);
+  const b = G.sampleSpec(); b.type = 'bar'; b.regions = [{ from: 1, to: 3, label: 'X', shade: 'light' }];
+  assert.ok(G.renderSVG(b).includes('>X<'));                         // regions work on bar graphs too
+});
+
+test('axis break zigzag appears only when an axis starts above zero', () => {
+  const s = G.sampleSpec(); s.y.min = 10;
+  const count = svg => (svg.match(/<rect x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" fill="#fff"\/><polyline/g) || []).length;
+  assert.equal(count(G.renderSVG(s)), 1);
+  s.y.breakMark = false; assert.equal(count(G.renderSVG(s)), 0);
+  s.y.breakMark = true; s.y.min = null; assert.equal(count(G.renderSVG(s)), 0);       // starts at zero
+  s.x.min = 2; s.y.min = 10; assert.equal(count(G.renderSVG(s)), 2);                  // both axes
+  s.misleading.truncate = true; assert.equal(count(G.renderSVG(s)), 0);               // a truncated graph is deliberately unmarked
+});
+
+test('physical scale lock: one grid square prints at the exact size', () => {
+  const s = G.blankSpec(); s.type = 'coordinate'; s.axes = 'origin'; s.grid.minor = false;
+  s.scale = { lock: true, mm: 10 };
+  const svg = G.renderSVG(s);
+  const c = /<clipPath[^>]*><rect x="([\d.-]+)" y="([\d.-]+)" width="([\d.]+)" height="([\d.]+)"/.exec(svg);
+  const ax = G.computeAxes(s);
+  const cells = (ax.x.hi - ax.x.lo) / ax.x.step;
+  assert.ok(Math.abs((+c[3] - 4) - cells * 10) < 0.01, 'plot width = cells x 10 mm');
+  assert.ok(Math.abs((+c[4] - 4) - cells * 10) < 0.01);
+  const size = G.svgSize(s);
+  assert.ok(size.w > cells * 10 && size.h > cells * 10);            // page grew to fit the grid
+  s.scale.mm = 5; assert.ok(G.svgSize(s).w < size.w);
+  s.type = 'bar'; assert.deepEqual(plain(G.svgSize(s)), { w: 165, h: 105 });   // not applicable to bar graphs: size preset wins
+});
+
+test('large print scales text and lines together', () => {
+  const s = G.sampleSpec();
+  const fonts = svg => [...svg.matchAll(/font-size="([\d.]+)"/g)].map(m => +m[1]);
+  const a = fonts(G.renderSVG(s)), b = (s.style.largePrint = true, fonts(G.renderSVG(s)));
+  assert.equal(a.length, b.length);
+  a.forEach((v, i) => assert.ok(Math.abs(b[i] / v - 1.35) < 0.03, `font ${v} -> ${b[i]}`));
+  assert.ok(G.renderSVG(s).includes('stroke-width="0.675"'));        // axis line .5 x 1.35
+  assert.ok(!/NaN|undefined/.test(G.renderSVG(s)));
+});
+
+test('photocopy-safe darkens the grid', () => {
+  const s = G.sampleSpec();
+  assert.ok(G.renderSVG(s).includes('#c4c4c4'));
+  s.style.photocopySafe = true;
+  const svg = G.renderSVG(s);
+  assert.ok(!svg.includes('#c4c4c4') && svg.includes('#787878') && svg.includes('#3a3a3a'));
+});
+
+test('misleading-graph options: truncated axis, uneven intervals, stretched shape', () => {
+  let s = G.sampleSpec(); s.type = 'bar';
+  s.rows = [{ x: 'A', ys: [52, 50], label: '' }, { x: 'B', ys: [58, 55], label: '' }];
+  s = G.normalize(s);
+  assert.equal(G.computeAxes(s).y.lo, 0);
+  s.misleading.truncate = true;
+  const y = G.computeAxes(s).y;
+  assert.ok(y.lo > 30 && y.lo < 50, 'truncated axis starts near the data: ' + y.lo);
+  assert.ok(!/NaN|undefined/.test(G.renderSVG(s)));
+
+  const l = G.sampleSpec();
+  const ys = svg => { const d = /<path d="([^"]*)" stroke="#8c8c8c"/.exec(svg)[1]; return [...d.matchAll(/M[\d.]+,([\d.]+)H/g)].map(m => +m[1]); };   // horizontal major gridlines
+  const even = ys(G.renderSVG(l)), gaps = a => a.slice(1).map((v, i) => a[i] - v);
+  assert.ok(Math.max(...gaps(even)) - Math.min(...gaps(even)) < 0.01);              // normally even
+  l.misleading.unevenY = true;
+  const g2 = gaps(ys(G.renderSVG(l)));
+  assert.ok(Math.max(...g2) - Math.min(...g2) > 1, 'gridline spacing is now uneven');
+
+  const t = G.sampleSpec(); t.misleading.shape = 'tall';
+  const c = svg => /<clipPath[^>]*><rect x="[\d.-]+" y="[\d.-]+" width="([\d.]+)" height="([\d.]+)"/.exec(svg).slice(1).map(Number);
+  const [w, h] = c(G.renderSVG(t)); assert.ok(h / w > 2, 'tall and narrow');
+  t.misleading.shape = 'wide'; const [w2, h2] = c(G.renderSVG(t)); assert.ok(h2 / w2 < 0.5, 'short and wide');
+  const q = G.renderSVG(t, { version: 'question' });
+  assert.ok(!/NaN|undefined/.test(q));
+});
+
+test('v1 files migrate: new fields default, scaffold level survives', () => {
+  const v1 = JSON.parse(JSON.stringify(plain(G.sampleSpec())));
+  for (const k of ['scale', 'annotations', 'regions', 'misleading']) delete v1[k];
+  delete v1.style.photocopySafe; delete v1.style.largePrint;
+  delete v1.x.format; delete v1.x.breakMark;
+  v1.specVersion = 1;
+  for (const level of ['axes', 'blank']) {
+    v1.hidden = [...G.SCAFFOLD_V1[level]];
+    const s = G.parseFile(JSON.stringify(v1));
+    assert.equal(s.specVersion, 2);
+    assert.equal(G.scaffoldLevel(s), level);
+    assert.equal(s.x.format, 'decimal'); assert.equal(s.x.breakMark, true);
+    assert.deepEqual(plain(s.annotations), []);
+    assert.equal(s.scale.lock, false);
+  }
+  v1.hidden = ['title', 'pt:0:1'];
+  assert.deepEqual(plain(G.parseFile(JSON.stringify(v1)).hidden), ['title', 'pt:0:1']);   // custom hides untouched
+});
+
+test('every option combined still renders cleanly and round-trips', () => {
+  const s = G.sampleSpec();
+  s.style = { colour: true, lineMarkers: true, photocopySafe: true, largePrint: true };
+  s.x.format = 'fraction'; s.y.format = 'sci'; s.y.sigfigs = 3; s.x.step = 0.5; s.x.decimals = 1;
+  s.scale = { lock: true, mm: 8 };
+  s.misleading = { truncate: true, unevenX: true, unevenY: true, shape: 'tall' };
+  s.annotations = [{ kind: 'callout', text: 'x', x: 1, y: 2, x2: 3, y2: 4 }];
+  s.regions = [{ from: 1, to: 2, label: 'R', shade: 'hatch' }];
+  s.hidden = [...G.SCAFFOLD.blank, 'pt:0:1'];
+  for (const type of G.TYPES) for (const version of ['key', 'question']) {
+    const t = G.normalize({ ...plain(s), type });
+    const svg = G.renderSVG(t, { version });
+    assert.ok(!/NaN|undefined|Infinity/.test(svg), type + ' ' + version);
+  }
+  const a = G.serialize(s);
+  assert.equal(G.serialize(G.parseFile(a)), a);
 });

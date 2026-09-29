@@ -121,6 +121,9 @@
   .dt .sh{display:flex;align-items:center;}
   .dt td.act,.dt th.act{width:26px;min-width:26px;text-align:center;}
   .dt .muted{color:var(--muted);text-align:center;}
+  .toolbar select{width:auto;padding:6px 8px;}
+  .issue{font-size:12px;color:var(--danger);margin:0;padding:2px 0;}
+  .ok-line{font-size:12.5px;color:var(--ok);font-weight:600;margin:0;}
   .xbtn{border:none;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:2px 6px;border-radius:6px;}
   .xbtn:hover{color:var(--danger);background:var(--danger-soft);}
 
@@ -180,6 +183,9 @@
     <button class="btn small" id="redoBtn" type="button" title="Redo">↷ Redo</button>
     <div class="spacer"></div>
     <label class="check" title="Export PNG/SVG without a white background"><input type="checkbox" id="transparent"> Transparent background</label>
+    <button class="btn" id="pairBtn" type="button" title="Download the question and the answer key together, with matching file names (e.g. water-temp-q.png and water-temp-key.png)">Export question + key</button>
+    <select id="pairFmt" aria-label="Format for the question + key pair"><option value="png">PNG</option><option value="svg">SVG</option></select>
+    <span class="sep"></span>
     <button class="btn" id="svgBtn" type="button">Export SVG</button>
     <button class="btn primary" id="pngBtn" type="button">Export PNG · 300 DPI</button>
   </header>
@@ -190,6 +196,7 @@
         <button class="tab active" data-tab="graph" role="tab">Graph</button>
         <button class="tab" data-tab="data" role="tab">Data</button>
         <button class="tab" data-tab="axes" role="tab">Axes</button>
+        <button class="tab" data-tab="notes" role="tab">Notes</button>
         <button class="tab" data-tab="test" role="tab">Test</button>
         <button class="tab" data-tab="style" role="tab">Style</button>
       </nav>
@@ -222,6 +229,12 @@
             </div>
             <p class="hint" style="margin-top:8px">Sizes are real print sizes. Full and half width fit a letter or A4 test with normal margins.</p>
           </div>
+          <div data-show="coordinate,line,scatter">
+            <h3 class="section-title">Physical scale</h3>
+            <label class="check"><input type="checkbox" data-bind="scale.lock"> Lock the grid to a real size</label>
+            <div class="row" style="margin-top:8px"><div><label class="lab">One grid square = (mm)</label><input type="number" min="1" max="50" step="any" data-bind="scale.mm"></div></div>
+            <p class="hint" style="margin-top:8px">A grid square is one major step. The page grows to fit the grid, so the size above is ignored. Paste the PNG into Word at 100% (it is stamped 300 DPI) and a ruler will measure true.</p>
+          </div>
           <div>
             <label class="lab" for="legend">Legend position</label>
             <select id="legend" data-bind="legend">
@@ -246,6 +259,9 @@
 
         <!-- AXES -->
         <section class="pane" data-pane="axes" hidden id="axesPane"></section>
+
+        <!-- NOTES -->
+        <section class="pane" data-pane="notes" hidden id="notesPane"></section>
 
         <!-- TEST -->
         <section class="pane" data-pane="test" hidden id="testPane"></section>
@@ -292,7 +308,7 @@
    the spec schema, nice-number axis maths, paste parsing and the SVG renderer.
    graph-maker.test.js loads this block on its own and tests it in Node.
    ========================================================================== */
-const SPEC_VERSION = 1;
+const SPEC_VERSION = 2;
 
 /* ---------- constants ---------- */
 const TYPES = ['coordinate', 'line', 'scatter', 'bar'];
@@ -318,14 +334,25 @@ const FONT = "Arial, Helvetica, 'Liberation Sans', sans-serif";   // system font
 
 /* Show/hide tokens. `hidden` in the spec lists what the QUESTION version hides;
    the answer key always shows everything. */
-const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'legend', 'pointLabels', 'data'];
+const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'legend', 'pointLabels', 'data', 'annotations', 'regions'];
+const FORMATS = ['decimal', 'fraction', 'sci'];
+const FORMAT_NAMES = { decimal: 'Decimal', fraction: 'Fractions', sci: 'Scientific notation' };
+const KINDS = ['text', 'arrow', 'callout'];
+const SHADES = ['none', 'light', 'hatch'];
+const SHAPES = ['none', 'tall', 'wide'];
+const MAX_ANN = 30, MAX_REGIONS = 12;
+const LARGE = 1.35;                                              // large-print scale: text, lines and markers together
 const BLANK_TOKENS = ['title', 'xTitle', 'yTitle', 'units'];
 const SCAFFOLD_LEVELS = ['complete', 'labels', 'axes', 'blank'];
 const SCAFFOLD = {   // visibility presets over the same spec — not separate code paths
   complete: [],
   labels:   ['data'],
-  axes:     ['data', 'legend', 'title', 'xTitle', 'yTitle', 'units'],
-  blank:    ['data', 'legend', 'title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks']
+  axes:     ['data', 'legend', 'title', 'xTitle', 'yTitle', 'units', 'annotations'],
+  blank:    ['data', 'legend', 'title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'annotations', 'regions']
+};
+const SCAFFOLD_V1 = {   // what the presets meant in specVersion 1, so old files keep their scaffold level
+  axes:  ['data', 'legend', 'title', 'xTitle', 'yTitle', 'units'],
+  blank: ['data', 'legend', 'title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks']
 };
 
 /* ---------- small helpers ---------- */
@@ -426,7 +453,9 @@ function resolveAxis(a, ext, o) {
     dLo = 0; dHi = ext && ext.max > 0 ? ext.max : 10;
   } else {
     dLo = ext ? ext.min : 0; dHi = ext ? ext.max : 10;
-    if (o.forceZero) { dLo = Math.min(dLo, 0); dHi = Math.max(dHi, 0); }
+    if (o.truncate) {                                        // misleading-graph option: start the axis near the data, not at zero
+      if (ext && ext.min > 0 && ext.max > ext.min) dLo = Math.max(0, ext.min - (ext.max - ext.min) * .25);
+    } else if (o.forceZero) { dLo = Math.min(dLo, 0); dHi = Math.max(dHi, 0); }
     else if (dLo > 0 && dLo <= 0.5 * dHi) dLo = 0;          // start at zero unless the data sit well above it
   }
   let tLo = a.min !== null ? a.min : dLo;
@@ -437,7 +466,7 @@ function resolveAxis(a, ext, o) {
   const lo = a.min !== null ? a.min : clean(Math.floor(tLo / step + 1e-9) * step);
   let hi = a.max !== null ? a.max : clean(Math.ceil(tHi / step - 1e-9) * step);
   if (!(hi > lo)) hi = clean(lo + step);
-  return { lo, hi, step, minor: a.minorPerMajor };
+  return { lo, hi, step, minor: a.minorPerMajor, fmt: { format: a.format, decimals: a.decimals, sigfigs: a.sigfigs } };
 }
 function ticks(ax) {
   const out = [], n = Math.round((ax.hi - ax.lo) / ax.step + 1e-9);
@@ -455,11 +484,42 @@ function anchorIndex(ax) {
   const i = Math.round((0 - ax.lo) / ax.step);
   return i >= 0 && Math.abs(ax.lo + i * ax.step) < ax.step * 1e-6 && ax.lo + i * ax.step <= ax.hi ? i : 0;
 }
+const MINUS = '\u2212';
+function sigStr(v, n) {                                      // n significant figures, keeping trailing zeros (2.50)
+  if (v === 0) return '0';
+  const d = n - 1 - Math.floor(Math.log10(Math.abs(v)));
+  return d >= 0 ? v.toFixed(Math.min(d, 12)) : String(Math.round(v / 10 ** -d) * 10 ** -d);
+}
+function sciStr(v, sf) {                                     // 2.5×10^3 ("^" marks the raised exponent for the renderer)
+  if (v === 0) return '0';
+  let e = Math.floor(Math.log10(Math.abs(v))), m = v / 10 ** e;
+  const dg = sf ? clamp(sf - 1, 0, 10) : 3;
+  let mt = m.toFixed(dg);
+  if (Math.abs(+mt) >= 10) { e++; mt = (m / 10).toFixed(dg); }
+  if (!sf) mt = String(+mt);
+  return mt + '\u00d710^' + e;
+}
+function fracStr(v) {                                        // 1/2, 1 3/4, -2/3 — null when no small denominator fits
+  for (const d of [1, 2, 3, 4, 5, 6, 8, 10, 12, 16]) {
+    const n = Math.round(v * d);
+    if (Math.abs(v * d - n) > 1e-9) continue;
+    const a = Math.abs(n), whole = Math.floor(a / d), rem = a % d;
+    const body = rem === 0 ? String(whole) : (whole ? whole + ' ' : '') + rem + '/' + d;
+    return (n < 0 ? '-' : '') + body;
+  }
+  return null;
+}
 function fmtTick(v, ax) {
-  const d = Math.max(decimals(ax.lo), decimals(ax.step));
-  let s = v.toFixed(d);
+  const f = ax.fmt || {};
+  let s = null;
+  if (f.format === 'fraction') s = fracStr(v);
+  else if (f.format === 'sci') s = sciStr(v, f.sigfigs);
+  if (s === null) {
+    if (f.sigfigs) s = sigStr(v, f.sigfigs);
+    else s = v.toFixed(f.decimals !== null && f.decimals !== undefined ? f.decimals : Math.max(decimals(ax.lo), decimals(ax.step)));
+  }
   if (/^-0(\.0+)?$/.test(s)) s = s.slice(1);
-  return s.replace('-', '−');
+  return s.replace(/-/g, MINUS);
 }
 
 /* ==========================================================================
@@ -480,6 +540,11 @@ function blankSpec() {
     series: [newSeries(0)], rows: [], hidden: [], blanks: [],
     style: { colour: false, lineMarkers: true }
   };
+  spec.x.format = spec.y.format = 'decimal'; spec.x.decimals = spec.y.decimals = null; spec.x.sigfigs = spec.y.sigfigs = null;
+  spec.x.breakMark = spec.y.breakMark = true;
+  spec.scale = { lock: false, mm: 10 }; spec.annotations = []; spec.regions = [];
+  spec.misleading = { truncate: false, unevenX: false, unevenY: false, shape: 'none' };
+  spec.style.photocopySafe = false; spec.style.largePrint = false;
   for (let i = 0; i < 6; i++) spec.rows.push(emptyRow(spec));
   return normalize(spec);
 }
@@ -506,8 +571,11 @@ function normalize(raw) {
   const axis = a => {
     a = a && typeof a === 'object' ? a : {};
     const step = numOrNull(a.step);
+    const dp = numOrNull(a.decimals), sf = numOrNull(a.sigfigs);
     return { label: str(a.label, ''), unit: str(a.unit, ''), min: numOrNull(a.min), max: numOrNull(a.max),
-             step: step > 0 ? step : null, minorPerMajor: int(a.minorPerMajor, 1, 10, 2) };
+             step: step > 0 ? step : null, minorPerMajor: int(a.minorPerMajor, 1, 10, 2),
+             format: pick(a.format, FORMATS, 'decimal'), decimals: dp === null ? null : clamp(Math.round(dp), 0, 8),
+             sigfigs: sf === null ? null : clamp(Math.round(sf), 1, 10), breakMark: bool(a.breakMark, true) };
   };
   const sz = r.size && typeof r.size === 'object' ? r.size : {};
   const size = sz.preset === 'custom'
@@ -528,18 +596,31 @@ function normalize(raw) {
   });
   if (!rows.length) rows.push({ x: null, ys: series.map(() => null), label: '' });
 
+  const num0 = v => numOrNull(v) ?? 0;
+  const annotations = (Array.isArray(r.annotations) ? r.annotations : []).slice(0, MAX_ANN).map(a => {
+    a = a && typeof a === 'object' ? a : {};
+    return { kind: pick(a.kind, KINDS, 'text'), text: str(a.text, ''), x: num0(a.x), y: num0(a.y), x2: num0(a.x2), y2: num0(a.y2) };
+  });
+  const regions = (Array.isArray(r.regions) ? r.regions : []).slice(0, MAX_REGIONS).map(g => {
+    g = g && typeof g === 'object' ? g : {};
+    return { from: num0(g.from), to: num0(g.to), label: str(g.label, ''), shade: pick(g.shade, SHADES, 'light') };
+  });
   const seen = new Set();
   const hidden = (Array.isArray(r.hidden) ? r.hidden : []).filter(t => {
     if (typeof t !== 'string' || seen.has(t)) return false;
     let m, ok = ELEMENT_TOKENS.includes(t);
     if ((m = /^series:(\d+)$/.exec(t))) ok = +m[1] < nS;
     else if ((m = /^pt:(\d+):(\d+)$/.exec(t))) ok = +m[1] < nS && +m[2] < rows.length;
+    else if ((m = /^ann:(\d+)$/.exec(t))) ok = +m[1] < annotations.length;
+    else if ((m = /^region:(\d+)$/.exec(t))) ok = +m[1] < regions.length;
     if (ok) seen.add(t);
     return ok;
   });
   const blanks = [...new Set(Array.isArray(r.blanks) ? r.blanks : [])].filter(t => BLANK_TOKENS.includes(t));
   const grid = r.grid && typeof r.grid === 'object' ? r.grid : {};
   const style = r.style && typeof r.style === 'object' ? r.style : {};
+  const sc = r.scale && typeof r.scale === 'object' ? r.scale : {};
+  const ml = r.misleading && typeof r.misleading === 'object' ? r.misleading : {};
   return {
     specVersion: SPEC_VERSION,
     type: pick(r.type, TYPES, 'line'),
@@ -551,7 +632,11 @@ function normalize(raw) {
     grid: { major: bool(grid.major, true), minor: bool(grid.minor, true) },
     legend: pick(r.legend, LEGENDS, 'right'),
     series, rows, hidden, blanks,
-    style: { colour: bool(style.colour, false), lineMarkers: bool(style.lineMarkers, true) }
+    style: { colour: bool(style.colour, false), lineMarkers: bool(style.lineMarkers, true),
+             photocopySafe: bool(style.photocopySafe, false), largePrint: bool(style.largePrint, false) },
+    scale: { lock: bool(sc.lock, false), mm: clamp(numOrNull(sc.mm) ?? 10, 1, 50) },
+    annotations, regions,
+    misleading: { truncate: bool(ml.truncate, false), unevenX: bool(ml.unevenX, false), unevenY: bool(ml.unevenY, false), shape: pick(ml.shape, SHAPES, 'none') }
   };
 }
 
@@ -559,6 +644,11 @@ function normalize(raw) {
 function migrate(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.specVersion !== 'number') throw new Error('This file is not a Graph Maker graph.');
   if (raw.specVersion > SPEC_VERSION) throw new Error('This graph was saved by a newer version of the tool (specVersion ' + raw.specVersion + ').');
+  if (raw.specVersion < 2) {                                 // v1 -> v2: new fields take their defaults in normalize(); keep the scaffold level
+    const h = (Array.isArray(raw.hidden) ? [...raw.hidden] : []).sort().join('|');
+    const level = ['axes', 'blank'].find(k => [...SCAFFOLD_V1[k]].sort().join('|') === h);
+    raw = Object.assign({}, raw, { specVersion: 2 }, level ? { hidden: [...SCAFFOLD[level]] } : {});
+  }
   return raw;
 }
 const serialize = spec => JSON.stringify(normalize(spec), null, 2);
@@ -575,13 +665,17 @@ function scaffoldLevel(spec) {
   const h = [...spec.hidden].sort().join('|');
   return SCAFFOLD_LEVELS.find(k => [...SCAFFOLD[k]].sort().join('|') === h) || 'custom';
 }
-/* Removing series i (kind 'series') or row i (kind 'row') must renumber the tokens that point at them. */
+/* Removing series i (kind 'series'), row i ('row'), annotation i ('ann') or region i ('region') must renumber the tokens that point at them. */
 function dropIndex(spec, kind, idx) {
   spec.hidden = spec.hidden.flatMap(t => {
     let m;
     if ((m = /^series:(\d+)$/.exec(t))) {
       if (kind !== 'series') return [t];
       const s = +m[1]; return s === idx ? [] : [s > idx ? 'series:' + (s - 1) : t];
+    }
+    if ((m = /^(ann|region):(\d+)$/.exec(t))) {
+      if (kind !== m[1]) return [t];
+      const n = +m[2]; return n === idx ? [] : [n > idx ? m[1] + ':' + (n - 1) : t];
     }
     if ((m = /^pt:(\d+):(\d+)$/.exec(t))) {
       let s = +m[1], r = +m[2];
@@ -725,11 +819,36 @@ function analyse(spec) {
   } else {
     const tx = clamp(Math.round((W - 30) / 12), 4, 40), ty = clamp(Math.round((H - 30) / 12), 4, 40);   // ~1 major tick per 12 mm
     ax = isBar ? null : resolveAxis(spec.x, ext(all.map(p => p.x)), { target: tx });
-    ay = resolveAxis(spec.y, extY, { target: ty, forceZero: isBar });
+    const trunc = spec.misleading.truncate;
+    ay = resolveAxis(spec.y, extY, { target: ty, forceZero: isBar && !trunc, truncate: trunc });
   }
   return { W, H, isBar, pts, cats, ax, ay, mode };
 }
 const computeAxes = spec => { const a = analyse(spec); return { x: a.ax, y: a.ay }; };
+
+/* Readability: does each plotted value sit exactly on a gridline that is actually drawn? */
+const gridStepFor = (ax, spec) => spec.grid.minor && ax.minor > 1 ? ax.step / ax.minor : ax.step;
+const onGrid = (v, ax, spec) => { const k = (v - ax.lo) / gridStepFor(ax, spec); return Math.abs(k - Math.round(k)) < 1e-6; };
+function readability(spec) {
+  const A = analyse(spec), issues = [];
+  if (A.isBar) A.cats.forEach(c => c.vals.forEach((v, j) => { if (v !== null && !onGrid(v, A.ay, spec)) issues.push({ j, r: c.r, axis: 'y', value: v }); }));
+  else A.pts.forEach((p, j) => p.forEach(pt => {
+    if (!onGrid(pt.x, A.ax, spec)) issues.push({ j, r: pt.r, axis: 'x', value: pt.x });
+    if (!onGrid(pt.y, A.ay, spec)) issues.push({ j, r: pt.r, axis: 'y', value: pt.y });
+  }));
+  return issues;
+}
+/* Move every off-grid value to the nearest gridline. Returns how many cells changed. */
+function snapValues(spec) {
+  const A = analyse(spec);
+  const snap = (v, ax) => { const g = gridStepFor(ax, spec); return clean(ax.lo + Math.round((v - ax.lo) / g) * g); };
+  let n = 0;
+  spec.rows.forEach(row => {
+    if (!A.isBar) { const x = parseNum(row.x); if (!Number.isNaN(x) && !onGrid(x, A.ax, spec)) { row.x = snap(x, A.ax); n++; } }
+    row.ys = row.ys.map(yv => { const y = parseNum(yv); if (Number.isNaN(y) || onGrid(y, A.ay, spec)) return yv; n++; return snap(y, A.ay); });
+  });
+  return n;
+}
 
 /* ==========================================================================
    SVG renderer — the only renderer. Units are millimetres (viewBox = size in mm),
@@ -737,15 +856,16 @@ const computeAxes = spec => { const a = analyse(spec); return { x: a.ax, y: a.ay
    ========================================================================== */
 const FS = 3.2, FT = 2.8, FH = 4.2, PAD = 2.5, TICK = 1.1;
 
-function markerSVG(kind, cx, cy, r, col) {
+function markerSVG(kind, cx, cy, r, col, S) {
+  S = S || 1;
   const p = a => a.map(v => f3(v)).join(',');
   switch (kind) {
     case 'square':   return `<rect x="${f3(cx - r * .9)}" y="${f3(cy - r * .9)}" width="${f3(r * 1.8)}" height="${f3(r * 1.8)}" fill="${col}"/>`;
     case 'triangle': return `<polygon points="${p([cx, cy - r * 1.25])} ${p([cx + r * 1.15, cy + r * .85])} ${p([cx - r * 1.15, cy + r * .85])}" fill="${col}"/>`;
     case 'diamond':  return `<polygon points="${p([cx, cy - r * 1.3])} ${p([cx + r * 1.3, cy])} ${p([cx, cy + r * 1.3])} ${p([cx - r * 1.3, cy])}" fill="${col}"/>`;
-    case 'cross':    return `<path d="M${p([cx - r, cy - r])}L${p([cx + r, cy + r])}M${p([cx - r, cy + r])}L${p([cx + r, cy - r])}" stroke="${col}" stroke-width=".55" fill="none"/>`;
-    case 'plus':     return `<path d="M${p([cx - r * 1.2, cy])}L${p([cx + r * 1.2, cy])}M${p([cx, cy - r * 1.2])}L${p([cx, cy + r * 1.2])}" stroke="${col}" stroke-width=".55" fill="none"/>`;
-    case 'ring':     return `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(r * .9)}" fill="#fff" stroke="${col}" stroke-width=".5"/>`;
+    case 'cross':    return `<path d="M${p([cx - r, cy - r])}L${p([cx + r, cy + r])}M${p([cx - r, cy + r])}L${p([cx + r, cy - r])}" stroke="${col}" stroke-width="${f3(.55 * S)}" fill="none"/>`;
+    case 'plus':     return `<path d="M${p([cx - r * 1.2, cy])}L${p([cx + r * 1.2, cy])}M${p([cx, cy - r * 1.2])}L${p([cx, cy + r * 1.2])}" stroke="${col}" stroke-width="${f3(.55 * S)}" fill="none"/>`;
+    case 'ring':     return `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(r * .9)}" fill="#fff" stroke="${col}" stroke-width="${f3(.5 * S)}"/>`;
     default:         return `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(r)}" fill="${col}"/>`;
   }
 }
@@ -762,8 +882,8 @@ function hatchFill(id, kind) {
   return { fill: `url(#${id})`, def: pat(inner[0], inner[1]) };
 }
 
-function legendLayout(names, pos, maxW) {
-  const symW = 7, gap = 1.6, rowH = FS * 1.55;
+function legendLayout(names, pos, maxW, S) {
+  const FS = 3.2 * S, symW = 7 * S, gap = 1.6, rowH = FS * 1.55;
   const cap = Math.max(12, maxW);
   const items = names.map(n => { const nm = fitText(n, cap - symW - gap, FS); return { name: nm, w: symW + gap + textW(nm, FS) }; });
   if (pos === 'right' || pos === 'inside') {
@@ -782,7 +902,12 @@ function legendLayout(names, pos, maxW) {
 function renderSVG(spec, o) {
   o = Object.assign({ version: 'key', ghost: false, hits: false, background: 'white', px: null, id: 'g', xmlHeader: false }, o);
   const A = analyse(spec);
-  const { W, H, isBar, pts, cats, ax, ay } = A;
+  let { W, H } = A;
+  const { isBar, pts, cats, ax, ay } = A;
+  const S = spec.style.largePrint ? LARGE : 1;                      // large print scales text, lines and markers together
+  const FS = 3.2 * S, FT = 2.8 * S, FH = 4.2 * S, PAD = 2.5 * S, TICK = 1.1 * S;
+  const lw = v => f3(v * S);
+  const uX = spec.misleading.unevenX, uY = spec.misleading.unevenY;
   const isQ = o.version === 'question';
   const hid = new Set(isQ ? spec.hidden : []);
   const blk = new Set(isQ ? spec.blanks : []);
@@ -812,7 +937,7 @@ function renderSVG(spec, o) {
   const legendOn = nS >= 2 && spec.legend !== 'none';
   const lpos = spec.legend;
   const names = spec.series.map((s, j) => s.name || 'Series ' + (j + 1));
-  const legend = legendOn ? legendLayout(names, lpos, lpos === 'right' || lpos === 'inside' ? W * .32 : W - 2 * PAD) : null;
+  const legend = legendOn ? legendLayout(names, lpos, lpos === 'right' || lpos === 'inside' ? W * .32 : W - 2 * PAD, S) : null;
   const legR = legendOn && lpos === 'right' ? legend.w + 3 : 0;
   const legT = legendOn && lpos === 'top' ? legend.h + 2 : 0;
   const legB = legendOn && lpos === 'bottom' ? legend.h + 2 : 0;
@@ -833,19 +958,31 @@ function renderSVG(spec, o) {
   let x0 = L, x1 = W - R, y0 = T, y1 = H - B;
   if (x1 - x0 < 12) x1 = x0 + 12;
   if (y1 - y0 < 12) y1 = y0 + 12;
-  if (A.mode) {                                                     // coordinate grid: equal scale so squares stay square
+  const lock = spec.scale.lock && !isBar, ratio = { tall: 2.2, wide: 0.42 }[spec.misleading.shape];
+  if (lock) {                                                       // physical scale lock: one major grid square prints at exactly scale.mm; the page grows to fit
+    x1 = x0 + (ax.hi - ax.lo) / ax.step * spec.scale.mm; y1 = y0 + (ay.hi - ay.lo) / ay.step * spec.scale.mm;
+    W = x1 + R; H = y1 + B;
+  } else if (ratio) {                                               // misleading-graph option: stretched plot shape
+    const w0 = x1 - x0, h0 = y1 - y0;
+    if (h0 / w0 > ratio) y1 = y0 + w0 * ratio; else { const nw = h0 / ratio; x0 += (w0 - nw) / 2; x1 = x0 + nw; }
+  } else if (A.mode) {                                              // coordinate grid: equal scale so squares stay square
     const s = Math.min((x1 - x0) / (ax.hi - ax.lo), (y1 - y0) / (ay.hi - ay.lo));
     const pw = s * (ax.hi - ax.lo), ph = s * (ay.hi - ay.lo);
     x0 = x0 + ((x1 - x0) - pw) / 2; x1 = x0 + pw; y1 = y0 + ph;
   }
-  const sx = v => x0 + (v - ax.lo) / (ax.hi - ax.lo) * (x1 - x0);
-  const sy = v => y1 - (v - ay.lo) / (ay.hi - ay.lo) * (y1 - y0);
+  if (isBar) bandW = (x1 - x0) / Math.max(1, cats.length);
+  const warp = (t, on) => on && t > 0 ? Math.pow(t, .55) : t;      // uneven intervals: squeeze the high end
+  const sx = v => x0 + warp((v - ax.lo) / (ax.hi - ax.lo), uX) * (x1 - x0);
+  const sy = v => y1 - warp((v - ay.lo) / (ay.hi - ay.lo), uY) * (y1 - y0);
+  const axX = v => isBar ? x0 + (v - .5) * bandW : sx(v);           // annotations/regions: bar graphs count categories from 1
   const xAx = isBar ? x0 : sx(yAxisV), yAx = sy(xAxisV);
 
   const txt = (x, y, s, opt) => {
     opt = opt || {};
     const rot = opt.rot ? ` transform="rotate(${opt.rot} ${f3(x)} ${f3(y)})"` : '';
-    return `<text x="${f3(x)}" y="${f3(y)}" font-size="${opt.fs || FS}" text-anchor="${opt.anchor || 'middle'}"${opt.bold ? ' font-weight="bold"' : ''}${rot}>${esc(s)}</text>`;
+    const fs = opt.fs || FS, k = String(s).indexOf('^');            // "a^b": b is a raised exponent (scientific notation)
+    const body = k < 0 ? esc(s) : esc(String(s).slice(0, k)) + `<tspan dy="${f3(-fs * .35)}" font-size="${f3(fs * .7)}">${esc(String(s).slice(k + 1))}</tspan>`;
+    return `<text x="${f3(x)}" y="${f3(y)}" font-size="${f3(fs)}" text-anchor="${opt.anchor || 'middle'}"${opt.bold ? ' font-weight="bold"' : ''}${rot}>${body}</text>`;
   };
 
   /* ----- gridlines ----- */
@@ -861,12 +998,23 @@ function renderSVG(spec, o) {
   };
   if (!isBar) gridLines(ax, true);
   gridLines(ay, false);
-  if (minorPath.length) out.push(`<path d="${minorPath.join('')}" stroke="#c4c4c4" stroke-width=".12" fill="none"/>`);
-  if (majorPath.length) out.push(`<path d="${majorPath.join('')}" stroke="#8c8c8c" stroke-width=".22" fill="none"/>`);
+  const gs = spec.style.photocopySafe ? { minor: ['#787878', .18], major: ['#3a3a3a', .32] } : { minor: ['#c4c4c4', .12], major: ['#8c8c8c', .22] };
+  if (minorPath.length) out.push(`<path d="${minorPath.join('')}" stroke="${gs.minor[0]}" stroke-width="${lw(gs.minor[1])}" fill="none"/>`);
+  if (majorPath.length) out.push(`<path d="${majorPath.join('')}" stroke="${gs.major[0]}" stroke-width="${lw(gs.major[1])}" fill="none"/>`);
 
   /* ----- axis lines / frame ----- */
-  if (!origin) out.push(`<rect x="${f3(x0)}" y="${f3(y0)}" width="${f3(x1 - x0)}" height="${f3(y1 - y0)}" fill="none" stroke="#555" stroke-width=".3"/>`);
-  out.push(`<path d="M${f3(x0)},${f3(yAx)}H${f3(x1)}M${f3(xAx)},${f3(y0)}V${f3(y1)}" stroke="#000" stroke-width=".5" fill="none"/>`);
+  if (!origin) out.push(`<rect x="${f3(x0)}" y="${f3(y0)}" width="${f3(x1 - x0)}" height="${f3(y1 - y0)}" fill="none" stroke="#555" stroke-width="${lw(.3)}"/>`);
+  out.push(`<path d="M${f3(x0)},${f3(yAx)}H${f3(x1)}M${f3(xAx)},${f3(y0)}V${f3(y1)}" stroke="#000" stroke-width="${lw(.5)}" fill="none"/>`);
+  /* axis break: a zigzag where an axis starts above zero (never on a deliberately truncated graph) */
+  const brk = (cx, cy, horiz) => {
+    const z = [[0, -2.2], [1.2, -1.1], [-1.2, 0], [1.2, 1.1], [0, 2.2]].map(([a, b]) => { const [X, Y] = horiz ? [cx + b, cy + a] : [cx + a, cy + b]; return f3(X) + ',' + f3(Y); });
+    const w = horiz ? [cx - 2.6 * S, cy - 1.7 * S, 5.2 * S, 3.4 * S] : [cx - 1.7 * S, cy - 2.6 * S, 3.4 * S, 5.2 * S];
+    out.push(`<rect x="${f3(w[0])}" y="${f3(w[1])}" width="${f3(w[2])}" height="${f3(w[3])}" fill="#fff"/><polyline points="${z.join(' ')}" fill="none" stroke="#000" stroke-width="${lw(.5)}" stroke-linejoin="round"/>`);
+  };
+  if (!spec.misleading.truncate) {
+    if (!isBar && spec.x.breakMark && ax.lo > 0 && yAtLeft) brk(x0 + 5 * S, yAx, true);
+    if (spec.y.breakMark && ay.lo > 0 && xAtBottom) brk(xAx, y1 - 5 * S, false);
+  }
   if (origin && !isBar) {                                            // arrowheads on an axes-through-origin plane
     out.push(`<path d="M${f3(x1 + .6)},${f3(yAx)}L${f3(x1 - 1.6)},${f3(yAx - .8)}V${f3(yAx + .8)}Z M${f3(xAx)},${f3(y0 - .6)}L${f3(xAx - .8)},${f3(y0 + 1.6)}H${f3(xAx + .8)}Z" fill="#000"/>`);
   }
@@ -874,11 +1022,34 @@ function renderSVG(spec, o) {
   const tin = origin ? TICK * .8 : 0, tout = origin ? TICK * .8 : TICK;
   xT.forEach(v => tk.push(`M${f3(sx(v))},${f3(yAx - tin)}V${f3(yAx + tout)}`));
   yT.forEach(v => tk.push(`M${f3(xAx - tout)},${f3(sy(v))}H${f3(xAx + tin)}`));
-  if (tk.length) out.push(`<path d="${tk.join('')}" stroke="#000" stroke-width=".35" fill="none"/>`);
+  if (tk.length) out.push(`<path d="${tk.join('')}" stroke="#000" stroke-width="${lw(.35)}" fill="none"/>`);
+
+  const defs = [];
+  /* ----- labelled regions: bands along x for "which section shows…" questions ----- */
+  const regionParts = [];
+  if (!hid.has('regions')) spec.regions.forEach((g, i) => {
+    if (hid.has('region:' + i)) return;
+    const a = clamp(Math.min(axX(g.from), axX(g.to)), x0, x1), b = clamp(Math.max(axX(g.from), axX(g.to)), x0, x1);
+    if (b - a < .2) return;
+    let fill = 'none';
+    if (g.shade === 'light') fill = 'rgba(0,0,0,.09)';
+    else if (g.shade === 'hatch') { fill = `url(#${o.id}-rg)`; }
+    regionParts.push(`<rect x="${f3(a)}" y="${f3(y0)}" width="${f3(b - a)}" height="${f3(y1 - y0)}" fill="${fill}"/>` +
+      `<path d="M${f3(a)},${f3(y0)}V${f3(y1)}M${f3(b)},${f3(y0)}V${f3(y1)}" stroke="#000" stroke-width="${lw(.3)}" stroke-dasharray="1.4 1" fill="none"/>`);
+    if (g.label) {
+      const lab = fitText(g.label, Math.max(4, b - a - 1), FS, true), w = textW(lab, FS, true) + 1.6;
+      regionParts.push(`<rect x="${f3((a + b) / 2 - w / 2)}" y="${f3(y0 + .8)}" width="${f3(w)}" height="${f3(FS * 1.5)}" fill="#fff" stroke="#000" stroke-width="${lw(.25)}"/>` + txt((a + b) / 2, y0 + .8 + FS * 1.1, lab, { bold: true }));
+    }
+  });
+  if (regionParts.length) {
+    defs.push(`<pattern id="${o.id}-rg" width="1.6" height="1.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1=".8" y1="0" x2=".8" y2="1.6" stroke="#000" stroke-opacity=".45" stroke-width=".25"/></pattern>`);
+    out.push(regionParts.join(''));
+  }
 
   /* ----- data (clipped to the plot) ----- */
-  const clipId = o.id + '-clip', defs = [];
+  const clipId = o.id + '-clip';
   const data = [], labels = [];
+  const flagRing = (cx, cy) => `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(2.8 * S)}" fill="none" stroke="#c43d35" stroke-width=".4" stroke-dasharray="1 .7"/>`;   // editor-only: value between gridlines
   const hitAttr = (j, r) => o.hits ? ` data-pt="${j}:${r}" style="cursor:pointer"` : '';
   const hit = (cx, cy) => o.hits ? `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="2.6" fill="transparent"/>` : '';
   if (!hid.has('data')) spec.series.forEach((st, j) => {
@@ -894,14 +1065,15 @@ function renderSVG(spec, o) {
         if (v === null || (hid.has(tok))) return;
         const bx = x0 + i * bandW + (bandW - groupW) / 2 + j * barW;
         const ya = sy(base), yb = sy(v);
-        parts.push(`<rect x="${f3(bx)}" y="${f3(Math.min(ya, yb))}" width="${f3(barW)}" height="${f3(Math.abs(ya - yb))}" fill="${hf.fill}" stroke="#000" stroke-width=".3"${ghost.has(tok) ? ' opacity=".3"' : ''}${hitAttr(j, c.r)}/>`);
+        parts.push(`<rect x="${f3(bx)}" y="${f3(Math.min(ya, yb))}" width="${f3(barW)}" height="${f3(Math.abs(ya - yb))}" fill="${hf.fill}" stroke="#000" stroke-width="${lw(.3)}"${ghost.has(tok) ? ' opacity=".3"' : ''}${hitAttr(j, c.r)}/>`);
+        if (o.flags && o.flags.has(j + ':' + c.r)) parts.push(flagRing(bx + barW / 2, Math.min(ya, yb)));
       });
     } else {
       const showLine = spec.type === 'line', showMk = spec.type !== 'line' || spec.style.lineMarkers;
-      const r = spec.type === 'coordinate' ? 1.55 : 1.35;
+      const r = (spec.type === 'coordinate' ? 1.55 : 1.35) * S;
       if (showLine) {                                               // hidden points break the line rather than being bridged
         let run = [];
-        const flush = () => { if (run.length > 1) parts.push(`<polyline points="${run.join(' ')}" fill="none" stroke="${col}" stroke-width=".5" stroke-linejoin="round"${DASHES[st.dash] ? ` stroke-dasharray="${DASHES[st.dash]}"` : ''}/>`); run = []; };
+        const flush = () => { if (run.length > 1) parts.push(`<polyline points="${run.join(' ')}" fill="none" stroke="${col}" stroke-width="${lw(.5)}" stroke-linejoin="round"${DASHES[st.dash] ? ` stroke-dasharray="${DASHES[st.dash]}"` : ''}/>`); run = []; };
         pts[j].forEach(p => { if (hid.has(`pt:${j}:${p.r}`)) flush(); else run.push(`${f3(sx(p.x))},${f3(sy(p.y))}`); });
         flush();
       }
@@ -909,7 +1081,8 @@ function renderSVG(spec, o) {
         const tok = `pt:${j}:${p.r}`;
         if (hid.has(tok)) return;
         const cx = sx(p.x), cy = sy(p.y), gh = ghost.has(tok) ? ' opacity=".3"' : '';
-        if (showMk || o.hits) parts.push(`<g${gh}${hitAttr(j, p.r)}>${showMk ? markerSVG(st.marker, cx, cy, r, col) : ''}${hit(cx, cy)}</g>`);
+        if (showMk || o.hits) parts.push(`<g${gh}${hitAttr(j, p.r)}>${showMk ? markerSVG(st.marker, cx, cy, r, col, S) : ''}${hit(cx, cy)}</g>`);
+        if (o.flags && o.flags.has(j + ':' + p.r)) parts.push(flagRing(cx, cy));
         if (p.label && !hid.has('pointLabels') && LABELLED_TYPES.includes(spec.type) && p.x >= ax.lo && p.x <= ax.hi && p.y >= ay.lo && p.y <= ay.hi) {
           const left = cx > x1 - 9;
           labels.push(`<g${gh}>${txt(left ? cx - r - .9 : cx + r + .9, cy - r - .2, p.label, { anchor: left ? 'end' : 'start', bold: true })}</g>`);
@@ -957,6 +1130,30 @@ function renderSVG(spec, o) {
   }
   out.push(...lab);
 
+  /* ----- annotations: text, arrows, callouts (positions are in data coordinates) ----- */
+  if (!hid.has('annotations')) spec.annotations.forEach((a, i) => {
+    if (hid.has('ann:' + i)) return;
+    const px = axX(a.x), py = sy(a.y), qx = axX(a.x2), qy = sy(a.y2), text = a.text;
+    const plate = (cx, cy, w, stroke) => `<rect x="${f3(cx - w / 2)}" y="${f3(cy - FS * .85)}" width="${f3(w)}" height="${f3(FS * 1.35)}" fill="#fff"${stroke ? ` stroke="#000" stroke-width="${lw(.3)}" rx=".8"` : ''}/>`;
+    const head = (fx, fy, tx, ty) => {                                  // arrowhead at (tx,ty), coming from (fx,fy)
+      const d = Math.hypot(tx - fx, ty - fy) || 1, ux = (tx - fx) / d, uy = (ty - fy) / d, L = 2.4 * S, W2 = 1 * S;
+      return `<polygon points="${f3(tx)},${f3(ty)} ${f3(tx - ux * L - uy * W2)},${f3(ty - uy * L + ux * W2)} ${f3(tx - ux * L + uy * W2)},${f3(ty - uy * L - ux * W2)}" fill="#000"/>`;
+    };
+    const w = text ? textW(text, FS) + 1.6 : 0;
+    if (a.kind === 'text') { if (text) out.push(plate(px, py, w) + txt(px, py + FS * .3, text)); }
+    else if (a.kind === 'arrow') {
+      out.push(`<line x1="${f3(px)}" y1="${f3(py)}" x2="${f3(qx)}" y2="${f3(qy)}" stroke="#000" stroke-width="${lw(.5)}"/>` + head(px, py, qx, qy));
+      if (text) {                                                       // label sits just beyond the tail
+        const d = Math.hypot(qx - px, qy - py) || 1, ux = (qx - px) / d, uy = (qy - py) / d;
+        const cx = px - ux * (w / 2 + .8), cy = py - uy * (FS * .9 + .6);
+        out.push(plate(cx, cy, w) + txt(cx, cy + FS * .3, text));
+      }
+    } else {
+      out.push(`<line x1="${f3(px)}" y1="${f3(py)}" x2="${f3(qx)}" y2="${f3(qy)}" stroke="#000" stroke-width="${lw(.4)}"/>` + head(px, py, qx, qy));
+      if (text) out.push(plate(px, py, w + 1.2, true) + txt(px, py + FS * .3, text));
+    }
+  });
+
   /* ----- titles (with optional blank answer lines) ----- */
   const under = (n) => '_'.repeat(Math.max(3, n));
   const axisText = (a, key, maxLen) => {
@@ -982,16 +1179,16 @@ function renderSVG(spec, o) {
     else if (lpos === 'top') { lx = cxm - legend.w / 2; ly = PAD + titleSp; }
     else if (lpos === 'bottom') { lx = cxm - legend.w / 2; ly = H - PAD - legend.h; }
     else { lx = x1 - legend.w - 3.5; ly = y0 + 1.8; }
-    if (lpos === 'inside') out.push(`<rect x="${f3(lx - 1.5)}" y="${f3(ly - 1)}" width="${f3(legend.w + 3)}" height="${f3(legend.h + 1.6)}" fill="#fff" stroke="#555" stroke-width=".25"/>`);
+    if (lpos === 'inside') out.push(`<rect x="${f3(lx - 1.5)}" y="${f3(ly - 1)}" width="${f3(legend.w + 3)}" height="${f3(legend.h + 1.6)}" fill="#fff" stroke="#555" stroke-width="${lw(.25)}"/>`);
     legend.items.forEach((it, j) => {
       const st = spec.series[j], col = colour ? PALETTE[j % PALETTE.length] : '#000';
       const iy = ly + it.y + legend.rowH / 2, ix = lx + it.x, sw = legend.symW;
       if (isBar) {
         const hf = colour ? { fill: col } : hatchFill(`${o.id}-h${j}`, st.hatch);
-        out.push(`<rect x="${f3(ix)}" y="${f3(iy - 1.5)}" width="${sw - 1.5}" height="3" fill="${hf.fill}" stroke="#000" stroke-width=".25"/>`);
+        out.push(`<rect x="${f3(ix)}" y="${f3(iy - 1.5)}" width="${sw - 1.5}" height="3" fill="${hf.fill}" stroke="#000" stroke-width="${lw(.25)}"/>`);
       } else {
-        if (spec.type === 'line') out.push(`<line x1="${f3(ix)}" y1="${f3(iy)}" x2="${f3(ix + sw - 1.5)}" y2="${f3(iy)}" stroke="${col}" stroke-width=".5"${DASHES[st.dash] ? ` stroke-dasharray="${DASHES[st.dash]}"` : ''}/>`);
-        if (spec.type !== 'line' || spec.style.lineMarkers) out.push(markerSVG(st.marker, ix + (sw - 1.5) / 2, iy, 1.2, col));
+        if (spec.type === 'line') out.push(`<line x1="${f3(ix)}" y1="${f3(iy)}" x2="${f3(ix + sw - 1.5)}" y2="${f3(iy)}" stroke="${col}" stroke-width="${lw(.5)}"${DASHES[st.dash] ? ` stroke-dasharray="${DASHES[st.dash]}"` : ''}/>`);
+        if (spec.type !== 'line' || spec.style.lineMarkers) out.push(markerSVG(st.marker, ix + (sw - 1.5) / 2, iy, 1.2 * S, col, S));
       }
       out.push(txt(ix + sw + legend.gap, iy + FS * .35, it.name, { anchor: 'start' }));
     });
@@ -1006,6 +1203,12 @@ function renderSVG(spec, o) {
   return head + `<title>${esc(name)}</title>` +
     `<defs><clipPath id="${clipId}"><rect x="${f3(x0 - 2)}" y="${f3(y0 - 2)}" width="${f3(x1 - x0 + 4)}" height="${f3(y1 - y0 + 4)}"/></clipPath>${defs.join('')}</defs>` +
     bg + out.join('') + '</svg>';
+}
+
+/* The page size actually drawn (a locked physical scale makes the page follow the grid). */
+function svgSize(spec) {
+  const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(renderSVG(spec));
+  return { w: +m[1], h: +m[2] };
 }
 
 /* ---------- PNG: stamp 300 DPI so Word places it at the real printed size ---------- */
@@ -1035,7 +1238,8 @@ function pngWithDpi(u8, dpi) {
 
   /* ---------- state: the spec is the truth; view/pick/tab are UI-only ---------- */
   let spec = sampleSpec();
-  const state = { view: 'key', pick: false, tab: 'graph' };
+  const state = { view: 'key', pick: false, tab: 'graph', size: null, issues: [] };
+  const fmtNum = v => String(clean(v));
   const hist = [JSON.stringify(spec)];
   let idx = 0, lastKey = null, lastT = 0;
 
@@ -1048,7 +1252,8 @@ function pngWithDpi(u8, dpi) {
   const VIS_ROWS = [
     ['title', 'Title', true], ['xTitle', 'X-axis title', true], ['yTitle', 'Y-axis title', true],
     ['units', 'Units in axis titles', true], ['xTicks', 'X-axis numbers'], ['yTicks', 'Y-axis numbers'],
-    ['legend', 'Legend'], ['pointLabels', 'Point labels (A, B, C…)'], ['data', 'All data (every series)']
+    ['legend', 'Legend'], ['pointLabels', 'Point labels (A, B, C…)'], ['annotations', 'Annotations (all)'], ['regions', 'Labelled regions (all)'],
+    ['data', 'All data (every series)']
   ];
 
   const getPath = (o, p) => p.split('.').reduce((a, k) => a == null ? a : a[k], o);
@@ -1103,11 +1308,17 @@ function pngWithDpi(u8, dpi) {
         <div class="row" style="margin-top:10px">
           <div><label class="lab">Minor lines per step</label><input type="number" min="1" max="10" step="1" data-bind="${k}.minorPerMajor"></div>
         </div>
+        <div class="row" style="margin-top:10px">
+          <div><label class="lab">Number format</label><select data-bind="${k}.format">${optList(FORMAT_NAMES)}</select></div>
+          <div><label class="lab">Decimals</label><input type="number" min="0" max="8" step="1" placeholder="auto" data-bind="${k}.decimals"></div>
+          <div><label class="lab">Sig. figs</label><input type="number" min="1" max="10" step="1" placeholder="auto" data-bind="${k}.sigfigs"></div>
+        </div>
+        <label class="check" style="margin-top:10px"><input type="checkbox" data-bind="${k}.breakMark"> Zigzag break if the axis doesn’t start at zero</label>
       </div></div>`;
   }
   function buildAxes() {
     $('#axesPane').innerHTML = axisCard('x', 'X axis') + axisCard('y', 'Y axis') + `
-      <p class="hint">Blank Min / Max / Step use automatic “nice” values (shown in grey). Type a number to override any of them.</p>
+      <p class="hint">Blank Min / Max / Step use automatic “nice” values (shown in grey). Type a number to override any of them. Significant figures win over decimal places; fractions fall back to decimals where no simple fraction fits.</p>
       <div><h3 class="section-title">Axes position</h3>
         <div class="seg" data-seg="axes"><button type="button" data-v="edges">Along the edges</button><button type="button" data-v="origin">Through the origin</button></div></div>
       <div><h3 class="section-title">Gridlines</h3>
@@ -1129,11 +1340,40 @@ function pngWithDpi(u8, dpi) {
         <div class="vis"><span class="head">Item</span><span class="head">If hidden</span>${rows}</div>
         <p class="hint" style="margin-top:8px">“Answer line” draws a blank (e.g. <b>Title: ________</b>) where a hidden label was.</p></div>
       <div><h3 class="section-title">Series</h3><div class="vis">${ser}</div></div>
+      <div><h3 class="section-title">Readability check</h3><div id="readBox"></div></div>
       <div><h3 class="section-title">Individual points and bars <span class="pill" id="markPill"></span></h3>
         <label class="check"><input type="checkbox" id="pick"> Click a point or bar in the preview to hide it</label>
         <div class="row tight" style="margin-top:8px"><button class="btn small" type="button" data-act="showMarks">Show all points and bars</button></div>
         <p class="hint" style="margin-top:8px">Hidden ones look faded in the Answer key and are left out of the Question.</p></div>`;
     $('#pick').checked = state.pick;
+  }
+
+  function buildNotes() {
+    const num = (path, lab) => `<div><label class="lab">${lab}</label><input type="number" step="any" data-bind="${path}"></div>`;
+    const ann = spec.annotations.map((a, i) => `<div class="card">
+      <div class="row"><div><label class="lab">Type</label><select data-bind="annotations.${i}.kind">${optList({ text: 'Text label', arrow: 'Arrow', callout: 'Callout' })}</select></div>
+        <div style="flex:none"><button class="xbtn" type="button" data-act="delAnn" data-i="${i}" title="Remove">×</button></div></div>
+      <div><label class="lab">Text</label><input type="text" data-bind="annotations.${i}.text" placeholder="e.g. Ice melting"></div>
+      <div class="row">${num(`annotations.${i}.x`, 'At x')}${num(`annotations.${i}.y`, 'At y')}</div>
+      <div class="row" data-kinds="arrow,callout" data-kindpath="annotations.${i}.kind">${num(`annotations.${i}.x2`, 'Points to x')}${num(`annotations.${i}.y2`, 'Points to y')}</div>
+      <label class="check"><input type="checkbox" data-vis="ann:${i}"> Show in question</label></div>`).join('');
+    const reg = spec.regions.map((g, i) => `<div class="card">
+      <div class="row"><div><label class="lab">Label</label><input type="text" data-bind="regions.${i}.label" placeholder="A"></div>
+        <div><label class="lab">Shading</label><select data-bind="regions.${i}.shade">${optList({ none: 'Outline only', light: 'Light grey', hatch: 'Hatched' })}</select></div>
+        <div style="flex:none"><button class="xbtn" type="button" data-act="delRegion" data-i="${i}" title="Remove">×</button></div></div>
+      <div class="row">${num(`regions.${i}.from`, 'From x')}${num(`regions.${i}.to`, 'To x')}</div>
+      <label class="check"><input type="checkbox" data-vis="region:${i}"> Show in question</label></div>`).join('');
+    $('#notesPane').innerHTML = `
+      <div><h3 class="section-title">Annotations</h3>
+        <div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="addAnn" data-kind="text">+ Text</button>
+          <button class="btn small" type="button" data-act="addAnn" data-kind="arrow">+ Arrow</button>
+          <button class="btn small" type="button" data-act="addAnn" data-kind="callout">+ Callout</button></div>
+        <div style="display:grid;gap:10px;margin-top:10px">${ann || '<p class="hint">None yet. Positions are in graph units, so they stay put if you change the axes.</p>'}</div>
+        ${spec.type === 'bar' ? '<p class="hint" style="margin-top:8px">On a bar graph, x counts categories from 1 (1.5 is between the first two).</p>' : ''}</div>
+      <div><h3 class="section-title">Labelled regions</h3>
+        <p class="hint" style="margin-bottom:8px">Bands along x with a letter on top, for “which section shows…?” questions (e.g. the parts of a heating curve).</p>
+        <button class="btn small" type="button" data-act="addRegion">+ Region</button>
+        <div style="display:grid;gap:10px;margin-top:10px">${reg}</div></div>`;
   }
 
   function buildStyle() {
@@ -1150,7 +1390,18 @@ function pngWithDpi(u8, dpi) {
       <div><label class="check"><input type="checkbox" data-bind="style.colour"> Use colour</label>
         <p class="hint" style="margin-top:6px">Off by default: graphs are black and white for photocopying. Series stay distinguishable without colour through marker shapes, dash patterns and hatched bar fills. With colour on, bars use solid colours.</p></div>
       <div data-show="line"><label class="check"><input type="checkbox" data-bind="style.lineMarkers"> Show markers on lines</label></div>
-      <div><h3 class="section-title">Series</h3><div style="display:grid;gap:10px">${cards}</div></div>`;
+      <div><h3 class="section-title">Print</h3>
+        <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="style.largePrint"> Large print (text, lines and markers ×1.35)</label>
+        <label class="check"><input type="checkbox" data-bind="style.photocopySafe"> Photocopy-safe gridlines (darker)</label>
+        <p class="hint" style="margin-top:6px">Large print keeps the page size, so the plot gets smaller; enlarge the size on the Graph tab if you need more room. The grey levels for photocopy-safe are starting values: do a test print on your school copier and tell me if they need adjusting.</p></div>
+      <div><h3 class="section-title">Series</h3><div style="display:grid;gap:10px">${cards}</div></div>
+      <div><h3 class="section-title">Misleading graph</h3>
+        <p class="hint" style="margin-bottom:8px">For “what is wrong with this graph?” questions. Everything else (scaffolds, hiding, exports) works as normal.</p>
+        <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="misleading.truncate"> Truncated y-axis (starts near the data, no break mark)</label>
+        <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="misleading.unevenY"> Uneven intervals on the y-axis</label>
+        <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="misleading.unevenX"> Uneven intervals on the x-axis</label>
+        <label class="lab">Stretched shape</label>
+        <select data-bind="misleading.shape"><option value="none">Normal</option><option value="tall">Tall and narrow</option><option value="wide">Short and wide</option></select></div>`;
   }
 
   /* ---------- data table ---------- */
@@ -1213,10 +1464,12 @@ function pngWithDpi(u8, dpi) {
     $$('[data-seg]').forEach(g => $$('button', g).forEach(b => b.classList.toggle('active', String(getPath(spec, g.dataset.seg)) === b.dataset.v)));
     $$('[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === spec.type));
     $$('[data-show]').forEach(el => { el.hidden = !el.dataset.show.split(',').includes(spec.type); });
-    const { w, h } = sizeMM(spec.size);
+    $$('[data-kinds]').forEach(el => { el.hidden = !el.dataset.kinds.split(',').includes(getPath(spec, el.dataset.kindpath)); });
+    const locked = spec.scale.lock && spec.type !== 'bar', { w, h } = state.size || sizeMM(spec.size);
     $('#sizePreset').value = spec.size.preset;
     if (active !== $('#sizeW')) $('#sizeW').value = w;
     if (active !== $('#sizeH')) $('#sizeH').value = h;
+    ['#sizePreset', '#sizeW', '#sizeH'].forEach(q => { $(q).disabled = locked; });
     const hid = new Set(spec.hidden), level = scaffoldLevel(spec);
     $$('[data-level]').forEach(b => b.classList.toggle('active', b.dataset.level === level));
     const pill = $('#levelPill'); if (pill) { pill.textContent = levelName(); pill.classList.toggle('custom', level === 'custom'); }
@@ -1225,6 +1478,17 @@ function pngWithDpi(u8, dpi) {
       const t = el.dataset.blank; el.checked = spec.blanks.includes(t);
       el.closest('label').classList.toggle('dis', !hid.has(t));
     });
+    const rb = $('#readBox');
+    if (rb) {
+      const names = spec.series.map(x => x.name || 'Series');
+      rb.innerHTML = state.issues.length
+        ? `<p class="hint" style="margin-bottom:6px">${state.issues.length} value${state.issues.length === 1 ? ' falls' : 's fall'} between gridlines at the current density, so students can’t read ${state.issues.length === 1 ? 'it' : 'them'} exactly. They’re ringed in red in the preview.</p>` +
+          state.issues.slice(0, 6).map(i => `<p class="issue">Row ${i.r + 1}${spec.type === 'bar' || spec.series.length > 1 ? ' · ' + esc(names[i.j]) : ''} · ${i.axis} = ${fmtNum(i.value)}</p>`).join('') +
+          (state.issues.length > 6 ? `<p class="hint">…and ${state.issues.length - 6} more.</p>` : '') +
+          `<div class="row tight" style="margin-top:8px"><button class="btn small" type="button" data-act="snap">Snap all values to the nearest gridline</button></div>` +
+          `<p class="hint" style="margin-top:6px">Or add minor lines on the Axes tab so more values land on a line.</p>`
+        : '<p class="ok-line">✓ Every value sits on a gridline.</p>';
+    }
     const marks = spec.hidden.filter(t => t.startsWith('pt:')).length;
     const mp = $('#markPill'); if (mp) mp.textContent = marks ? marks + ' hidden' : 'none hidden';
     $$('#tblwrap input[data-r]').forEach(el => {
@@ -1235,9 +1499,14 @@ function pngWithDpi(u8, dpi) {
   }
 
   function renderPreview() {
-    const { w, h } = sizeMM(spec.size);
     const pick = state.pick && state.view === 'key';
-    $('#preview').innerHTML = renderSVG(spec, { version: state.view, ghost: true, hits: pick, px: { w: Math.round(w * 7.5), h: Math.round(h * 7.5) } });
+    const flags = state.view === 'key' ? new Set(state.issues.map(i => i.j + ':' + i.r)) : null;
+    const svg = renderSVG(spec, { version: state.view, ghost: true, hits: pick, flags });
+    const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg);
+    state.size = { w: +m[1], h: +m[2] };
+    $('#preview').innerHTML = svg;
+    const el = $('#preview svg');                                  // show at about 2x real size, shrinking to fit
+    el.setAttribute('width', Math.round(state.size.w * 7.5)); el.setAttribute('height', Math.round(state.size.h * 7.5));
     $('#preview').classList.toggle('pick', pick);
     $('#caption').textContent = state.view === 'key'
       ? 'Answer key: everything is shown.'
@@ -1246,14 +1515,15 @@ function pngWithDpi(u8, dpi) {
     $$('#viewSeg button').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
   }
   function renderStatus() {
-    const { w, h } = sizeMM(spec.size), bad = countBad();
-    $('#status').innerHTML = `<span><b>${w} × ${h}</b> mm</span><span class="dotline"></span>
+    const { w, h } = state.size, bad = countBad(), rd = state.issues.length;
+    $('#status').innerHTML = `<span><b>${+w.toFixed(1)} × ${+h.toFixed(1)}</b> mm</span><span class="dotline"></span>
       <span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span><span class="dotline"></span>
       <span>${TYPE_NAMES[spec.type]}</span>` +
+      (rd ? `<span class="dotline"></span><span class="warn">${rd} value${rd === 1 ? '' : 's'} between gridlines</span>` : '') +
       (bad ? `<span class="dotline"></span><span class="warn">${bad} cell${bad === 1 ? ' isn’t a number and is' : 's aren’t numbers and are'} left off the graph</span>` : '');
   }
-  function refresh() { syncControls(); renderPreview(); renderStatus(); }
-  function rebuildStructure() { buildTable(); buildTest(); buildStyle(); refresh(); }
+  function refresh() { state.issues = readability(spec); renderPreview(); syncControls(); renderStatus(); }
+  function rebuildStructure() { buildTable(); buildNotes(); buildTest(); buildStyle(); refresh(); }
 
   /* ---------- actions ---------- */
   function setType(t) {
@@ -1294,32 +1564,65 @@ function pngWithDpi(u8, dpi) {
     commit(null, true);
   }
 
+  const nextLetter = () => String.fromCharCode(65 + spec.regions.length % 26);
+  function addAnn(kind) {
+    if (spec.annotations.length >= MAX_ANN) return toast('Annotation limit reached (' + MAX_ANN + ').', 'err');
+    const a = computeAxes(spec), n = spec.annotations.length, mid = (lo, hi) => clean(Math.round((lo + hi) / 2 * 100) / 100);
+    const xs = a.x ? a.x.hi - a.x.lo : 4, ys = a.y.hi - a.y.lo;
+    const x = clean((a.x ? mid(a.x.lo, a.x.hi) : 2.5) + ((n % 4) - 1.5) * xs * .12);      // stagger so new ones don't stack
+    const y = clean(mid(a.y.lo, a.y.hi) + (n % 2 ? -1 : 1) * ys * .12 * (1 + Math.floor(n / 4) * .5));
+    spec.annotations.push({ kind, text: kind === 'text' ? 'Label' : kind === 'arrow' ? 'Look here' : 'Note', x, y, x2: clean(x + xs * .12), y2: clean(y - ys * .15) });
+    commit(null, true);
+  }
+  function addRegion() {
+    if (spec.regions.length >= MAX_REGIONS) return toast('Region limit reached (' + MAX_REGIONS + ').', 'err');
+    const a = computeAxes(spec), lo = a.x ? a.x.lo : .5, hi = a.x ? a.x.hi : spec.rows.length + .5, span = hi - lo;
+    const prev = spec.regions[spec.regions.length - 1];                   // each new region continues where the last one ended
+    const from = prev ? Math.max(prev.from, prev.to) : clean(lo + span * .05), to = clean(Math.min(hi, from + span * .25));
+    spec.regions.push({ from, to, label: nextLetter(), shade: 'light' });
+    commit(null, true);
+  }
+  function snapAll() {
+    const n = snapValues(spec);
+    spec = normalize(spec); commit(null, true);
+    toast(n ? 'Moved ' + n + ' value' + (n === 1 ? '' : 's') + ' onto gridlines. Undo puts them back.' : 'Nothing to snap.', n ? 'ok' : '');
+  }
+
   /* ---------- files ---------- */
   const slug = () => (spec.title || 'graph').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'graph';
-  const versionSuffix = () => state.view === 'key' ? '-key' : '-q';
+  const suffix = version => version === 'key' ? '-key' : '-q';
   function download(name, blob) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
   const bgOpt = () => $('#transparent').checked ? 'none' : 'white';
-  function exportSVG() {
-    const svg = renderSVG(spec, { version: state.view, background: bgOpt(), xmlHeader: true });
-    download(slug() + versionSuffix() + '.svg', new Blob([svg], { type: 'image/svg+xml' }));
+  const makeSVG = version => new Blob([renderSVG(spec, { version, background: bgOpt(), xmlHeader: true })], { type: 'image/svg+xml' });
+  async function makePNG(version) {
+    const { w, h } = svgSize(spec), pw = mmToPx(w, 300), ph = mmToPx(h, 300);
+    const svg = renderSVG(spec, { version, background: bgOpt(), px: { w: pw, h: ph } });
+    const img = new Image();
+    await new Promise((ok, no) => { img.onload = ok; img.onerror = () => no(new Error('The browser could not draw the graph.')); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+    const cv = document.createElement('canvas'); cv.width = pw; cv.height = ph;
+    cv.getContext('2d').drawImage(img, 0, 0, pw, ph);
+    const blob = await new Promise(ok => cv.toBlob(ok, 'image/png'));
+    if (!blob) throw new Error('The browser could not create the PNG.');
+    return new Blob([pngWithDpi(new Uint8Array(await blob.arrayBuffer()), 300)], { type: 'image/png' });
   }
+  const exportSVG = () => download(slug() + suffix(state.view) + '.svg', makeSVG(state.view));
   async function exportPNG() {
+    try { download(slug() + suffix(state.view) + '.png', await makePNG(state.view)); }
+    catch (err) { toast(err.message || 'PNG export failed.', 'err'); }
+  }
+  async function exportPair() {                                     // question first, then key, sharing one base name
+    const fmt = $('#pairFmt').value;
     try {
-      const { w, h } = sizeMM(spec.size), pw = mmToPx(w, 300), ph = mmToPx(h, 300);
-      const svg = renderSVG(spec, { version: state.view, background: bgOpt(), px: { w: pw, h: ph } });
-      const img = new Image();
-      await new Promise((ok, no) => { img.onload = ok; img.onerror = () => no(new Error('The browser could not draw the graph.')); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
-      const cv = document.createElement('canvas'); cv.width = pw; cv.height = ph;
-      cv.getContext('2d').drawImage(img, 0, 0, pw, ph);
-      const blob = await new Promise(ok => cv.toBlob(ok, 'image/png'));
-      if (!blob) throw new Error('The browser could not create the PNG.');
-      const out = pngWithDpi(new Uint8Array(await blob.arrayBuffer()), 300);
-      download(slug() + versionSuffix() + '.png', new Blob([out], { type: 'image/png' }));
-    } catch (err) { toast(err.message || 'PNG export failed.', 'err'); }
+      for (const version of ['question', 'key']) {
+        download(slug() + suffix(version) + '.' + fmt, fmt === 'png' ? await makePNG(version) : makeSVG(version));
+        await new Promise(r => setTimeout(r, 350));                 // browsers drop downloads fired in the same instant
+      }
+      toast('Downloaded ' + slug() + '-q.' + fmt + ' and ' + slug() + '-key.' + fmt, 'ok');
+    } catch (err) { toast(err.message || 'Export failed.', 'err'); }
   }
   function saveJSON() { download(slug() + '.graph.json', new Blob([serialize(spec)], { type: 'application/json' })); toast('Saved ' + slug() + '.graph.json', 'ok'); }
   async function openFile(file) {
@@ -1375,6 +1678,11 @@ function pngWithDpi(u8, dpi) {
     else if (b.parentElement && b.parentElement.dataset.seg) {
       const v = b.dataset.v; setPath(spec, b.parentElement.dataset.seg, /^\d+$/.test(v) ? Number(v) : v); commit(null);
     }
+    else if (b.dataset.act === 'addAnn') addAnn(b.dataset.kind);
+    else if (b.dataset.act === 'addRegion') addRegion();
+    else if (b.dataset.act === 'delAnn') { spec.annotations.splice(+b.dataset.i, 1); dropIndex(spec, 'ann', +b.dataset.i); commit(null, true); }
+    else if (b.dataset.act === 'delRegion') { spec.regions.splice(+b.dataset.i, 1); dropIndex(spec, 'region', +b.dataset.i); commit(null, true); }
+    else if (b.dataset.act === 'snap') snapAll();
     else if (b.dataset.act === 'delRow') delRow(+b.dataset.i);
     else if (b.dataset.act === 'delSeries') delSeries(+b.dataset.i);
     else if (b.dataset.act === 'showMarks') { spec.hidden = spec.hidden.filter(t => !t.startsWith('pt:')); commit(null); }
@@ -1419,6 +1727,7 @@ function pngWithDpi(u8, dpi) {
   $('#undoBtn').onclick = () => goto(idx - 1);
   $('#redoBtn').onclick = () => goto(idx + 1);
   $('#svgBtn').onclick = exportSVG;
+  $('#pairBtn').onclick = exportPair;
   $('#pngBtn').onclick = exportPNG;
 
   /* ---------- go ---------- */
