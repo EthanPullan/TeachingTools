@@ -75,12 +75,33 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
   drawn with different x and y steps. "Snap points and corners" fixes the points.
 - Assumption: the equation label defaults to "the equation" for a new line; intercept marks, slope triangles and every table are opt-in.
 
+## Phase 3 notes (number lines)
+- **Same spec, second type.** `type` is `plane` or `numberline`. Objects keep their kind's `on` (`plane` / `numberline`) and the
+  resolver only sees the current type's objects, so switching the type loses nothing (checked in unit and browser tests).
+  The plane's `x` axis settings are the line's scale, so range, step, minor ticks and number format work as before.
+- **New kinds:** `nlpoint`, `inequality` (one, "and", or "or"; real numbers or integer dots), `hops`, `signchart`. The line itself
+  lives in `spec.line` (orientation, join-ticks, rows). Rows can share one scale (stacked) or each have their own (double number line,
+  optional connectors between matching ticks). Vertical is the same code in a rotated (u, v) frame.
+- **Notation is derived from the segments**, never typed: inequality, interval and set-builder lines (∞ ∪ ∈ ℝ ℤ ∅), each optional,
+  hidden together by the `notation` token. Solution drawing hides under `results`; sign-chart signs under `signs`, its zeros under `keyPoints`.
+- **Sign chart** reuses the Phase 2 zero finder plus a new `findPoles`; a pole is never included in a solution, a zero is for ≥ and ≤,
+  and a double root is a lone point for ≤. Or type the critical values and signs by hand.
+- **Blank boxes** replace chosen tick numbers in the question only ("fill in the missing numbers"). Quick setups: integers, eighths,
+  tenths, quarters (mixed numbers), cost/percent double line, thermometer.
+- **Fractions:** a third number format, improper fractions.
+- **specVersion is now 3** (an older reader would silently drop number-line objects). Science files are still refused.
+- Bug found by testing, fixed: `findPoles` missed a pole that fell exactly on a sample point when the neighbours were small
+  (`(x−1)/((x+2)(x−3))` on −10..10). It now probes just beside the point; a removable hole stays a hole. Still not found: an even-order pole
+  (`1/(x−1)²`) that falls *between* samples, because the sign does not flip. Rare for classroom expressions; not chased.
+- Accepted on purpose: a sign chart takes `y = 2x` as well as `2x` (it is the same expression in x). Only `x = 4` is refused.
+- Smell noticed: the Number line tab's mark cards use array positions in `data-bind` like the other tabs (see below).
+
 ## How Phase 1 is tested
-- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 79 tests after Phase 2): axis maths, number
+- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 91 tests after Phase 3): axis maths, number
   cleanup, label typography, `normalize` idempotence, save/load round trip, stable ids, paste parsing, and a
   render matrix (every layout × scaffold level × style) asserting no `NaN`/`undefined`, an identical page and
   plot rectangle in question and key, and that a hidden title/label never leaks into the question SVG.
-- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 86 checks after Phase 2) drive the real page
+- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 109 checks after Phase 3) drive the real page
   over `file://` in Chromium: no network requests, table entry and paste, click-to-place and drag with snapping,
   scaffold levels, pick-to-hide, export names (`q4-q.png` / `q4-key.png`), PNG stamped 300 DPI with pixel size
   matching the millimetres, the locked scale **measured by the browser** (ten 10 mm squares = 100 mm),
@@ -96,6 +117,10 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
   six or more labelled graphs share a half-width grid. Different x and y steps make perpendicular lines look wrong (warned, not prevented).
 - Very small pages: at quarter width (40 mm) labels next to points inevitably crowd; use half width or larger
   for graphs with labelled points.
+
+- Phase 3: glyphs ℝ ℤ ∈ ∪ ∞ ∅ render in Chromium; whether they survive in a Word/Google Docs paste of the SVG, or a machine without a
+  font that has them, is unchecked (PNG is safe). Crowding when several mark types share one short line is left to the teacher (see the
+  screenshot habit: use stacked lines). Vertical lines take their length from the page height, not the range.
 
 ## Smells noticed while building (not fixed; for separate issues)
 - The toolbar is crowded (also true of the science tool); a menu for exports would tidy it.
@@ -113,7 +138,7 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 ## Progress
 - [x] Phase 1: MVP (`tools/math-graph-maker/`, specVersion 1)
 - [x] Phase 2: function engine and linear relations (specVersion 2)
-- [ ] Phase 3: number lines
+- [x] Phase 3: number lines (specVersion 3)
 - [ ] Phase 4: transformations, geometry, paper
 - [ ] Phase 5: data displays
 - [ ] Phase 6: test-making toolkit

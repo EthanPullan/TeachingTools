@@ -200,7 +200,7 @@ function pngInfo(buf) {
   check('the saved file is named after the export name', downloads[dl5].suggestedFilename() === 'q4.mathgraph.json', downloads[dl5].suggestedFilename());
   const file = await saved(downloads[dl5]);
   const json = JSON.parse(fs.readFileSync(file, 'utf8'));
-  check('the file carries specVersion and the tool name', json.specVersion === 2 && json.tool === 'math-graph-maker');
+  check('the file carries specVersion and the tool name', json.specVersion === 3 && json.tool === 'math-graph-maker');
   await page.click('#newBtn');
   check('New gives a blank graph', (await objIds()).length === 0);
   await page.setInputFiles('#fileIn', file);
@@ -214,9 +214,9 @@ function pngInfo(buf) {
 
   console.log('Axes, style and layout controls');
   await tab('axes');
-  await page.selectOption('[data-bind="axes.arrows"]', 'none');
+  await page.selectOption('[data-types="plane"] [data-bind="axes.arrows"]', 'none');
   check('arrows: none removes the arrowheads', (await page.$$eval('#preview polygon[fill="#000"]', p => p.length)) === 0);
-  await page.selectOption('[data-bind="axes.arrows"]', 'both');
+  await page.selectOption('[data-types="plane"] [data-bind="axes.arrows"]', 'both');
   await page.check('[data-bind="grid.highlight5"]');
   check('darker every-5th gridlines appear', (await page.$$eval('#preview path[stroke="#555"]', p => p.length)) === 1);
   await page.click('[data-seg="axes.position"] [data-v="edges"]');
@@ -355,6 +355,96 @@ function pngInfo(buf) {
   check('undo brings it back', (await objIds()).includes('fn1'));
   await shot('07-equations');
   await tab('graph');
+
+  console.log('Number lines');
+  const planeIds = await objIds();
+  await tab('graph');
+  await page.click('[data-seg="type"] [data-v="numberline"]');
+  check('Number line tab appears; plane tabs go', await page.isVisible('.tab[data-tab="line"]') && !(await page.isVisible('.tab[data-tab="objects"]')) && !(await page.isVisible('.tab[data-tab="functions"]')));
+  check('the preview is now a number line (no plane objects drawn)', (await objIds()).length === 0 && await page.$$eval('#preview svg', s => s.length) === 1);
+  await page.click('[data-seg="type"] [data-v="plane"]');
+  check('switching back and forth loses no plane object', JSON.stringify(await objIds()) === JSON.stringify(planeIds), [await objIds(), planeIds]);
+  await page.click('[data-seg="type"] [data-v="numberline"]');
+  await tab('line');
+  await page.selectOption('#linePreset', 'integers');
+  check('quick setup: integers −10 to 10', /−10/.test(await page.$eval('#preview', e => e.textContent)) && /10/.test(await page.$eval('#preview', e => e.textContent)));
+  await page.click('#linePane [data-act="addIneq"]');
+  await page.fill('#linePane [data-bind$=".a.at"]', '-3');
+  for (const n of ['inequality', 'interval', 'set']) await page.check(`#linePane [data-bind$=".notation.${n}"]`);
+  const words3 = async () => (await page.$$eval('#preview text', t => t.map(x => x.textContent))).join(' ');
+  const w3 = await words3();
+  check('Graph x ≥ −3: all three notations are written', /x ≥ −3/.test(w3) && /\[−3, ∞\)/.test(w3) && /x ∈ ℝ/.test(w3), w3);
+  check('and the solution is drawn (a marked object)', (await objIds()).length === 1);
+  await shot('08-numberline-key');
+  await page.click('#viewSeg [data-view="question"]'); 
+  await tab('test');
+  check('Test tab lists number-line rows, not plane ones', await page.isVisible('#testPane [data-vis="notation"]') && !(await page.isVisible('#testPane [data-vis="quadrantLabels"]').catch(() => false)));
+  await page.click('#testPane [data-level="blank"]');
+  check('blank question: solution and notation are gone', (await objIds()).length === 0 && !/x ≥ −3/.test(await words3()));
+  await shot('09-numberline-question');
+  await page.click('#viewSeg [data-view="key"]');
+  check('the answer key still shows everything', (await objIds()).length === 1 && /x ≥ −3/.test(await words3()));
+  await page.click('#testPane [data-level="complete"]');
+
+  await tab('line');
+  await page.selectOption('#linePane [data-bind$=".form"]', 'and');
+  await page.fill('#linePane [data-bind$=".b.at"]', '4');
+  await page.selectOption('#linePane [data-bind$=".b.op"]', 'lt');
+  check('a compound inequality is written as −3 ≤ x < 4', /−3 ≤ x < 4/.test(await words3()), await words3());
+  await page.selectOption('#linePane [data-bind$=".domain"]', 'integer');
+  check('integers only: set notation switches to ℤ', /ℤ/.test(await words3()));
+
+  await page.click('#linePane [data-act="addHops"]');
+  await page.fill('#linePane [data-bind$=".start"]', '3');
+  await page.fill('#linePane [data-list^="steps"]', '5, -8');
+  await page.check('#linePane [data-bind$=".result"]');
+  check('integer addition: 3 + 5 + (−8) shows hops +5 and −8 and the answer −0 → 0', /\+5/.test(await words3()) && /−8/.test(await words3()), await words3());
+  await shot('10-numberline-hops');
+  await page.click('#linePane [data-act="addSign"]');
+  await page.fill('#linePane [data-bind$=".expr"]', '(x + 2)(x - 3)');
+  await page.selectOption('#linePane [data-bind$=".op"] >> nth=-1', 'gt');
+  const svgTxt = await page.$eval('#preview', e => e.innerHTML);
+  check('sign chart for (x + 2)(x − 3) > 0 is drawn with + and − signs', (await page.$$eval('#preview [data-obj^="sc"]', e => e.length)) === 1 && /[+]<\/text>|>\+</.test(svgTxt) && />−</.test(svgTxt));
+  await shot('11-numberline-signchart');
+
+  await page.click('#linePane [data-act="boxAlt"]');
+  await page.click('#viewSeg [data-view="question"]');
+  const boxes = await page.$$eval('#preview rect[data-box], #preview rect', r => r.length);
+  check('“Box every other number” puts blank boxes in the question', boxes > 0);
+  await page.click('#viewSeg [data-view="key"]');
+
+  await page.selectOption('#linePreset', 'percent');
+  check('double number line preset: two lines, connectors', (await page.$$eval('#linePane [data-bind$=".label"]', e => e.length)) >= 2 && /Percent/.test(await words3()));
+  await shot('12-numberline-double');
+  await page.selectOption('#linePreset', 'thermometer');
+  const dim = await page.$eval('#preview svg', s => { const v = s.viewBox.baseVal; return { width: v.width, height: v.height }; });
+  check('thermometer preset is vertical (taller than wide)', dim.height > dim.width, [dim.width, dim.height]);
+  await shot('13-numberline-vertical');
+
+  await page.selectOption('#linePreset', 'fractions');
+  await page.click('#linePane [data-act="addNlPoint"]');
+  await page.fill('#linePane [data-bind$=".at"]', '0.375');
+  await page.check('#linePane [data-bind$=".value"]');
+  check('fractions preset writes 3/8 as a stacked fraction', /3/.test(await words3()) && /8/.test(await words3()));
+
+  const dl9 = downloads.length; await page.click('#pngBtn'); await waitDownloads(dl9 + 1);
+  const pn = downloads.slice(dl9).map(d => d.suggestedFilename());
+  check('export downloads the PNG of the current view', pn.length >= 1 && pn.every(n => /\.png$/.test(n)), pn);
+  const pi = pngInfo(fs.readFileSync(await saved(downloads[dl9])));
+  check('number-line PNG is 300 DPI and not empty', Math.round(pi.dpi) === 300 && pi.w > 500 && pi.h > 100, pi);
+  const dl8 = downloads.length; await page.click('#saveBtn'); await waitDownloads(dl8 + 1);
+  const file3 = await saved(downloads[dl8]);
+  const before3 = await page.evaluate(() => document.querySelector('#preview').innerHTML);
+  const j3 = JSON.parse(fs.readFileSync(file3, 'utf8'));
+  check('the file records the type and the line', j3.type === 'numberline' && j3.line && j3.line.rows.length === 1 && j3.specVersion === 3, [j3.type, j3.specVersion]);
+  await page.click('#newBtn');
+  await page.setInputFiles('#fileIn', file3); await page.waitForTimeout(150);
+  check('reopening gives an identical number line', await page.evaluate(() => document.querySelector('#preview').innerHTML) === before3);
+  check('the reopened file is still a number line with its tab', await page.isVisible('.tab[data-tab="line"]'));
+
+  await tab('graph');
+  await page.click('[data-seg="type"] [data-v="plane"]');
+  check('switching back to a plane: the tabs return', await page.isVisible('.tab[data-tab="objects"]') && !(await page.isVisible('.tab[data-tab="line"]')));
 
   console.log('Print layout (Ctrl+P)');
   await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));

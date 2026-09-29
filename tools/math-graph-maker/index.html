@@ -188,8 +188,9 @@
     <aside class="panel">
       <nav class="tabs" id="tabs" role="tablist">
         <button class="tab active" data-tab="graph" role="tab">Graph</button>
-        <button class="tab" data-tab="objects" role="tab">Points &amp; shapes</button>
-        <button class="tab" data-tab="functions" role="tab">Equations</button>
+        <button class="tab" data-tab="objects" data-types="plane" role="tab">Points &amp; shapes</button>
+        <button class="tab" data-tab="functions" data-types="plane" role="tab">Equations</button>
+        <button class="tab" data-tab="line" data-types="numberline" role="tab" hidden>Number line</button>
         <button class="tab" data-tab="axes" role="tab">Axes</button>
         <button class="tab" data-tab="test" role="tab">Test</button>
         <button class="tab" data-tab="style" role="tab">Style</button>
@@ -199,6 +200,11 @@
         <!-- GRAPH -->
         <section class="pane" data-pane="graph">
           <div>
+            <h3 class="section-title">What are you making?</h3>
+            <div class="seg" data-seg="type"><button type="button" data-v="plane">Coordinate plane</button><button type="button" data-v="numberline">Number line</button></div>
+            <p class="hint" style="margin-top:6px" data-types="numberline">Set up the line on the Number line tab. Your plane objects are kept, and come back if you switch again.</p>
+          </div>
+          <div>
             <label class="lab" for="title">Title</label>
             <input class="in" id="title" type="text" data-bind="title" placeholder="e.g. Plot the points">
             <p class="hint" style="margin-top:6px">A lone <i>x</i> or <i>y</i> is italic automatically. Wrap other variables in stars, like *t*; write powers as x^2. A hyphen before a number becomes a true minus sign.</p>
@@ -207,7 +213,7 @@
             <label class="lab" for="fname">Export file name</label>
             <input class="in" id="fname" type="text" data-bind="name" placeholder="e.g. q4  (gives q4-q.png and q4-key.png)">
           </div>
-          <div>
+          <div data-types="plane">
             <h3 class="section-title">Grid layout</h3>
             <div class="seg" data-seg="quadrants">
               <button type="button" data-v="1">One quadrant</button>
@@ -228,7 +234,7 @@
           <div>
             <h3 class="section-title">Physical scale</h3>
             <label class="check"><input type="checkbox" data-bind="scale.lock"> Lock the grid to a real size</label>
-            <div class="row" style="margin-top:8px"><div><label class="lab">One grid square = (mm)</label><input type="number" min="1" max="50" step="any" data-bind="scale.mm"></div></div>
+            <div class="row" style="margin-top:8px"><div><label class="lab"><span data-types="plane">One grid square</span><span data-types="numberline" hidden>One step between numbers</span> = (mm)</label><input type="number" min="1" max="50" step="any" data-bind="scale.mm"></div></div>
             <p class="hint" id="scaleHint" style="margin-top:8px">The page grows to fit the grid, so the size above is ignored. Paste the PNG into Word at 100% (it is stamped 300 DPI) and a ruler will measure true.</p>
           </div>
         </section>
@@ -248,6 +254,9 @@
 
         <!-- EQUATIONS -->
         <section class="pane" data-pane="functions" hidden id="functionsPane"></section>
+
+        <!-- NUMBER LINE -->
+        <section class="pane" data-pane="line" hidden id="linePane"></section>
 
         <!-- AXES -->
         <section class="pane" data-pane="axes" hidden id="axesPane"></section>
@@ -269,7 +278,7 @@
         </div>
         <span class="hint" id="viewHint"></span>
         <span class="sep"></span>
-        <label class="check" title="Answer key view: click empty space to add a point, drag a point or corner to move it"><input type="checkbox" id="editTool"> Click to add points · drag to move</label>
+        <label class="check" data-types="plane" title="Answer key view: click empty space to add a point, drag a point or corner to move it"><input type="checkbox" id="editTool"> Click to add points · drag to move</label>
         <label class="check" id="snapWrap" hidden><input type="checkbox" id="snapTool" checked> Snap to gridlines</label>
       </div>
       <div class="canvas-scroll">
@@ -311,12 +320,12 @@
      kinds instead of growing one big function.
    Helpers marked "(from science)" are copied from tools/science-graph-maker.
    ========================================================================== */
-const SPEC_VERSION = 2;                                     // 2: equations, tables of values and related objects (an older tool would silently drop them)
+const SPEC_VERSION = 3;                                     // 2: equations, tables and related objects; 3: number lines (an older tool would silently drop what it does not know)
 const TOOL = 'math-graph-maker';
 
 /* ---------- constants ---------- */
-const TYPES = ['plane'];
-const TYPE_NAMES = { plane: 'Coordinate plane' };
+const TYPES = ['plane', 'numberline'];
+const TYPE_NAMES = { plane: 'Coordinate plane', numberline: 'Number line' };
 const SIZES = {                                             // real units: millimetres. Presets set the width; the height follows the grid.
   full:    { w: 165, name: 'Full width' },
   half:    { w: 82,  name: 'Half width' },
@@ -334,12 +343,12 @@ const FILLS = ['none', 'light', 'hatch'];
 const ARROWS = ['both', 'end', 'none'];
 const ORIGIN_LABELS = ['0', 'O', 'none'];
 const AXIS_POSITIONS = ['origin', 'edges'];
-const FORMATS = ['decimal', 'fraction'];
-const FORMAT_NAMES = { decimal: 'Decimal', fraction: 'Fractions' };
+const FORMATS = ['decimal', 'fraction', 'improper'];
+const FORMAT_NAMES = { decimal: 'Decimals', fraction: 'Fractions and mixed numbers', improper: 'Improper fractions' };
 
 /* Show/hide tokens. `hidden` in the spec lists what the QUESTION version hides: these element tokens and/or object ids.
    The answer key always shows everything. */
-const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'objects'];
+const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'notation', 'signs', 'results', 'objects'];
 const BLANK_TOKENS = ['title', 'xTitle', 'yTitle', 'units'];
 const SCAFFOLD_LEVELS = ['complete', 'labels', 'axes', 'blank'];
 const SCAFFOLD = {   // visibility presets over the same spec — not separate code paths
@@ -525,12 +534,12 @@ function anchorIndex(ax) {
   const i = Math.round((0 - ax.lo) / ax.step);
   return i >= 0 && Math.abs(ax.lo + i * ax.step) < ax.step * 1e-6 && ax.lo + i * ax.step <= ax.hi ? i : 0;
 }
-function fracStr(v, markup) {                                /* 1/2, 1 3/4, -2/3 — null when no small denominator fits; markup: 1{3/4} for stacked fractions */
+function fracStr(v, markup, improper) {                                /* 1/2, 1 3/4, -2/3 — null when no small denominator fits; markup: 1{3/4} for stacked fractions */
   for (const d of [1, 2, 3, 4, 5, 6, 8, 10, 12, 16]) {
     const n = Math.round(v * d);
     if (Math.abs(v * d - n) > 1e-9) continue;
     const a = Math.abs(n), whole = Math.floor(a / d), rem = a % d;
-    const body = rem === 0 ? String(whole) : markup ? (whole ? String(whole) : '') + '{' + rem + '/' + d + '}' : (whole ? whole + ' ' : '') + rem + '/' + d;
+    const body = rem === 0 ? String(whole) : improper ? (markup ? '{' + a + '/' + d + '}' : a + '/' + d) : markup ? (whole ? String(whole) : '') + '{' + rem + '/' + d + '}' : (whole ? whole + ' ' : '') + rem + '/' + d;
     return (n < 0 ? '-' : '') + body;
   }
   return null;
@@ -538,7 +547,7 @@ function fracStr(v, markup) {                                /* 1/2, 1 3/4, -2/3
 /* Tick text. Fractions come back as {1/2} markup for the renderer; pass plain = true for text boxes and placeholders. */
 function fmtTick(v, ax, plain) {
   const f = ax.fmt || {};
-  let s = f.format === 'fraction' ? fracStr(v, !plain) : null;
+  let s = f.format === 'fraction' || f.format === 'improper' ? fracStr(v, !plain, f.format === 'improper') : null;
   if (s === null) s = v.toFixed(f.decimals !== null && f.decimals !== undefined ? f.decimals : Math.max(decimals(ax.lo), decimals(ax.step)));
   if (/^-0(\.0+)?$/.test(s)) s = s.slice(1);
   return s.replace(/-/g, MINUS);
@@ -966,6 +975,9 @@ const vertsOf = o => o.vertices.map((v, k) => ({ x: parseNum(v[0]), y: parseNum(
 const objName = o => o.kind === 'point' ? 'Point' + (o.label ? ' ' + o.label : '')
   : o.kind === 'function' ? 'Equation ' + (o.expr.trim() || '(empty)')
   : o.kind === 'related' ? (o.rel === 'parallel' ? 'Parallel line' : 'Perpendicular line')
+  : o.kind === 'nlpoint' ? 'Point ' + (o.label || (isBlank(o.at) ? '' : String(o.at)))
+  : o.kind === 'inequality' ? 'Inequality ' + (ineqText(ineqSegments(o), 'x', fmtNum) || '')
+  : o.kind === 'hops' ? 'Hops from ' + (isBlank(o.start) ? '?' : String(o.start)) : o.kind === 'signchart' ? 'Sign chart ' + (o.expr.trim() || '')
   : o.kind === 'table' ? 'Table of values' : o.kind === 'guide' ? 'Guide lines' : o.kind === 'intersect' ? 'Intersection' : o.kind === 'vlt' ? 'Vertical line test'
   : (o.kind === 'polygon' ? 'Polygon' : 'Line segments') + (o.labels.some(Boolean) ? ' ' + o.labels.filter(Boolean).join('') : '');
 
@@ -1364,6 +1376,7 @@ OBJECT_KINDS.vlt = {
 
 /* ---------- readability: can a student read this exactly? ---------- */
 function readability(spec) {
+  if (isNL(spec)) return readabilityLine(spec);
   const objs = resolveObjects(spec), A = analyse(spec, objs), issues = [];
   const win = { xlo: A.ax.lo, xhi: A.ax.hi, ylo: A.ay.lo, yhi: A.ay.hi };
   const onG = (v, ax) => { const k = (v - ax.lo) / gridStepFor(ax, spec); return Math.abs(k - Math.round(k)) < 1e-6; };
@@ -1414,6 +1427,7 @@ function readability(spec) {
 const plainMarkup = s => flatRuns(labelRuns(s)).map(r => r.t).join('');
 /* Move every point and corner that is off the drawn grid onto the nearest gridline. Returns how many values moved. */
 function snapPoints(spec) {
+  if (isNL(spec)) return 0;
   const A = analyse(spec);
   let n = 0;
   const snap = (v, ax) => { const y = parseNum(v); if (!isFin(y)) return v; const s = snapValue(y, ax, spec); if (s !== y) n++; return s; };
@@ -1429,7 +1443,8 @@ function snapPoints(spec) {
    at draw time, never stored, so editing an original updates everything built from it. resolveObjects returns the objects with
    their computed parts attached, and .res(id) to look any object up (cycles resolve to null). */
 function resolveObjects(spec) {
-  const src = new Map(spec.objects.map(o => [o.id, o])), memo = new Map(), busy = new Set();
+  const list = spec.objects.filter(o => kindOn(o.kind) === spec.type);         // a number line ignores plane objects, and the other way round; nothing is lost when the type is switched
+  const src = new Map(list.map(o => [o.id, o])), memo = new Map(), busy = new Set();
   function res(id) {
     if (memo.has(id)) return memo.get(id);
     const o = src.get(id);
@@ -1439,7 +1454,7 @@ function resolveObjects(spec) {
     busy.delete(id); memo.set(id, r);
     return r;
   }
-  const out = spec.objects.map(o => res(o.id) || o);
+  const out = list.map(o => res(o.id) || o);
   out.res = res;
   return out;
 }
@@ -1482,11 +1497,17 @@ function normalize(raw) {
     ? { preset: 'custom', w: clamp(vNum(sz.w) ?? 165, 20, 400), h: vNum(sz.h) === null ? null : clamp(vNum(sz.h), 20, 400) }
     : { preset: vPick(sz.preset, Object.keys(SIZES), 'full') };
 
+  const ln = r.line && typeof r.line === 'object' ? r.line : {};
+  const lineRows = (Array.isArray(ln.rows) && ln.rows.length ? ln.rows : [{}]).slice(0, MAX_LINES).map(w => {
+    w = w && typeof w === 'object' ? w : {};
+    return { label: vStr(w.label, ''), own: vBool(w.own, false), axis: axis(w.axis, 'x'), boxes: (Array.isArray(w.boxes) ? w.boxes : []).slice(0, MAX_BOXES).map(cellClean), side: vPick(w.side, ['below', 'above'], 'below') };
+  });
   const seen = new Set(ELEMENT_TOKENS), objects = [];
   (Array.isArray(r.objects) ? r.objects : []).slice(0, MAX_OBJECTS).forEach(raw => {
     if (!raw || typeof raw !== 'object' || !OBJECT_KINDS[raw.kind]) return;      // an object of a kind this version doesn't know is dropped
     const ob = OBJECT_KINDS[raw.kind].norm(raw);
     if (!idOk(ob.id) || seen.has(ob.id)) { const pre = OBJECT_KINDS[raw.kind].prefix; let n = 1; while (seen.has(pre + n)) n++; ob.id = pre + n; }
+    if ('row' in ob && ob.row >= lineRows.length) ob.row = lineRows.length - 1;
     seen.add(ob.id); objects.push(ob);
   });
   const ids = new Set(objects.map(o => o.id)), hseen = new Set();
@@ -1502,7 +1523,7 @@ function normalize(raw) {
   return {
     specVersion: SPEC_VERSION,
     tool: TOOL,
-    type: 'plane',
+    type: vPick(r.type, TYPES, 'plane'),
     title: vStr(r.title, ''),
     name: vStr(r.name, ''),
     size,
@@ -1512,6 +1533,7 @@ function normalize(raw) {
             letters: vBool(ax.letters, true), originLabel: vPick(ax.originLabel, ORIGIN_LABELS, '0') },
     grid: { major: vBool(grid.major, true), minor: vBool(grid.minor, false), highlight5: vBool(grid.highlight5, false) },
     quadrantLabels: vBool(r.quadrantLabels, false),
+    line: { orient: vPick(ln.orient, ORIENTS, 'horizontal'), connect: vBool(ln.connect, false), rows: lineRows },
     objects, hidden, blanks,
     scale: { lock: vBool(sc.lock, false), mm: clamp(vNum(sc.mm) ?? 10, 1, 50) },
     style: { colour: vBool(style.colour, false), photocopySafe: vBool(style.photocopySafe, false), largePrint: vBool(style.largePrint, false) }
@@ -1672,6 +1694,7 @@ function nextLabels(spec, n) {
    ========================================================================== */
 const cellsFor = mm => clamp(Math.floor((mm - 20) / 3.5), 3, 60);          // most major cells that stay at least ~3.5 mm wide
 function analyse(spec, objs) {
+  if (isNL(spec)) return analyseLine(spec, objs);
   objs = objs || resolveObjects(spec);
   const size = sizeMM(spec.size), mode = spec.quadrants === 1 ? 'one' : 'four', ext = extentsOf(objs);
   return { size, mode,
@@ -1686,6 +1709,7 @@ const snapValue = (v, ax, spec) => { const g = gridStepFor(ax, spec); return cle
 const insidePlane = (x, y, A) => x >= A.ax.lo - 1e-9 && x <= A.ax.hi + 1e-9 && y >= A.ay.lo - 1e-9 && y <= A.ay.hi + 1e-9;
 /* Objects with any vertex outside the plane (they are clipped; the editor warns). */
 function outsideObjects(spec) {
+  if (isNL(spec)) return outsideLine(spec);
   const objs = resolveObjects(spec), A = analyse(spec, objs), out = [];
   objs.forEach(o => { if (OBJECT_KINDS[o.kind].bounds(o).some(p => !insidePlane(p.x, p.y, A))) out.push({ id: o.id, name: objName(o) }); });
   return out;
@@ -1794,6 +1818,7 @@ function makeKit(spec, o) {
    `ghost` (editor only): objects the question hides are drawn faded in the key. `hits`: add handles for picking and dragging. */
 function renderSVG(spec, o) {
   o = Object.assign({ version: 'key', ghost: false, hits: false, background: 'white', px: null, id: 'g', xmlHeader: false }, o);
+  if (isNL(spec)) return renderNumberLine(spec, o);
   const objs = resolveObjects(spec), A = analyse(spec, objs), { ax, ay, size } = A;
   const K = makeKit(spec, o);
   const { S, FS, FT, PAD, TICK, lw, hid, txt } = K;
@@ -1978,6 +2003,389 @@ function renderSVG(spec, o) {
   return K.shell(W, H, `<clipPath id="${clipId}"><rect x="${f3(x0 - 2)}" y="${f3(y0 - 2)}" width="${f3(pw + 4)}" height="${f3(ph + 4)}"/></clipPath>${defs.join('')}`, out.join(''));
 }
 
+
+/* ==========================================================================
+   Phase 3: number lines. One spec type ('numberline'), one or more ROWS that share a scale (or own theirs, for double number
+   lines), horizontal or vertical. Marks are objects again: points, inequalities, hops and sign charts.
+   ========================================================================== */
+const ORIENTS = ['horizontal', 'vertical'];
+const INEQ_OPS = ['lt', 'le', 'gt', 'ge'], INEQ_FORMS = ['simple', 'and', 'or'];
+const OP_SYMBOL = { lt: '<', le: '≤', gt: '>', ge: '≥' };
+const SET_SYMBOL = { real: 'ℝ', integer: 'ℤ' };
+const MAX_LINES = 6, MAX_HOPS = 12, MAX_CRIT = 12, MAX_BOXES = 40;
+const isNL = spec => spec.type === 'numberline';
+const kindOn = k => (OBJECT_KINDS[k] && OBJECT_KINDS[k].on) || 'plane';
+
+/* A number as written on a line: decimal, or a stacked fraction when the line's numbers are fractions. */
+function valText(v, ax) {
+  const f = ax && ax.fmt && ax.fmt.format;
+  if (f && f !== 'decimal') { const s = fracStr(v, true, f === 'improper'); if (s !== null) return s.replace(/-/g, MINUS); }
+  return fmtNum(v);
+}
+/* Vertical asymptotes: sign flips through infinity, or an undefined point with huge values on both sides. */
+function findPoles(fn, lo, hi, N) {
+  N = N || 800;
+  const span = hi - lo, out = [], xs = [], ys = [];
+  if (!(span > 0)) return out;
+  for (let i = 0; i <= N; i++) { xs.push(i === N ? hi : lo + span * i / N); ys.push(fn(xs[i])); }
+  for (let i = 0; i < N; i++) {
+    const a = ys[i], b = ys[i + 1];
+    if (isFin(a) && isFin(b) && a * b < 0) { const r = bisect(fn, xs[i], xs[i + 1], a), fr = isFin(r) ? fn(r) : NaN; if (isFin(r) && (!isFin(fr) || Math.abs(fr) > Math.max(Math.abs(a), Math.abs(b)))) out.push(clean(r)); }
+  }
+  for (let i = 1; i < N; i++) {                                     // a pole landing exactly on a sample: undefined here, huge just beside it (a removable hole stays small)
+    if (isFin(ys[i]) || !isFin(ys[i - 1]) || !isFin(ys[i + 1])) continue;
+    const e = 1e-7 * Math.max(1, Math.abs(xs[i])), near = Math.max(Math.abs(fn(xs[i] - e)), Math.abs(fn(xs[i] + e)));
+    if ((Math.abs(ys[i - 1]) >= 50 && Math.abs(ys[i + 1]) >= 50) || near > 1e4) out.push(clean(xs[i]));
+  }
+  return [...new Set(out)].sort((p, q) => p - q);
+}
+
+/* ---------- inequalities as segments ---------- */
+/* { lo, hi, loC, hiC } with lo / hi possibly ∓Infinity. */
+function ineqSegments(o) {
+  const half = h => {
+    const c = parseNum(h.at); if (!isFin(c)) return null;
+    const up = h.op === 'gt' || h.op === 'ge', cl = h.op === 'ge' || h.op === 'le';
+    return up ? { lo: c, hi: Infinity, loC: cl, hiC: false } : { lo: -Infinity, hi: c, loC: false, hiC: cl };
+  };
+  const A = half(o.a), B = o.form === 'simple' ? null : half(o.b);
+  if (!A) return [];
+  if (!B) return [A];
+  if (o.form === 'and') {
+    const lo = Math.max(A.lo, B.lo), hi = Math.min(A.hi, B.hi);
+    const loC = A.lo === B.lo ? A.loC && B.loC : A.lo > B.lo ? A.loC : B.loC, hiC = A.hi === B.hi ? A.hiC && B.hiC : A.hi < B.hi ? A.hiC : B.hiC;
+    if (lo > hi || (lo === hi && !(loC && hiC))) return [];
+    return [{ lo, hi, loC, hiC }];
+  }
+  const [p, q] = A.lo <= B.lo ? [A, B] : [B, A];                     // union: merge when they overlap or touch with an included point
+  if (p.hi > q.lo || (p.hi === q.lo && (p.hiC || q.loC))) return [{ lo: p.lo, hi: Math.max(p.hi, q.hi), loC: p.lo === q.lo ? p.loC || q.loC : p.loC, hiC: p.hi === q.hi ? p.hiC || q.hiC : p.hi > q.hi ? p.hiC : q.hiC }];
+  return [p, q];
+}
+const segIneq = (g, sym, num) => {                                 // x ≥ 3 · −2 < x ≤ 5 · x = 4
+  if (g.lo === -Infinity && g.hi === Infinity) return sym + ' ∈ ' + SET_SYMBOL.real;
+  if (g.lo === -Infinity) return sym + ' ' + (g.hiC ? '≤' : '<') + ' ' + num(g.hi);
+  if (g.hi === Infinity) return sym + ' ' + (g.loC ? '≥' : '>') + ' ' + num(g.lo);
+  if (g.lo === g.hi) return sym + ' = ' + num(g.lo);
+  return num(g.lo) + ' ' + (g.loC ? '≤' : '<') + ' ' + sym + ' ' + (g.hiC ? '≤' : '<') + ' ' + num(g.hi);
+};
+const ineqText = (segs, sym, num) => segs.length ? segs.map(g => segIneq(g, sym, num)).join(' or ') : 'no solution';
+const intervalText = (segs, num) => segs.length ? segs.map(g => (g.lo === -Infinity || !g.loC ? '(' : '[') + (g.lo === -Infinity ? '−∞' : num(g.lo)) + ', ' + (g.hi === Infinity ? '∞' : num(g.hi)) + (g.hi === Infinity || !g.hiC ? ')' : ']')).join(' ∪ ') : '∅';
+const setText = (segs, sym, domain, num) => segs.length ? '{' + sym + ' | ' + ineqText(segs, sym, num) + ', ' + sym + ' ∈ ' + SET_SYMBOL[domain] + '}' : '∅';
+/* The notation lines an object writes beneath its row, in a fixed order. */
+function noteTexts(segs, notation, sym, domain, ax) {
+  const num = v => valText(v, ax), out = [];
+  if (notation.inequality) out.push(ineqText(segs, sym, num));
+  if (notation.interval) out.push(intervalText(segs, num));
+  if (notation.set) out.push(setText(segs, sym, domain, num));
+  return out;
+}
+const normNotation = n => { n = n && typeof n === 'object' ? n : {}; return { inequality: vBool(n.inequality, false), interval: vBool(n.interval, false), set: vBool(n.set, false) }; };
+const noteCount = o => ['inequality', 'interval', 'set'].filter(k => o.notation[k]).length;
+
+/* ---------- sign chart ---------- */
+/* Critical values inside the line (zeros and vertical asymptotes of the expression, or the typed values), the sign of each
+   interval between them, and — when solving — the solution as segments. win: { lo, hi }. */
+function signChartData(o, win) {
+  let fn = null, crit = [];
+  const eq = o.expr.trim() ? parseEquation(o.expr) : null;
+  if (eq && eq.ok && eq.vertical === null) fn = eq.fn;
+  const inside = v => isFin(v) && v > win.lo + 1e-9 && v < win.hi - 1e-9;
+  let poles = [];
+  if (fn) { const z = findZeros(fn, win.lo, win.hi); poles = findPoles(fn, win.lo, win.hi); crit = [...z.map(v => ({ v, pole: false })), ...poles.filter(p => !z.some(v => Math.abs(v - p) < 1e-7)).map(v => ({ v, pole: true }))]; }
+  else crit = o.values.map(parseNum).filter(inside).map(v => ({ v, pole: false }));
+  crit = crit.filter(c => inside(c.v)).sort((p, q) => p.v - q.v).filter((c, i, a) => !i || c.v - a[i - 1].v > 1e-9).slice(0, MAX_CRIT);
+  const edges = [win.lo, ...crit.map(c => c.v), win.hi];
+  const signs = edges.slice(0, -1).map((a, i) => {
+    if (!fn) return ['+', '-', '−', ''].includes(o.signs[i]) ? (o.signs[i] === '-' ? '−' : o.signs[i]) : '';
+    const y = fn((a + edges[i + 1]) / 2);
+    return !isFin(y) ? '' : y > 0 ? '+' : y < 0 ? '−' : '';
+  });
+  let segs = [];
+  if (o.op !== 'none') {
+    const want = o.op === 'gt' || o.op === 'ge' ? '+' : '−', strict = o.op === 'gt' || o.op === 'lt', ok = signs.map(s => s === want);
+    const cur = [];
+    ok.forEach((yes, i) => { if (yes) cur.push({ lo: i === 0 ? -Infinity : crit[i - 1].v, hi: i === ok.length - 1 ? Infinity : crit[i].v, loC: false, hiC: false, i }); });
+    const closedAt = k => !strict && !crit[k].pole;                     // a zero counts for ≥ and ≤; a pole never does
+    segs = [];
+    cur.forEach(g => { const last = segs[segs.length - 1]; if (last && last.i === g.i - 1 && closedAt(g.i - 1)) { last.hi = g.hi; last.hiC = false; last.i = g.i; } else segs.push(Object.assign({}, g)); });
+    segs.forEach(g => { g.loC = g.lo !== -Infinity && closedAt(crit.findIndex(c => c.v === g.lo)); g.hiC = g.hi !== Infinity && closedAt(crit.findIndex(c => c.v === g.hi)); });
+    if (!strict) crit.forEach((c, k) => { if (!c.pole && !segs.some(g => g.lo <= c.v && c.v <= g.hi)) segs.push({ lo: c.v, hi: c.v, loC: true, hiC: true, i: -1 }); });
+    segs.sort((p, q) => p.lo - q.lo);
+  }
+  return { fn, crit, edges, signs, segs, error: eq && !eq.ok ? eq.error : (eq && eq.vertical !== null ? 'A sign chart needs an expression in x.' : '') };
+}
+
+/* ---------- object kinds for number lines ---------- */
+const rowNorm = r => vInt(r.row, 0, MAX_LINES - 1, 0);
+OBJECT_KINDS.nlpoint = {
+  name: 'Point on the line', prefix: 'np', on: 'numberline',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'nlpoint', row: rowNorm(r), at: cellClean(r.at), closed: vBool(r.closed, true), label: vStr(r.label, ''), value: vBool(r.value, false) }),
+  bounds: o => { const v = parseNum(o.at); return isFin(v) ? [{ x: v, y: 0 }] : []; },
+  draw(o, C) {
+    const v = parseNum(o.at);
+    if (!isFin(v) || v < C.ax.lo - 1e-9 || v > C.ax.hi + 1e-9) return null;
+    const u = C.u(v), [x, y] = C.P(u, 0), text = o.label || (o.value ? valText(v, C.ax) : '');
+    return { shape: markerSVG('circle', x, y, 1.7 * C.S, C.col, C.S, !o.closed), label: text && !C.K.hid.has('pointLabels') ? C.up(u, 3.8 * C.S, text, { bold: true, halo: true }) : '' };
+  }
+};
+
+/* Segments as thick line, end dots (filled = included, open = not) and arrows where they carry on; integers as separate dots. */
+function drawSegments(segs, domain, C) {
+  const { S, ax, L } = C, ray = 3 * S;
+  let s = '';
+  const dot = (v, closed) => { const [x, y] = C.P(C.u(v), 0); return markerSVG('circle', x, y, 1.7 * S, C.col, S, !closed); };
+  const thick = (u1, u2) => { const [a, b] = [C.P(u1, 0), C.P(u2, 0)]; return `<line x1="${f3(a[0])}" y1="${f3(a[1])}" x2="${f3(b[0])}" y2="${f3(b[1])}" stroke="${C.col}" stroke-width="${C.lw(1.1)}" stroke-linecap="butt"/>`; };
+  segs.forEach(g => {
+    const lo = Math.max(g.lo, ax.lo), hi = Math.min(g.hi, ax.hi);
+    if (hi < lo - 1e-9) return;
+    const contLo = g.lo < ax.lo - 1e-9, contHi = g.hi > ax.hi + 1e-9;    // the solution carries on past the end of the line
+    if (domain === 'integer') {
+      const a = Math.ceil(lo - 1e-9) + (!g.loC && !contLo && Math.abs(lo - Math.round(lo)) < 1e-9 ? 1 : 0), b = Math.floor(hi + 1e-9) - (!g.hiC && !contHi && Math.abs(hi - Math.round(hi)) < 1e-9 ? 1 : 0);
+      for (let n = a; n <= b && n - a < 80; n++) s += dot(n, true);
+      if (contHi && b >= a) s += thick(C.u(b), L + ray - 2.2 * S) + C.head(C.P(L + ray, 0), C.dirHi, C.col, 1.15);
+      if (contLo && b >= a) s += thick(C.u(a), -ray + 2.2 * S) + C.head(C.P(-ray, 0), C.dirLo, C.col, 1.15);
+      return;
+    }
+    if (lo === hi && !contLo && !contHi) { s += dot(lo, g.loC && g.hiC); return; }               // a single included point
+    const u1 = contLo ? -ray : C.u(lo), u2 = contHi ? L + ray : C.u(hi);
+    s += thick(contLo ? -ray + 2.2 * S : u1, contHi ? L + ray - 2.2 * S : u2);
+    if (contHi) s += C.head(C.P(L + ray, 0), C.dirHi, C.col, 1.15); else s += dot(hi, g.hiC);
+    if (contLo) s += C.head(C.P(-ray, 0), C.dirLo, C.col, 1.15); else s += dot(lo, g.loC);
+  });
+  return s;
+}
+function notesOf(o, C, segs) {
+  return noteTexts(segs, o.notation, C.sym, o.domain || 'real', C.ax).map((t, k) => C.note(k, t)).join('');
+}
+OBJECT_KINDS.inequality = {
+  name: 'Inequality', prefix: 'iq', on: 'numberline',
+  norm: r => {
+    const half = h => { h = h && typeof h === 'object' ? h : {}; return { op: vPick(h.op, INEQ_OPS, 'ge'), at: cellClean(h.at) }; };
+    return { id: vStr(r.id, ''), kind: 'inequality', row: rowNorm(r), form: vPick(r.form, INEQ_FORMS, 'simple'), a: half(r.a), b: half(r.b), domain: vPick(r.domain, ['real', 'integer'], 'real'), notation: normNotation(r.notation) };
+  },
+  noteLines: noteCount,
+  bounds: o => ineqSegments(o).flatMap(g => [g.lo, g.hi]).filter(isFin).map(x => ({ x, y: 0 })),
+  draw(o, C) {
+    const segs = ineqSegments(o), hide = C.K.hid;
+    return { shape: hide.has('results') ? '' : drawSegments(segs, o.domain, C), label: hide.has('notation') ? '' : notesOf(o, C, segs) };
+  }
+};
+
+function hopPath(o) {
+  const path = [parseNum(o.start)];
+  o.steps.forEach(s => { const d = parseNum(s); path.push(isFin(d) && isFin(path[path.length - 1]) ? clean(path[path.length - 1] + d) : NaN); });
+  return path;
+}
+OBJECT_KINDS.hops = {
+  name: 'Hops', prefix: 'hp', on: 'numberline',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'hops', row: rowNorm(r), start: cellClean(r.start), steps: (Array.isArray(r.steps) ? r.steps : []).slice(0, MAX_HOPS).map(cellClean),
+                labels: vBool(r.labels, true), startDot: vBool(r.startDot, true), result: vBool(r.result, false) }),
+  bounds: o => hopPath(o).filter(isFin).map(x => ({ x, y: 0 })),
+  draw(o, C) {
+    const path = hopPath(o), S = C.S;
+    let s = '', label = '';
+    const inside = v => isFin(v) && v >= C.ax.lo - 1e-9 && v <= C.ax.hi + 1e-9;
+    const end = path[path.length - 1];
+    if (o.result && !C.K.hid.has('results') && inside(end)) { const [x, y] = C.P(C.u(end), 0); s += markerSVG('circle', x, y, 1.9 * S, C.col, S, false); label += C.up(C.u(end), 4.2 * S, valText(end, C.ax), { bold: true, halo: true }); }
+    if (o.startDot && inside(path[0])) { const [x, y] = C.P(C.u(path[0]), 0); s += markerSVG('circle', x, y, 1.6 * S, C.col, S, false); }
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i], b = path[i + 1];
+      if (!inside(a) || !inside(b) || a === b) continue;
+      const u1 = C.u(a), u2 = C.u(b), h = clamp(Math.abs(u2 - u1) * .38, 3.4 * S, 10 * S);
+      const p1 = C.P(u1, 0), p2 = C.P(u2, 0), cp = C.P((u1 + u2) / 2, 2 * h);
+      const d = Math.hypot(p2[0] - cp[0], p2[1] - cp[1]) || 1, dir = [(p2[0] - cp[0]) / d, (p2[1] - cp[1]) / d], base = [p2[0] - dir[0] * 2.3 * S, p2[1] - dir[1] * 2.3 * S];
+      s += `<path d="M${f3(p1[0])},${f3(p1[1])}Q${f3(cp[0])},${f3(cp[1])} ${f3(base[0])},${f3(base[1])}" fill="none" stroke="${C.col}" stroke-width="${C.lw(.55)}"/>` + C.head(p2, dir, C.col, .9);
+      if (o.labels) label += C.up((u1 + u2) / 2, h + 1.4 * S, (b - a > 0 ? '+' : '') + fmtNum(b - a), { halo: true });
+    }
+    return { shape: s, label };
+  }
+};
+
+OBJECT_KINDS.signchart = {
+  name: 'Sign chart', prefix: 'sc', on: 'numberline',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'signchart', row: rowNorm(r), expr: vStr(r.expr, ''), values: (Array.isArray(r.values) ? r.values : []).slice(0, MAX_CRIT).map(cellClean),
+                signs: (Array.isArray(r.signs) ? r.signs : []).slice(0, MAX_CRIT + 1).map(t => vStr(t, '')), op: vPick(r.op, ['none', ...INEQ_OPS], 'none'), notation: normNotation(r.notation) }),
+  noteLines: noteCount,
+  bounds: o => o.values.map(parseNum).filter(isFin).map(x => ({ x, y: 0 })),
+  draw(o, C) {
+    const D = signChartData(o, C.ax), S = C.S, hide = C.K.hid;
+    let s = '', label = '';
+    if (!hide.has('keyPoints')) D.crit.forEach(c => {
+      const u = C.u(c.v), a = C.P(u, -1.9 * S), b = C.P(u, 1.9 * S);
+      s += `<line x1="${f3(a[0])}" y1="${f3(a[1])}" x2="${f3(b[0])}" y2="${f3(b[1])}" stroke="${C.col}" stroke-width="${C.lw(.5)}"/>`;
+      if (o.op === 'none' && !c.pole) s += markerSVG('circle', C.P(u, 0)[0], C.P(u, 0)[1], 1.6 * S, C.col, S, false);
+      label += C.down(u, 2.6 * S, valText(c.v, C.ax), { fs: C.K.FT, bold: true, halo: true });
+    });
+    if (!hide.has('signs')) D.signs.forEach((sg, i) => {
+      if (!sg) return;
+      const a = Math.max(D.edges[i], C.ax.lo), b = Math.min(D.edges[i + 1], C.ax.hi);
+      label += C.up(C.u((a + b) / 2), 2.6 * S, sg, { fs: C.K.FS * 1.25, bold: true });
+    });
+    if (!hide.has('results') && D.segs.length) s += drawSegments(D.segs, 'real', C);
+    return { shape: s, label: label + (hide.has('notation') ? '' : notesOf(o, C, D.segs)) };
+  }
+};
+
+/* Quick setups for a number line: they set the scale, layout and rows, and clear earlier number-line marks. */
+const LINE_PRESETS = {
+  integers:   { name: 'Integers, −10 to 10', x: { min: -10, max: 10, step: 1, minorPerMajor: 1 } },
+  fractions:  { name: 'Fractions, 0 to 1 in eighths', x: { min: 0, max: 1, step: .125, format: 'fraction', minorPerMajor: 1 } },
+  decimals:   { name: 'Decimals, 0 to 1 in tenths', x: { min: 0, max: 1, step: .1, minorPerMajor: 1 } },
+  mixed:      { name: 'Mixed numbers, 0 to 3 in quarters', x: { min: 0, max: 3, step: .25, format: 'fraction', minorPerMajor: 1 } },
+  percent:    { name: 'Double number line: cost and percent', x: { min: 0, max: 20, step: 5, minorPerMajor: 1 }, connect: true,
+                rows: [{ label: 'Cost ($)', side: 'above' }, { label: 'Percent (%)', own: true, axis: { min: 0, max: 100, step: 25 } }] },
+  thermometer: { name: 'Thermometer (vertical), −20 to 40', orient: 'vertical', x: { min: -20, max: 40, step: 10, minorPerMajor: 1 }, rows: [{ label: '°C' }] }
+};
+function applyLinePreset(spec, id) {
+  const p = LINE_PRESETS[id], s = JSON.parse(JSON.stringify(spec));
+  s.type = 'numberline';
+  Object.assign(s.x, { min: null, max: null, step: null, format: 'decimal', decimals: null, minorPerMajor: 2, labelEvery: null }, p.x);
+  s.line = { orient: p.orient || 'horizontal', connect: !!p.connect, rows: p.rows || [{}] };
+  s.objects = s.objects.filter(o => kindOn(o.kind) !== 'numberline');
+  s.hidden = s.hidden.filter(t => ELEMENT_TOKENS.includes(t));
+  return normalize(s);
+}
+/* Remove row i: its marks move to the first row, later rows shift up. */
+function dropLineRow(spec, i) {
+  if (spec.line.rows.length < 2) return;
+  spec.line.rows.splice(i, 1);
+  spec.objects.forEach(o => { if ('row' in o && kindOn(o.kind) === 'numberline') o.row = o.row === i ? 0 : o.row > i ? o.row - 1 : o.row; });
+}
+/* ---------- analysis, warnings ---------- */
+function analyseLine(spec, objs) {
+  objs = objs || resolveObjects(spec);
+  const size = sizeMM(spec.size), mode = spec.quadrants === 1 ? 'one' : 'four', rows = spec.line.rows, vertical = spec.line.orient === 'vertical';
+  const maxCells = cellsFor(vertical ? (size.h || 100) : size.w);
+  const nl = objs.filter(o => kindOn(o.kind) === 'numberline');
+  const ext = list => { const xs = list.flatMap(o => OBJECT_KINDS[o.kind].bounds(o).map(p => p.x)); return xs.length ? { min: Math.min(...xs), max: Math.max(...xs) } : null; };
+  const shared = ext(nl.filter(o => !rows[o.row || 0].own));
+  const axes = rows.map((row, r) => resolveAxis(row.own ? row.axis : spec.x, row.own ? ext(nl.filter(o => (o.row || 0) === r)) : shared, { mode, maxCells }));
+  return { size, mode, vertical, axes, ax: axes[0], ay: null };
+}
+function outsideLine(spec) {
+  const objs = resolveObjects(spec), A = analyseLine(spec, objs), out = [];
+  objs.forEach(o => { const ax = A.axes[o.row || 0]; if (OBJECT_KINDS[o.kind].bounds(o).some(p => p.x < ax.lo - 1e-9 || p.x > ax.hi + 1e-9)) out.push({ id: o.id, name: objName(o) }); });
+  return out;
+}
+function readabilityLine(spec) {
+  const objs = resolveObjects(spec), A = analyseLine(spec, objs), issues = [];
+  const onTick = (v, ax) => { const g = gridStepFor(ax, spec), k = (v - ax.lo) / g; return Math.abs(k - Math.round(k)) < 1e-6; };
+  objs.forEach(o => {
+    const ax = A.axes[o.row || 0];
+    if (o.kind === 'signchart') { const d = signChartData(o, ax); if (d.error) issues.push({ id: o.id, text: 'Sign chart: ' + d.error }); return; }
+    const off = OBJECT_KINDS[o.kind].bounds(o).map(p => p.x).filter(v => v >= ax.lo - 1e-9 && v <= ax.hi + 1e-9 && !onTick(v, ax));
+    if (off.length) issues.push({ id: o.id, text: objName(o) + ': ' + off.slice(0, 3).map(v => valText(v, ax).replace(/[{}]/g, '')).join(', ') + (off.length > 3 ? ', …' : '') + ' falls between tick marks.' });
+  });
+  return issues;
+}
+
+/* ---------- the renderer ---------- */
+function renderNumberLine(spec, o) {
+  const objs = resolveObjects(spec), A = analyseLine(spec, objs), K = makeKit(spec, o);
+  const { S, FS, FT, PAD, lw, hid, txt } = K;
+  const vertical = A.vertical, rows = spec.line.rows, nR = rows.length, axes = A.axes;
+  const arrowsOn = spec.axes.arrows !== 'none', both = spec.axes.arrows === 'both';
+  const AL = 2.6 * S, AW = .95 * S, AE = 3.4 * S, TL = 1.6 * S, noteH = FS * 1.45, gap = 3 * S;
+  const info = rows.map((row, r) => {
+    const mine = objs.filter(ob => kindOn(ob.kind) === 'numberline' && (ob.row || 0) === r), base = {};
+    let notes = 0;
+    mine.forEach(ob => { base[ob.id] = notes; notes += OBJECT_KINDS[ob.kind].noteLines ? OBJECT_KINDS[ob.kind].noteLines(ob) : 0; });
+    return { mine, base, notes, hops: mine.some(ob => ob.kind === 'hops'), sign: mine.some(ob => ob.kind === 'signchart'), ray: mine.some(ob => ob.kind === 'inequality' || ob.kind === 'signchart') };
+  });
+  const anyRay = info.some(i => i.ray);
+  const extHi = arrowsOn ? AE : anyRay ? 3 * S : 0, extLo = both ? AE : anyRay ? 3 * S : 0;
+  const tk = axes.map(ax => { const T = ticks(ax); return { T, L: T.map(v => fmtTick(v, ax)) }; });
+  const size = A.size, titleSp = K.titleInfo(size.w).sp, xTitleSp = K.axisHas(spec.x) ? FS * 1.35 + 1.4 : 0;
+  const steps0 = axSpan(axes[0]) / axes[0].step;
+  const maxLabW = Math.max(0, ...tk.map(t => Math.max(0, ...t.L.map(s => K.w(s, FT)))));
+  const rowLabW = Math.max(0, ...rows.map(r => r.label ? K.w(r.label, FS, true) : 0));
+  const up0 = info.map((i, r) => Math.max(5.6 * S, i.hops ? 14 * S : 0, i.sign ? 7 * S : 0, rows[r].side === 'above' ? TL + 1 + FT * 1.2 : 0));
+  const dn0 = info.map((i, r) => (rows[r].side === 'above' ? TL + 1 : TL + 1.2 + FT * 1.25) + i.notes * noteH + (i.notes ? 1 : 0));
+  let W, H, Ltot, x0 = 0, yb = 0;
+  const lineAt = [], noteTop = [];
+  if (!vertical) {
+    const halfF = Math.max(...tk.map(t => K.w(t.L[0] || '', FT) / 2)), halfL = Math.max(...tk.map(t => K.w(t.L[t.L.length - 1] || '', FT) / 2));
+    const L0 = PAD + (rowLabW ? rowLabW + 3 * S : 0) + Math.max(extLo, halfF) + 1, R0 = PAD + Math.max(extHi, halfL) + 1;
+    Ltot = spec.scale.lock ? steps0 * spec.scale.mm : size.w - L0 - R0;
+    W = spec.scale.lock ? L0 + Ltot + R0 : size.w; x0 = L0;
+    let y = PAD + titleSp;
+    rows.forEach((row, r) => { lineAt.push(y + up0[r]); noteTop.push(y + up0[r] + (row.side === 'above' ? TL + 1 : TL + 1.2 + FT * 1.25)); y += up0[r] + dn0[r] + gap; });
+    H = y - gap + xTitleSp + PAD + 1;
+  } else {
+    Ltot = spec.scale.lock ? steps0 * spec.scale.mm : (size.h || 100);
+    const colL = tk.map(t => TL + 1.2 + Math.max(0, ...t.L.map(s => K.w(s, FT)))), colR = info.map((i, r) => Math.max(10 * S, i.hops ? 14 * S : 0, i.sign ? 8 * S : 0));
+    let x = PAD + 1;
+    rows.forEach((row, r) => { lineAt.push(x + colL[r]); x += colL[r] + colR[r] + 4 * S; });
+    const notesMax = Math.max(...info.map(i => i.notes));
+    W = Math.max(x - 4 * S + PAD, 40 * S, size.preset === 'custom' ? size.w : 0);
+    const shift = (W - (x - 4 * S + PAD)) / 2; lineAt.forEach((_, r) => { lineAt[r] += shift; });
+    const top = PAD + titleSp + (rowLabW ? FS * 1.7 : 0) + extHi + 1;
+    yb = top + Ltot; noteTop.push(...rows.map(() => yb + extLo + 3 * S));
+    H = yb + extLo + 3 * S + notesMax * noteH + (notesMax ? 1 : 0) + xTitleSp + PAD + 1;
+  }
+  const P = (r, u, v) => vertical ? [lineAt[r] + v, yb - u] : [x0 + u, lineAt[r] - v];
+  const upT = (r, u, dv, s, opt) => { opt = opt || {}; const [x, y] = P(r, u, 0), fs = opt.fs || FS; return vertical ? txt(x + dv, y + fs * .35, s, Object.assign({ anchor: 'start' }, opt)) : txt(x, y - dv, s, opt); };
+  const downT = (r, u, dv, s, opt) => { opt = opt || {}; const [x, y] = P(r, u, 0), fs = opt.fs || FS; return vertical ? txt(x - dv, y + fs * .35, s, Object.assign({ anchor: 'end' }, opt)) : txt(x, y + dv + fs * .8, s, opt); };
+  const head = (tx, ty, dx, dy, fill, k) => { const l = AL * (k || 1), w = AW * (k || 1); return `<polygon points="${f3(tx)},${f3(ty)} ${f3(tx - dx * l - dy * w)},${f3(ty - dy * l + dx * w)} ${f3(tx - dx * l + dy * w)},${f3(ty - dy * l - dx * w)}" fill="${fill}"/>`; };
+  const dirHi = vertical ? [0, -1] : [1, 0], dirLo = vertical ? [0, 1] : [-1, 0];
+  if (o.geom) Object.assign(o.geom, { W, H, L: Ltot, vertical, lineAt: lineAt.slice(), x0, yb, cell: Ltot / steps0 });
+  const body = [], data = [], labels = [];
+  const uOf = (ax, v) => (v - ax.lo) / axSpan(ax) * Ltot;
+
+  /* rows: line, ticks, numbers, boxes, label */
+  rows.forEach((row, r) => {
+    const ax = axes[r], le = (row.own ? row.axis : spec.x).labelEvery, isSign = info[r].sign;
+    const a = P(r, -extLo + (extLo ? AL * .8 : 0), 0), b = P(r, Ltot + extHi - (extHi ? AL * .8 : 0), 0);
+    body.push(`<line x1="${f3(a[0])}" y1="${f3(a[1])}" x2="${f3(b[0])}" y2="${f3(b[1])}" stroke="#000" stroke-width="${lw(.5)}"/>`);
+    if (extHi) { const t = P(r, Ltot + extHi, 0); body.push(head(t[0], t[1], dirHi[0], dirHi[1], '#000')); }
+    if (extLo) { const t = P(r, -extLo, 0); body.push(head(t[0], t[1], dirLo[0], dirLo[1], '#000')); }
+    if (!isSign) {
+      const d = [], m = ax.minor, n = Math.round(axSpan(ax) / (ax.step / m) + 1e-9);
+      if (spec.grid.minor && m > 1) for (let i = 0; i <= n; i++) if (i % m) { const u = uOf(ax, clean(ax.lo + i * ax.step / m)), p = P(r, u, -.9 * S), q = P(r, u, .9 * S); d.push(`M${f3(p[0])},${f3(p[1])}L${f3(q[0])},${f3(q[1])}`); }
+      tk[r].T.forEach(v => { const u = uOf(ax, v), p = P(r, u, -TL), q = P(r, u, TL); d.push(`M${f3(p[0])},${f3(p[1])}L${f3(q[0])},${f3(q[1])}`); });
+      body.push(`<path d="${d.join('')}" stroke="#000" stroke-width="${lw(.4)}" fill="none"/>`);
+      if (!hid.has('xTicks')) {
+        const sp = Ltot * ax.step / axSpan(ax), every = le || Math.max(1, Math.ceil(vertical ? FT * 1.35 / sp : (maxLabW + 1.6) / sp)), anchor = anchorIndex(ax), boxes = row.boxes.map(parseNum);
+        tk[r].T.forEach((v, i) => {
+          if ((i - anchor) % every) return;
+          const u = uOf(ax, v), boxed = K.isQ && boxes.some(bx => Math.abs(bx - v) < 1e-9);
+          if (boxed) {                                                    // a blank box where the student writes the number
+            const bw = Math.max(7 * S, K.w(tk[r].L[i], FT) + 2.2), bh = 4.8 * S, [px, py] = P(r, u, 0);
+            const rx = vertical ? px - TL - 1 - bw : px - bw / 2, ry = vertical ? py - bh / 2 : row.side === 'above' ? py - TL - 1 - bh : py + TL + 1;
+            labels.push(`<rect x="${f3(rx)}" y="${f3(ry)}" width="${f3(bw)}" height="${f3(bh)}" fill="#fff" stroke="#000" stroke-width="${lw(.35)}"/>`);
+          } else labels.push(row.side === 'above' && !vertical ? upT(r, u, TL + 1, tk[r].L[i], { fs: FT }) : downT(r, u, TL + 1, tk[r].L[i], { fs: FT }));
+        });
+      }
+    }
+    if (row.label) { const t = P(r, 0, 0); labels.push(vertical ? txt(lineAt[r], t[1] - Ltot - extHi - 3 * S, row.label, { bold: true }) : txt(PAD, lineAt[r] + FS * .35, row.label, { anchor: 'start', bold: true })); }
+  });
+  if (spec.line.connect && !vertical) for (let r = 0; r < nR - 1; r++) if (tk[r].T.length === tk[r + 1].T.length) tk[r].T.forEach((v, i) => {
+    const u = uOf(axes[r], v), p = P(r, u, -TL - 1), q = P(r + 1, uOf(axes[r + 1], tk[r + 1].T[i]), TL + 1);
+    body.push(`<line x1="${f3(p[0])}" y1="${f3(p[1])}" x2="${f3(q[0])}" y2="${f3(q[1])}" stroke="#777" stroke-width="${lw(.25)}" stroke-dasharray="1.2 1"/>`);
+  });
+
+  /* marks */
+  const shown = ob => !hid.has(ob.id) && !hid.has(OBJECT_KINDS[ob.kind].token || 'objects');
+  const ghostOf = ob => !K.isQ && o.ghost && spec.hidden.includes(ob.id) ? ' opacity=".3"' : '';
+  objs.forEach((ob, i) => {
+    if (kindOn(ob.kind) !== 'numberline' || !shown(ob)) return;
+    const r = ob.row || 0, ax = axes[r], col = spec.style.colour ? PALETTE[i % PALETTE.length] : '#000';
+    const C = { o, K, S, lw, ax, row: r, L: Ltot, vertical, col, dirHi, dirLo, sym: spec.x.letter,
+      u: v => uOf(ax, v), P: (u, v) => P(r, u, v), up: (u, dv, s, opt) => upT(r, u, dv, s, opt), down: (u, dv, s, opt) => downT(r, u, dv, s, opt),
+      head: (t, d, fill, k) => head(t[0], t[1], d[0], d[1], fill, k),
+      note: (k, text) => { const idx = info[r].base[ob.id] + k; return vertical ? txt(lineAt[r], noteTop[r] + idx * noteH + FS * .8, text, {}) : txt(x0 + Ltot / 2, noteTop[r] + idx * noteH + FS * .8, text, {}); } };
+    const res = OBJECT_KINDS[ob.kind].draw(ob, C);
+    if (!res) return;
+    data.push(`<g data-obj="${ob.id}"${ghostOf(ob)}${o.hits ? ' style="cursor:pointer"' : ''}>${res.shape}${res.label}</g>`);
+  });
+
+  const out = [...body, ...data, ...labels];
+  out.push(...K.titleSVG(size.w, W / 2));
+  const xt = K.axisText(spec.x, 'xTitle', Math.max(20, Ltot));
+  if (xt) out.push(txt(vertical ? W / 2 : x0 + Ltot / 2, H - PAD - FS * .35, xt));
+  return K.shell(W, H, '', out.join(''));
+}
+
 /* The page size actually drawn (a locked physical scale makes the page follow the grid). */
 function svgSize(spec) {
   const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(renderSVG(spec));
@@ -2026,9 +2434,14 @@ function pngWithDpi(u8, dpi) {
     ['title', 'Title', true], ['xTitle', 'X-axis title', true], ['yTitle', 'Y-axis title', true], ['units', 'Units in axis titles', true],
     ['xTicks', 'X-axis numbers'], ['yTicks', 'Y-axis numbers'], ['axisLetters', 'Axis letters (x, y)'], ['quadrantLabels', 'Quadrant labels'],
     ['pointLabels', 'Point and vertex names (A, B, C…)'], ['coordLabels', 'Coordinates beside points'],
-    ['equations', 'Equation and function-name labels'], ['keyPoints', 'Intercepts and intersections'], ['slopeTriangle', 'Slope triangles'],
-    ['tables', 'Tables of values'], ['objects', 'All points, shapes and graphs']
+    ['equations', 'Equation and function-name labels'], ['keyPoints', 'Intercepts, intersections and critical values'], ['slopeTriangle', 'Slope triangles'],
+    ['tables', 'Tables of values'], ['notation', 'Notation beneath the line'], ['signs', 'Signs (+ and −) on a sign chart'],
+    ['results', 'Solutions, hop results and answers'], ['objects', 'All points, shapes and graphs']
   ];
+  const VIS_FOR = {
+    plane: ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'objects'],
+    numberline: ['title', 'xTitle', 'units', 'xTicks', 'pointLabels', 'keyPoints', 'notation', 'signs', 'results', 'objects']
+  };
   const MARKER_SYMBOLS = { circle: '●', square: '■', triangle: '▲', diamond: '◆', cross: '✕', plus: '＋' };
 
   const getPath = (o, p) => p.split('.').reduce((a, k) => a == null ? a : a[k], o);
@@ -2069,11 +2482,11 @@ function pngWithDpi(u8, dpi) {
 
   function axisCard(k, title) {
     const x = k === 'x';
-    return `<div class="card"><h4>${title}</h4>
+    return `<div class="card"${x ? '' : ' data-types="plane"'}><h4>${x ? '<span data-types="plane">X axis</span><span data-types="numberline" hidden>Number line scale</span>' : title}</h4>
       <div class="row">
         <div><label class="lab">Label</label><input type="text" data-bind="${k}.label" placeholder="${x ? 'e.g. Time' : 'e.g. Distance'}"></div>
         <div><label class="lab">Unit</label><input type="text" data-bind="${k}.unit" placeholder="e.g. ${x ? 'h' : 'km'}"></div>
-        <div style="flex:none;width:62px"><label class="lab" title="The letter shown at the arrow tip">Letter</label><input type="text" maxlength="3" data-bind="${k}.letter"></div>
+        <div style="flex:none;width:62px" data-types="plane"><label class="lab" title="The letter shown at the arrow tip">Letter</label><input type="text" maxlength="3" data-bind="${k}.letter"></div>
       </div>
       <div class="row">
         <div><label class="lab">Min</label><input type="number" step="any" data-bind="${k}.min" data-auto="${k}.lo"></div>
@@ -2088,12 +2501,15 @@ function pngWithDpi(u8, dpi) {
         <div><label class="lab">Number format</label><select data-bind="${k}.format">${optList(FORMAT_NAMES)}</select></div>
         <div><label class="lab">Decimals</label><input type="number" min="0" max="8" step="1" placeholder="auto" data-bind="${k}.decimals"></div>
       </div>
-      <label class="check"><input type="checkbox" data-bind="${k}.breakMark"> Zigzag break if the axis doesn’t start at zero</label></div>`;
+      <label class="check" data-types="plane"><input type="checkbox" data-bind="${k}.breakMark"> Zigzag break if the axis doesn’t start at zero</label></div>`;
   }
   function buildAxes() {
     $('#axesPane').innerHTML = axisCard('x', 'X axis') + axisCard('y', 'Y axis') + `
+      <div data-types="numberline" hidden><h3 class="section-title">Line</h3>
+        <div class="row"><div><label class="lab">Arrows</label><select data-bind="axes.arrows"><option value="both">On both ends</option><option value="end">On the high end only</option><option value="none">None</option></select></div><div></div></div>
+        <label class="check" style="margin-top:10px"><input type="checkbox" data-bind="grid.minor"> Short tick marks between the numbers (set how many under “Minor lines per step”)</label></div>
       <p class="hint">Blank Min / Max / Step use automatic values (shown in grey): at least ±10, growing to fit what you plot, with a step that suits the printed size. Type a number to override any of them. “Number every…” shows a number on every nth gridline.</p>
-      <div><h3 class="section-title">Axes</h3>
+      <div data-types="plane"><h3 class="section-title">Axes</h3>
         <div class="seg" data-seg="axes.position"><button type="button" data-v="origin">Through the origin</button><button type="button" data-v="edges">Along the edges</button></div>
         <div class="row" style="margin-top:10px">
           <div><label class="lab">Arrows</label><select data-bind="axes.arrows"><option value="both">On both ends</option><option value="end">Positive ends only</option><option value="none">None</option></select></div>
@@ -2101,7 +2517,7 @@ function pngWithDpi(u8, dpi) {
         </div>
         <label class="check" style="margin-top:10px"><input type="checkbox" data-bind="axes.letters"> Letters at the arrow tips</label>
         <p class="hint" style="margin-top:6px">Arrows and letters belong to axes through the origin. “Along the edges” draws a frame with numbers outside.</p></div>
-      <div><h3 class="section-title">Gridlines</h3>
+      <div data-types="plane"><h3 class="section-title">Gridlines</h3>
         <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="grid.major"> Major gridlines</label>
         <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="grid.minor"> Minor gridlines</label>
         <label class="check"><input type="checkbox" data-bind="grid.highlight5"> Darker line at every 5th gridline (easier counting)</label></div>`;
@@ -2216,11 +2632,63 @@ function pngWithDpi(u8, dpi) {
         <div style="display:grid;gap:10px;margin-top:10px">${rels}${inter}${guides}${vlts}</div></div>`;
   }
 
+  /* ---------- the Number line tab: rows and marks ---------- */
+  const OP_NAMES = { lt: 'is less than (<)', le: 'is at most (≤)', gt: 'is greater than (>)', ge: 'is at least (≥)' };
+  function buildLine() {
+    const rows = spec.line.rows, nR = rows.length, at = i => spec.objects.map((o, k) => [o, k]).filter(([o]) => o.kind === i);
+    const num = (path, lab, ph) => `<div><label class="lab">${lab}</label><input type="number" step="any" data-bind="${path}"${ph ? ` placeholder="${ph}"` : ''}></div>`;
+    const del = (i, what) => `<div style="flex:none"><button class="xbtn" type="button" data-act="delObj" data-i="${i}" title="Remove ${what}">×</button></div>`;
+    const rowPick = i => nR > 1 ? `<div><label class="lab">On line</label><select data-bind="objects.${i}.row">${rows.map((r, k) => `<option value="${k}">${esc(r.label || 'Line ' + (k + 1))}</option>`).join('')}</select></div>` : '';
+    const notes = i => `<div><label class="lab">Write beneath the line</label><div style="display:flex;gap:6px 14px;flex-wrap:wrap"><label class="check sm" style="flex:none"><input type="checkbox" data-bind="objects.${i}.notation.inequality"> inequality</label><label class="check sm" style="flex:none"><input type="checkbox" data-bind="objects.${i}.notation.interval"> interval</label><label class="check sm" style="flex:none"><input type="checkbox" data-bind="objects.${i}.notation.set"> set</label></div></div>`;
+    const list = (kind, i, vals, lab, ph) => `<div><label class="lab">${lab}</label><input type="text" data-list="${kind}:${i}" value="${esc(vals.map(cellStr).join(', '))}" placeholder="${ph}" spellcheck="false" autocomplete="off"></div>`;
+    const half = (i, k, lab) => `<div class="row"><div><label class="lab">${lab}</label><select data-bind="objects.${i}.${k}.op">${optList(OP_NAMES)}</select></div>${num(`objects.${i}.${k}.at`, 'the number')}</div>`;
+    const rowCards = rows.map((r, i) => `<div class="card">
+      <div class="row"><div><label class="lab">Line ${i + 1} label</label><input type="text" data-bind="line.rows.${i}.label" placeholder="${i ? 'e.g. Percent (%)' : 'optional'}"></div>${nR > 1 ? `<div style="flex:none"><button class="xbtn" type="button" data-act="delRow" data-i="${i}" title="Remove this line">×</button></div>` : ''}</div>
+      <div class="row"><div><label class="lab">Numbers go</label><select data-bind="line.rows.${i}.side"><option value="below">Below the line</option><option value="above">Above the line</option></select></div></div>
+      ${list('boxes', i, r.boxes, 'Blank boxes in the question at (numbers)', 'e.g. 0.25, 0.75')}
+      <div class="row tight"><button class="btn small" type="button" data-act="boxAlt" data-i="${i}" title="Box every other number, keeping the two ends">Box every other number</button><button class="btn small" type="button" data-act="boxNone" data-i="${i}">Clear boxes</button></div>
+      <label class="check"><input type="checkbox" data-bind="line.rows.${i}.own"> This line has its own scale (double number line)</label>
+      <div data-showif="line.rows.${i}.own"><div class="row">${num(`line.rows.${i}.axis.min`, 'Min')}${num(`line.rows.${i}.axis.max`, 'Max')}${num(`line.rows.${i}.axis.step`, 'Step')}</div>
+        <div class="row" style="margin-top:8px"><div><label class="lab">Number format</label><select data-bind="line.rows.${i}.axis.format">${optList(FORMAT_NAMES)}</select></div>${num(`line.rows.${i}.axis.labelEvery`, 'Number every…', 'auto')}</div></div>
+    </div>`).join('');
+    const pts = at('nlpoint').map(([o, i]) => `<div class="card"><div class="row">${num(`objects.${i}.at`, 'Point at')}<div><label class="lab">Name</label><input type="text" data-bind="objects.${i}.label" placeholder="e.g. A"></div>${rowPick(i)}${del(i, 'this point')}</div>
+      <div class="row" style="gap:16px"><label class="check"><input type="checkbox" data-bind="objects.${i}.closed"> Filled dot</label><label class="check"><input type="checkbox" data-bind="objects.${i}.value"> Write its value</label></div></div>`).join('');
+    const ineqs = at('inequality').map(([o, i]) => `<div class="card"><div class="row"><div><label class="lab">Show</label><select data-bind="objects.${i}.form"><option value="simple">One inequality</option><option value="and">Both of two (and), e.g. −2 &lt; x ≤ 5</option><option value="or">Either of two (or), e.g. x &lt; −2 or x &gt; 5</option></select></div>${rowPick(i)}${del(i, 'this inequality')}</div>
+      <div class="row"><span class="hint" style="flex:none;align-self:center">x</span><div style="flex:1">${half(i, 'a', 'First: x…')}</div></div>
+      <div data-kinds="and,or" data-kindpath="objects.${i}.form">${half(i, 'b', 'Second: x…')}</div>
+      <div class="row"><div><label class="lab">The numbers are</label><select data-bind="objects.${i}.domain"><option value="real">Any real number (a line)</option><option value="integer">Integers only (dots)</option></select></div></div>
+      ${notes(i)}</div>`).join('');
+    const hops = at('hops').map(([o, i]) => `<div class="card"><div class="row">${num(`objects.${i}.start`, 'Start at')}${rowPick(i)}${del(i, 'these hops')}</div>
+      ${list('steps', i, o.steps, 'Hops (positive right, negative left)', 'e.g. 5, -8')}
+      <div class="row" style="gap:14px;flex-wrap:wrap"><label class="check sm"><input type="checkbox" data-bind="objects.${i}.labels"> Write the hop sizes</label><label class="check sm"><input type="checkbox" data-bind="objects.${i}.startDot"> Dot at the start</label><label class="check sm"><input type="checkbox" data-bind="objects.${i}.result"> Show where it lands</label></div></div>`).join('');
+    const signs = at('signchart').map(([o, i]) => `<div class="card"><div class="row"><div><label class="lab">Expression in x</label><input type="text" data-bind="objects.${i}.expr" placeholder="e.g. (x + 2)(x - 3)" spellcheck="false" autocomplete="off"></div>${rowPick(i)}${del(i, 'this sign chart')}</div>
+      <p class="issue" data-eqerr="${i}"></p>
+      <div data-showif-not="objects.${i}.expr" class="row-wrap">${list('values', i, o.values, 'Or type the critical values yourself', 'e.g. -2, 3')}${list('signs', i, o.signs, 'and the sign of each interval, left to right', 'e.g. +, -, +')}</div>
+      <div class="row"><div><label class="lab">Also solve</label><select data-bind="objects.${i}.op"><option value="none">Just the signs</option><option value="gt">expression &gt; 0</option><option value="ge">expression ≥ 0</option><option value="lt">expression &lt; 0</option><option value="le">expression ≤ 0</option></select></div></div>
+      ${notes(i)}</div>`).join('');
+    $('#linePane').innerHTML = `
+      <div><h3 class="section-title">Quick setup</h3>
+        <select id="linePreset"><option value="">Choose a setup…</option>${Object.keys(LINE_PRESETS).map(k => `<option value="${k}">${esc(LINE_PRESETS[k].name)}</option>`).join('')}</select>
+        <p class="hint" style="margin-top:6px">Sets the range, step and number format (and rows for a double line). It clears the marks below; Undo brings them back.</p></div>
+      <div><h3 class="section-title">Marks on the line</h3>
+        <div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="addNlPoint">+ Point</button><button class="btn small" type="button" data-act="addIneq">+ Inequality</button>
+          <button class="btn small" type="button" data-act="addHops">+ Hops</button><button class="btn small" type="button" data-act="addSign">+ Sign chart</button></div>
+        <p class="hint" style="margin:8px 0">Filled dots include the number, open dots don’t. Hide any mark, or the notation, in the question on the Test tab.</p>
+        <div style="display:grid;gap:10px">${pts}${ineqs}${hops}${signs}</div></div>
+      <div><h3 class="section-title">Layout</h3>
+        <div class="seg" data-seg="line.orient"><button type="button" data-v="horizontal">Horizontal</button><button type="button" data-v="vertical">Vertical</button></div>
+        <p class="hint" style="margin-top:6px">A vertical line sizes itself: use a custom Height on the Graph tab for its length.</p>
+        <label class="check" style="margin-top:8px"><input type="checkbox" data-bind="line.connect"> Join matching tick marks between lines (double number lines)</label></div>
+      <div><h3 class="section-title">Lines</h3>
+        <div style="display:grid;gap:10px">${rowCards}</div>
+        <div class="row tight" style="margin-top:8px"><button class="btn small" type="button" data-act="addRow">+ Line (stacked, same scale)</button></div></div>`;
+  }
+
   function buildTest() {
-    const rows = VIS_ROWS.map(([tok, name, blankable]) =>
+    const rows = VIS_ROWS.filter(r => VIS_FOR[spec.type].includes(r[0])).map(([tok, name, blankable]) =>
       `<label class="check"><input type="checkbox" data-vis="${tok}"> ${name}</label>` +
       (blankable ? `<label class="check sm" data-blankwrap="${tok}"><input type="checkbox" data-blank="${tok}"> Answer line</label>` : '<span></span>')).join('');
-    const objs = spec.objects.map(o => `<label class="check"><input type="checkbox" data-vis="${o.id}"> <span data-oname="${o.id}"></span></label>`).join('');
+    const objs = spec.objects.filter(o => kindOn(o.kind) === spec.type).map(o => `<label class="check"><input type="checkbox" data-vis="${o.id}"> <span data-oname="${o.id}"></span></label>`).join('');
     $('#testPane').innerHTML = `
       <div><h3 class="section-title">Scaffold level <span class="pill" id="levelPill"></span></h3>
         <div class="levels">${SCAFFOLD_LEVELS.map(k => `<button type="button" class="level" data-level="${k}"><b>${LEVEL_INFO[k][0]}</b><span>${LEVEL_INFO[k][1]}</span></button>`).join('')}</div>
@@ -2272,6 +2740,9 @@ function pngWithDpi(u8, dpi) {
     $$('[data-seg]').forEach(g => $$('button', g).forEach(b => b.classList.toggle('active', String(getPath(spec, g.dataset.seg)) === b.dataset.v)));
     $$('[data-kinds]').forEach(el => { el.hidden = !el.dataset.kinds.split(',').includes(getPath(spec, el.dataset.kindpath)); });
     $$('[data-open]').forEach(el => { el.checked = spec.objects[+el.dataset.open].style === 'open'; });
+    $$('[data-types]').forEach(el => { el.hidden = !el.dataset.types.split(',').includes(spec.type); });
+    { const t = $('.tab.active'); if (t && t.hidden) $('.tab[data-tab="graph"]').click(); }
+    if (isNL(spec)) state.edit = false;
     $$('[data-showif]').forEach(el => { el.hidden = !getPath(spec, el.dataset.showif); });
     $$('[data-showif-not]').forEach(el => { el.hidden = !!getPath(spec, el.dataset.showifNot); });
     $$('[data-eqerr]').forEach(el => { const o = spec.objects[+el.dataset.eqerr]; el.textContent = o && o.expr.trim() ? parseEquation(o.expr).error || '' : ''; });
@@ -2326,14 +2797,14 @@ function pngWithDpi(u8, dpi) {
   function renderStatus() {
     const { w, h } = state.size, bad = countBad(), out = state.outside.length, iss = state.issues.length, dot = '<span class="dotline"></span>';
     $('#status').innerHTML = `<span><b>${+w.toFixed(1)} × ${+h.toFixed(1)}</b> mm</span>${dot}<span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span>` +
-      (spec.scale.lock ? `${dot}<span>1 grid square = <b>${+spec.scale.mm.toFixed(2)}</b> mm</span>` : `${dot}<span>1 grid square ≈ <b>${+state.geom.cell.toFixed(1)}</b> mm</span>`) +
+      (spec.scale.lock ? `${dot}<span>1 ${isNL(spec) ? 'step' : 'grid square'} = <b>${+spec.scale.mm.toFixed(2)}</b> mm</span>` : `${dot}<span>1 ${isNL(spec) ? 'step' : 'grid square'} ≈ <b>${+state.geom.cell.toFixed(1)}</b> mm</span>`) +
       (spec.scale.lock && w > 180 ? `${dot}<span class="warn">wider than a letter/A4 page’s usable width (about 180 mm): use a smaller square or a shorter range</span>` : '') +
       (out ? `${dot}<span class="warn">${out} object${out === 1 ? '' : 's'} outside the grid</span>` : '') +
       (iss ? `${dot}<span class="warn">${iss} readability warning${iss === 1 ? '' : 's'} (Test tab)</span>` : '') +
       (bad ? `${dot}<span class="warn">${bad} cell${bad === 1 ? ' isn’t a number and is' : 's aren’t numbers and are'} left off the graph</span>` : '');
   }
   function refresh() { state.outside = outsideObjects(spec); state.issues = readability(spec); renderPreview(); syncControls(); renderStatus(); }
-  function rebuildStructure() { buildObjects(); buildFunctions(); buildTest(); refresh(); }
+  function rebuildStructure() { buildObjects(); buildFunctions(); buildLine(); buildTest(); refresh(); }
 
   /* ---------- actions ---------- */
   function showQuestion() { if (state.view !== 'question') { state.view = 'question'; state.pick = false; state.edit = false; const p = $('#pick'); if (p) p.checked = false; } }
@@ -2461,6 +2932,15 @@ function pngWithDpi(u8, dpi) {
       else if (f === 'label') o.labels[r] = t.value; else o.vertices[r][f === 'x' ? 0 : 1] = cellFromText(t.value);
       if (f !== 'label') t.classList.toggle('bad', badCell(cellFromText(t.value)));
       commit('cell:' + t.dataset.oi + ':' + r + ':' + f);
+    } else if (t.dataset.list) {                                      // comma-separated lists: blank boxes, hop sizes, critical values, signs
+      const [kind, i] = t.dataset.list.split(':'), items = t.value.split(/[,;\s]+/).filter(Boolean);
+      if (kind === 'boxes') spec.line.rows[+i].boxes = items.map(cellFromText).slice(0, MAX_BOXES);
+      else if (kind === 'steps') spec.objects[+i].steps = items.map(cellFromText).slice(0, MAX_HOPS);
+      else if (kind === 'values') spec.objects[+i].values = items.map(cellFromText).slice(0, MAX_CRIT);
+      else if (kind === 'signs') spec.objects[+i].signs = items.slice(0, MAX_CRIT + 1);
+      commit('list:' + t.dataset.list);
+    } else if (t.id === 'linePreset') {
+      if (t.value) { spec = applyLinePreset(spec, t.value); t.value = ''; commit(null, true); toast('Number line set up. Undo brings back what you had.', 'ok'); }
     } else if (t.dataset.tblank) {
       const [i, c, k] = t.dataset.tblank.split(':'), o = spec.objects[+i], tok = c + ':' + k, at = o.blank.indexOf(tok);
       if (t.checked && at < 0) o.blank.push(tok); else if (!t.checked && at >= 0) o.blank.splice(at, 1);
@@ -2497,13 +2977,24 @@ function pngWithDpi(u8, dpi) {
       $$('.pane').forEach(p => { p.hidden = p.dataset.pane !== state.tab; });
     }
     else if (b.parentElement && b.parentElement.dataset.seg) {
-      const v = b.dataset.v; setPath(spec, b.parentElement.dataset.seg, /^\d+$/.test(v) ? Number(v) : v); commit(null);
+      const v = b.dataset.v, seg = b.parentElement.dataset.seg; setPath(spec, seg, /^\d+$/.test(v) ? Number(v) : v); if (seg === 'type') state.edit = false; commit(null, seg === 'type');
     }
     else if (a === 'addPoint') addPoint();
     else if (a === 'addShape') addShape(b.dataset.kind);
     else if (a === 'delObj') delObj(+b.dataset.i);
     else if (a === 'addVert') addVert(+b.dataset.i);
     else if (a === 'delVert') delVert(+b.dataset.i, +b.dataset.k);
+    else if (a === 'addNlPoint') addObj('nlpoint', { at: 0 });
+    else if (a === 'addIneq') addObj('inequality', { a: { op: 'ge', at: spec.objects.some(o => o.kind === 'inequality') ? 0 : -3 } });
+    else if (a === 'addHops') addObj('hops', { start: 0, steps: [4, -6], result: true });
+    else if (a === 'addSign') addObj('signchart', { expr: '(x + 2)(x - 3)', op: 'gt' });
+    else if (a === 'addRow') { if (spec.line.rows.length >= MAX_LINES) toast('Line limit reached (' + MAX_LINES + ').', 'err'); else { spec.line.rows.push({}); spec = normalize(spec); commit(null, true); } }
+    else if (a === 'delRow') { dropLineRow(spec, +b.dataset.i); spec = normalize(spec); commit(null, true); }
+    else if (a === 'boxAlt' || a === 'boxNone') {
+      const i = +b.dataset.i, ax = analyse(spec).axes[i], T = ticks(ax);
+      spec.line.rows[i].boxes = a === 'boxNone' ? [] : T.filter((v, k) => k > 0 && k < T.length - 1 && k % 2 === 1);
+      commit(null, true);
+    }
     else if (a === 'addEq') addEq();
     else if (a === 'addTable') addTable();
     else if (a === 'addRelated') addRelated();

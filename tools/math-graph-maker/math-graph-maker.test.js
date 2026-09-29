@@ -18,7 +18,8 @@ const G = vm.runInNewContext(core + `;({ SPEC_VERSION, TOOL, SCAFFOLD, SCAFFOLD_
   parseEquation, compileExpr, astMarkup, linearMarkup, linearFit, toFraction, flatRuns, runsW, fracStr,
   findZeros, findIntersections, findExtrema, sampleFunction, clipSeg, clipRun, simplifyPts, plotRuns,
   interceptPoints, intersectionPoints, lineCross, slopeTriangle, suggestXs, relatedEq,
-  resolveObjects, readability, snapPoints, pasteRows, dropRow, fillRows, tableLayout, MAX_ROWS, TABLE_COLS })`, {});
+  resolveObjects, readability, snapPoints, pasteRows, dropRow, fillRows, tableLayout, MAX_ROWS, TABLE_COLS,
+  analyseLine, applyLinePreset, dropLineRow, ineqSegments, ineqText, intervalText, setText, noteTexts, signChartData, findPoles, valText, renderNumberLine, LINE_PRESETS })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -135,7 +136,7 @@ test('normalize is idempotent and keeps a fixed key order', () => {
   const s = G.sampleSpec();
   const a = JSON.stringify(s), b = JSON.stringify(G.normalize(JSON.parse(a)));
   assert.equal(a, b);
-  assert.deepEqual(Object.keys(s), ['specVersion', 'tool', 'type', 'title', 'name', 'size', 'quadrants', 'x', 'y', 'axes', 'grid', 'quadrantLabels', 'objects', 'hidden', 'blanks', 'scale', 'style']);
+  assert.deepEqual(Object.keys(s), ['specVersion', 'tool', 'type', 'title', 'name', 'size', 'quadrants', 'x', 'y', 'axes', 'grid', 'quadrantLabels', 'line', 'objects', 'hidden', 'blanks', 'scale', 'style']);
   assert.equal(s.specVersion, G.SPEC_VERSION); assert.equal(s.tool, 'math-graph-maker');
 });
 test('normalize survives garbage and clamps values', () => {
@@ -792,7 +793,7 @@ test('new object kinds normalise, round-trip, and clean up references when somet
   s.objects.push(G.makeObject(s, 'intersect', { of: [f1, f2], label: 'A' }));
   s.objects.push(G.makeObject(s, 'vlt', { at: [1, 2, '-'] }));
   const n = G.normalize(s);
-  assert.equal(n.specVersion, 2);
+  assert.equal(n.specVersion, 3);
   assert.deepEqual(plain(n.objects.map(o => o.id)), ['fn1', 'fn2', 'pt1', 'tb1', 'rl1', 'gd1', 'gd2', 'is1', 'vl1']);
   assert.deepEqual(plain(n.objects[3].blank), ['y:0', 'y:2', 'x:1'], 'blank marks outside the table are dropped');
   assert.equal(G.serialize(G.parseFile(G.serialize(n))), G.serialize(n));
@@ -809,8 +810,8 @@ test('new object kinds normalise, round-trip, and clean up references when somet
 });
 test('files: a version 1 file still opens; a newer one is refused', () => {
   const v1 = JSON.stringify({ tool: 'math-graph-maker', specVersion: 1, objects: [{ kind: 'point', id: 'pt1', x: 1, y: 2, label: 'A' }] });
-  const s = G.parseFile(v1); assert.equal(s.specVersion, 2); assert.equal(s.objects[0].label, 'A');
-  assert.throws(() => G.parseFile('{"tool":"math-graph-maker","specVersion":3}'), /newer version/);
+  const s = G.parseFile(v1); assert.equal(s.specVersion, 3); assert.equal(s.objects[0].label, 'A');
+  assert.throws(() => G.parseFile('{"tool":"math-graph-maker","specVersion":4}'), /newer version/);
 });
 test('tables of values: calculated y, typed y, headings, undefined values, paste, delete and fill', () => {
   const s = fnSpec(['f(x) = 2x + 1', 'y = 1/x']);
@@ -989,4 +990,144 @@ test('readability: warns when values fall between gridlines, and suggests whole-
   s = fnSpec(['y = 2x + 1']); s.objects.push(G.makeObject(s, 'related', { of: 'fn1', rel: 'perpendicular', through: { x: 0, y: 0 }, rightAngle: true }));
   assert.deepEqual(R(s).filter(t => /scales differ/.test(t)), []);
   s.x.step = 1; s.y.step = 5; assert.equal(R(s).filter(t => /scales differ/.test(t)).length, 1);
+});
+
+
+/* ================= Phase 3: number lines ================= */
+const nlSpec = (objs, extra) => {
+  const s = G.blankSpec(); s.type = 'numberline'; s.x.min = -5; s.x.max = 5; s.x.step = 1;
+  (objs || []).forEach(([k, p]) => s.objects.push(G.makeObject(s, k, p)));
+  return Object.assign(s, extra || {});
+};
+const iq = p => Object.assign({ form: 'simple', a: { op: 'ge', at: -3 } }, p);
+const INF = v => v === Infinity ? '+inf' : v === -Infinity ? '-inf' : v;              // Infinity does not survive JSON, so name it
+const segRows = list => Array.from(list, g => [INF(g.lo), INF(g.hi), g.loC, g.hiC]);
+const segs = p => segRows(G.ineqSegments(G.makeObject(G.blankSpec(), 'inequality', iq(p))));
+
+test('ineqSegments: simple, and, or, empty and merged cases', () => {
+  assert.deepEqual(segs({}), [[-3, '+inf', true, false]]);
+  assert.deepEqual(segs({ a: { op: 'lt', at: 2 } }), [['-inf', 2, false, false]]);
+  assert.deepEqual(segs({ form: 'and', a: { op: 'gt', at: -2 }, b: { op: 'le', at: 5 } }), [[-2, 5, false, true]]);
+  assert.deepEqual(segs({ form: 'and', a: { op: 'gt', at: 5 }, b: { op: 'lt', at: 2 } }), [], 'empty intersection');
+  assert.deepEqual(segs({ form: 'and', a: { op: 'ge', at: 2 }, b: { op: 'le', at: 2 } }), [[2, 2, true, true]], 'a single point');
+  assert.deepEqual(segs({ form: 'and', a: { op: 'gt', at: 2 }, b: { op: 'le', at: 2 } }), []);
+  assert.deepEqual(segs({ form: 'or', a: { op: 'lt', at: -1 }, b: { op: 'gt', at: 3 } }), [['-inf', -1, false, false], [3, '+inf', false, false]]);
+  assert.equal(segs({ form: 'or', a: { op: 'lt', at: 4 }, b: { op: 'gt', at: 1 } }).length, 1, 'overlapping or-ranges merge (all reals)');
+  assert.equal(segs({ form: 'or', a: { op: 'lt', at: 2 }, b: { op: 'ge', at: 2 } }).length, 1, 'touching with an included point merges');
+  assert.equal(segs({ form: 'or', a: { op: 'lt', at: 2 }, b: { op: 'gt', at: 2 } }).length, 2, 'x ≠ 2 stays two pieces');
+  assert.deepEqual(segs({ a: { op: 'ge', at: '' } }), [], 'a blank value gives no solution rather than a guess');
+});
+
+test('inequality notation: inequality, interval and set builder', () => {
+  const T = (form, n, dom) => plain(G.noteTexts(G.ineqSegments(G.makeObject(G.blankSpec(), 'inequality', iq(form))), n, 'x', dom || 'real', null));
+  assert.deepEqual(T({}, { inequality: true, interval: true, set: true }), ['x ≥ −3', '[−3, ∞)', '{x | x ≥ −3, x ∈ ℝ}']);
+  assert.deepEqual(T({ a: { op: 'lt', at: 2 } }, { inequality: true, interval: true }), ['x < 2', '(−∞, 2)']);
+  assert.deepEqual(T({ form: 'and', a: { op: 'gt', at: -2 }, b: { op: 'le', at: 5 } }, { inequality: true, interval: true }), ['−2 < x ≤ 5', '(−2, 5]']);
+  assert.deepEqual(T({ form: 'or', a: { op: 'lt', at: -1 }, b: { op: 'gt', at: 3 } }, { inequality: true, interval: true }), ['x < −1 or x > 3', '(−∞, −1) ∪ (3, ∞)']);
+  assert.deepEqual(T({}, { set: true }, 'integer'), ['{x | x ≥ −3, x ∈ ℤ}']);
+  assert.deepEqual(T({ form: 'and', a: { op: 'gt', at: 5 }, b: { op: 'lt', at: 2 } }, { inequality: true, interval: true, set: true }), ['no solution', '∅', '∅']);
+  assert.deepEqual(T({}, {}), []);
+});
+
+test('signChartData: zeros, signs, solution segments; poles; manual values', () => {
+  const win = { lo: -6, hi: 6 };
+  const sc = p => G.signChartData(G.makeObject(G.blankSpec(), 'signchart', p), win);
+  let d = sc({ expr: '(x+2)(x-3)', op: 'gt' });
+  assert.deepEqual(plain(d.crit.map(c => c.v)), [-2, 3]); assert.deepEqual(plain(d.signs), ['+', '−', '+']);
+  assert.deepEqual(segRows(d.segs), [['-inf', -2, false, false], [3, '+inf', false, false]]);
+  d = sc({ expr: '(x+2)(x-3)', op: 'le' });
+  assert.deepEqual(segRows(d.segs), [[-2, 3, true, true]], '≤ includes the zeros');
+  d = sc({ expr: 'x^2', op: 'le' }); assert.deepEqual(segRows(d.segs), [[0, 0, true, true]], 'a touching zero is a lone solution for ≤');
+  d = sc({ expr: '1/(x-1)', op: 'lt' });
+  assert.deepEqual(plain(d.crit), [{ v: 1, pole: true }]); assert.deepEqual(segRows(d.segs), [['-inf', 1, false, false]], 'a pole is never included');
+  d = sc({ expr: '', values: [-1, 2], signs: ['+', '-', '+'], op: 'ge' });
+  assert.deepEqual(plain(d.signs), ['+', '−', '+']); assert.equal(d.segs.length, 2);
+  d = sc({ expr: 'y = 2x', op: 'gt' }); assert.ok(!d.error && d.crit.length === 1, 'y = … is accepted as an expression in x');
+  d = sc({ expr: 'x = 4' }); assert.ok(d.error, 'a vertical line is not an expression in x: reported, not drawn');
+  d = sc({ expr: 'x +' }); assert.ok(d.error);
+});
+
+test('findPoles finds asymptotes and ignores smooth curves', () => {
+  assert.deepEqual(plain(G.findPoles(x => 1 / (x - 1), -5, 5)), [1]);
+  assert.deepEqual(plain(G.findPoles(x => 1 / ((x - 1) * (x + 2)), -5, 5)), [-2, 1]);
+  assert.deepEqual(plain(G.findPoles(x => x * x, -5, 5)), []);
+  assert.deepEqual(plain(G.findPoles(x => (x - 1) / ((x + 2) * (x - 3)), -10, 10)), [-2, 3], 'poles that fall on a sample point');
+  assert.deepEqual(plain(G.findPoles(x => (x * x - 1) / (x - 1), -5, 5)), [], 'a removable hole is not a pole');
+});
+
+test('number line schema: type, line settings, clamped rows, objects of the other type survive', () => {
+  const s = G.normalize({ type: 'numberline', line: { orient: 'sideways', rows: [] } });
+  assert.equal(s.type, 'numberline'); assert.equal(s.line.orient, 'horizontal'); assert.equal(s.line.rows.length, 1);
+  assert.equal(G.normalize({ type: 'nonsense' }).type, 'plane');
+  const s2 = G.blankSpec(); s2.objects.push(G.makeObject(s2, 'point', { x: 1, y: 2 }), G.makeObject(s2, 'nlpoint', { at: 3, row: 5 }));
+  s2.type = 'numberline'; const n = G.normalize(s2);
+  assert.equal(n.objects.length, 2, 'both kinds kept'); assert.equal(n.objects[1].row, 0, 'a row that does not exist is clamped');
+  assert.deepEqual(plain(G.normalize(n)), plain(n), 'normalize is idempotent');
+  assert.equal(G.resolveObjects(n).length, 1, 'a number line only draws number-line objects');
+  const p = G.normalize(Object.assign({}, plain(n), { type: 'plane' }));
+  assert.equal(G.resolveObjects(p).length, 1); assert.equal(G.resolveObjects(p)[0].kind, 'point');
+});
+
+test('presets: applyLinePreset sets the line, keeps plane objects, drops old marks', () => {
+  const s = G.blankSpec(); s.objects.push(G.makeObject(s, 'point', { x: 1, y: 1 }), G.makeObject(s, 'nlpoint', { at: 2 }));
+  const t = G.applyLinePreset(s, 'fractions');
+  assert.equal(t.type, 'numberline'); assert.equal(t.x.format, 'fraction'); assert.equal(t.x.step, 0.125);
+  assert.deepEqual(plain(t.objects.map(o => o.kind)), ['point'], 'old number-line marks replaced, plane objects kept');
+  const pc = G.applyLinePreset(s, 'percent'); assert.equal(pc.line.rows.length, 2); assert.equal(pc.line.connect, true); assert.equal(pc.line.rows[1].own, true);
+  assert.equal(G.applyLinePreset(s, 'thermometer').line.orient, 'vertical');
+  for (const k of Object.keys(G.LINE_PRESETS)) noBad(G.renderSVG(G.applyLinePreset(s, k), {}));
+});
+
+test('dropLineRow moves marks up and keeps ids', () => {
+  const s = nlSpec([['nlpoint', { at: 1, row: 0 }], ['nlpoint', { at: 2, row: 1 }], ['nlpoint', { at: 3, row: 2 }]]);
+  s.line.rows = G.normalize({ line: { rows: [{ label: 'a' }, { label: 'b' }, { label: 'c' }] } }).line.rows;
+  G.dropLineRow(s, 1);
+  assert.equal(s.line.rows.length, 2); assert.deepEqual(plain(s.objects.map(o => o.row)), [0, 0, 1]);
+  G.dropLineRow(s, 0); G.dropLineRow(s, 0); assert.equal(s.line.rows.length, 1, 'never below one row');
+});
+
+test('number line renders: question and key share a page; scaffold levels; hidden marks', () => {
+  const s = nlSpec([['inequality', iq({ notation: { inequality: true, interval: true, set: true } })], ['nlpoint', { at: 2, label: 'P' }], ['hops', { start: -4, steps: [3, -2], result: true }]], { title: 'Graph it' });
+  const key = G.renderSVG(s, { version: 'key' }); noBad(key);
+  const vb = svg => /viewBox="([^"]+)"/.exec(svg)[1];
+  for (const k of G.SCAFFOLD_LEVELS) {
+    const q = G.renderSVG(Object.assign({}, s, { hidden: G.SCAFFOLD[k] }), { version: 'question' }); noBad(q);
+    assert.equal(vb(q), vb(key), k + ': same page as the key');
+  }
+  const q = G.renderSVG(Object.assign({}, s, { hidden: s.objects.map(o => o.id) }), { version: 'question' });
+  assert.ok(!/data-obj=/.test(q) && /data-obj=/.test(key), 'hidden marks are gone from the question, present in the key');
+  assert.equal(vb(q), vb(key));
+  const hideTok = t => G.renderSVG(Object.assign({}, s, { hidden: [t] }), { version: 'question' });
+  assert.equal(vb(hideTok('notation')), vb(key), 'hiding the notation reserves its space');
+  assert.notEqual(hideTok('notation'), key); assert.notEqual(hideTok('results'), key);
+});
+
+test('number line: rendering does not mutate the spec', () => {
+  const s = G.normalize(nlSpec([['inequality', iq({ form: 'and', b: { op: 'lt', at: 4 } })], ['signchart', { expr: '(x+2)(x-3)', op: 'gt' }]]));
+  const before = JSON.stringify(s); G.renderSVG(s, { version: 'question' }); G.renderSVG(s, { version: 'key' });
+  assert.equal(JSON.stringify(s), before);
+});
+
+test('number line: vertical layout, double lines with connectors, fractions', () => {
+  const v = G.applyLinePreset(G.blankSpec(), 'thermometer'); noBad(G.renderSVG(v, {}));
+  const d = G.applyLinePreset(G.blankSpec(), 'percent'); const svg = G.renderSVG(d, {}); noBad(svg); assert.ok(/Cost/.test(svg) && /Percent/.test(svg));
+  d.line.connect = false; assert.notEqual(G.renderSVG(d, {}), svg, 'connectors switch off');
+  assert.equal(G.valText(0.375, { fmt: { format: 'fraction' } }).replace(/[{}]/g, ''), '3/8');
+  assert.equal(G.valText(1.5, { fmt: { format: 'improper' } }).replace(/[{}]/g, ''), '3/2');
+  assert.equal(G.valText(1.5, { fmt: { format: 'fraction' } }), '1{1/2}');
+});
+
+test('number line: boxes are blank in the question and filled in the key', () => {
+  const s = nlSpec([]); s.line.rows[0].boxes = [2];
+  const k = G.renderSVG(s, { version: 'key' }), q = G.renderSVG(s, { version: 'question' }), cnt = (v, tag) => (v.match(new RegExp('<' + tag + '[ >]', 'g')) || []).length;
+  assert.equal(cnt(q, 'text'), cnt(k, 'text') - 1, 'the boxed number is not printed in the question');
+  assert.equal(cnt(q, 'rect'), cnt(k, 'rect') + 1, 'and an empty box takes its place');
+});
+
+test('number line readability and outside warnings', () => {
+  let s = nlSpec([['nlpoint', { at: 2.5 }]]); const r = plain(G.readability(s).map(i => i.text));
+  assert.equal(r.length, 1); assert.match(r[0], /falls between tick marks/);
+  s = nlSpec([['nlpoint', { at: 9 }]]); assert.equal(G.outsideObjects(s).length, 1);
+  s = nlSpec([['signchart', { expr: 'x = 4' }]]); assert.match(G.readability(s)[0].text, /Sign chart/);
+  assert.equal(G.snapPoints(s), 0);
 });
