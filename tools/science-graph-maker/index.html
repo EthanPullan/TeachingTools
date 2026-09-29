@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Graph Maker</title>
+<title>Science Graph Maker</title>
 <style>
   :root{
     --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
@@ -191,7 +191,7 @@
 <body>
 <div class="app">
   <header class="toolbar">
-    <div class="brand"><span class="mark"></span>Graph Maker <small>graphs for tests</small></div>
+    <div class="brand"><span class="mark"></span>Science Graph Maker <small>graphs for science tests</small></div>
     <button class="btn small" id="newBtn" type="button" title="Start a new blank graph (you can undo this)">New</button>
     <button class="btn small" id="openBtn" type="button">Open…</button>
     <button class="btn small" id="saveBtn" type="button" title="Save this graph as a .json file">Save</button>
@@ -415,7 +415,7 @@
 /* ==========================================================================
    CORE — pure functions, no DOM. Everything the tool "knows" lives here:
    the spec schema, nice-number axis maths, paste parsing and the SVG renderer.
-   graph-maker.test.js loads this block on its own and tests it in Node.
+   science-graph-maker.test.js loads this block on its own and tests it in Node.
    ========================================================================== */
 const SPEC_VERSION = 4;
 
@@ -970,7 +970,7 @@ function normalize(raw) {
 
 /* Older files get migrated here as the schema grows (nothing to do for v1). */
 function migrate(raw) {
-  if (!raw || typeof raw !== 'object' || typeof raw.specVersion !== 'number') throw new Error('This file is not a Graph Maker graph.');
+  if (!raw || typeof raw !== 'object' || typeof raw.specVersion !== 'number') throw new Error('This file is not a Science Graph Maker graph.');
   if (raw.specVersion > SPEC_VERSION) throw new Error('This graph was saved by a newer version of the tool (specVersion ' + raw.specVersion + ').');
   if (raw.specVersion < 2) {                                 // v1 -> v2: new fields take their defaults in normalize(); keep the scaffold level
     const h = (Array.isArray(raw.hidden) ? [...raw.hidden] : []).sort().join('|');
@@ -1976,7 +1976,11 @@ function pngWithDpi(u8, dpi) {
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
 
   /* ---------- state: the spec is the truth; view/pick/tab are UI-only ---------- */
-  const RECENT_KEY = 'graphmaker.recent.v1', PRESET_KEY = 'graphmaker.presets.v1', MAX_RECENT = 20;
+  const RECENT_KEY = 'sciencegraphmaker.recent.v1', PRESET_KEY = 'sciencegraphmaker.presets.v1', MAX_RECENT = 20;
+  /* The tool used to be called "Graph Maker": carry anyone's saved recents and presets over once, so the rename loses nothing. */
+  for (const [now, was] of [[RECENT_KEY, 'graphmaker.recent.v1'], [PRESET_KEY, 'graphmaker.presets.v1']]) {
+    try { if (localStorage.getItem(now) === null && localStorage.getItem(was) !== null) localStorage.setItem(now, localStorage.getItem(was)); } catch (e) { /* storage blocked: nothing to carry */ }
+  }
   /* localStorage is a convenience only (it can be blocked or full); JSON files are the real save. */
   const store = {
     get(k) { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } },

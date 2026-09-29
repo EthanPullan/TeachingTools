@@ -1,5 +1,5 @@
-// Unit tests for the Graph Maker core (the <script id="core"> block in index.html).
-// Run:  node --test tools/graph-maker/
+// Unit tests for the Science Graph Maker core (the <script id="core"> block in index.html).
+// Run:  node --test tools/science-graph-maker/science-graph-maker.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -116,7 +116,7 @@ test('save -> load round-trip is byte-identical', () => {
 
 test('files from the future or from elsewhere are rejected clearly', () => {
   assert.throws(() => G.parseFile('{"specVersion":99}'), /newer version/);
-  assert.throws(() => G.parseFile('{"hello":1}'), /not a Graph Maker/);
+  assert.throws(() => G.parseFile('{"hello":1}'), /not a Science Graph Maker/);
   assert.throws(() => G.parseFile('nope'), /JSON/);
 });
 

@@ -18,7 +18,7 @@ works offline, and can be downloaded on its own.
 | [Name Caller](https://ethanpullan.github.io/TeachingTools/tools/name-caller/) | Pull a name out of a hat — pulls from your shared Class Lists, no repeats |
 | [Movie Picker](https://ethanpullan.github.io/TeachingTools/tools/movie-picker/) | Cinema board with a ballot, votes and a weighted draw |
 | [Multiplication Chart](https://ethanpullan.github.io/TeachingTools/tools/multiplication-chart/) | n × n times table with row/column highlight, fullscreen for the board, and print |
-| [Graph Maker](https://ethanpullan.github.io/TeachingTools/tools/graph-maker/) | Line, bar (incl. dual-axis combo), scatter, coordinate, histogram, box plot, pie and number-line graphs for tests, with best-fit lines, equations, shapes, error bars, log scales and alternate-version generator — paste data, hide things for a question version, export a question + answer-key pair (PNG 300 DPI / SVG), readability check, annotations, real-size grids, large print, presets, recent graphs, CSV import, click-to-plot, copy image, print sheets, black-and-white friendly |
+| [Science Graph Maker](https://ethanpullan.github.io/TeachingTools/tools/science-graph-maker/) | Graphs for science tests: line, bar (incl. dual-axis combo), scatter, coordinate, histogram, box plot, pie and number-line with best-fit lines, equations, shapes, error bars, log scales and alternate-version generator — paste data, hide things for a question version, export a question + answer-key pair (PNG 300 DPI / SVG), readability check, annotations, real-size grids, large print, presets, recent graphs, CSV import, click-to-plot, copy image, print sheets, black-and-white friendly |
 
 ### Daily
 
@@ -50,3 +50,6 @@ still open and look right offline.
 - **Static site.** Served straight from the repo root with GitHub Pages.
 - **Design system.** Shared tokens and components live in
   [`STYLE_GUIDE.md`](STYLE_GUIDE.md).
+- **Building the math graph tool?** Read
+  [`docs/MATH_GRAPH_MAKER_HANDOFF.md`](docs/MATH_GRAPH_MAKER_HANDOFF.md) first: it records what
+  worked, what broke, and what wasn't verified while building the Science Graph Maker.
