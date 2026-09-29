@@ -17,6 +17,7 @@ works offline, and can be downloaded on its own.
 | [Name Wheel](https://ethanpullan.github.io/TeachingTools/tools/name-wheel/) | Spin to pick a name — pulls from your shared Class Lists, no repeats |
 | [Name Caller](https://ethanpullan.github.io/TeachingTools/tools/name-caller/) | Pull a name out of a hat — pulls from your shared Class Lists, no repeats |
 | [Movie Picker](https://ethanpullan.github.io/TeachingTools/tools/movie-picker/) | Cinema board with a ballot, votes and a weighted draw |
+| [Multiplication Chart](https://ethanpullan.github.io/TeachingTools/tools/multiplication-chart/) | n × n times table with row/column highlight, fullscreen for the board, and print |
 
 ### Daily
 

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multiplication Chart</title>
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;
+    display:flex;flex-direction:column;height:100vh;height:100dvh;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+
+  .toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+  .field{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);}
+  input[type=number]{width:62px;border:1px solid var(--line);border-radius:8px;padding:7px 9px;
+    background:var(--panel-2);font-family:var(--mono);}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;user-select:none;}
+  .check input{width:16px;height:16px;accent-color:var(--board);}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn .ic{font-size:15px;line-height:1;}
+
+  /* Stage: the chart is a square sized to the smaller of the free width/height. */
+  .stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:14px;}
+  .sheet{height:100%;max-width:100%;aspect-ratio:1/1;display:flex;flex-direction:column;
+    background:var(--room-bg);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:12px;min-width:0;min-height:0;}
+  #printHeader{display:none;}
+  #chart{--n:12;flex:1;min-height:0;display:grid;
+    grid-template-columns:repeat(calc(var(--n) + 1),1fr);
+    grid-template-rows:repeat(calc(var(--n) + 1),1fr);
+    gap:2px;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;
+    /* font scales with the smaller stage dimension (cqmin of .sheet) */
+    font-size:clamp(8px,calc(min(100vw - 60px,100vh - 130px) / (var(--n) + 1) * .42),64px);}
+  #chart div{display:flex;align-items:center;justify-content:center;background:#fff;
+    border-radius:4px;box-shadow:inset 0 0 0 1px var(--line);font-weight:500;}
+  #chart .alt{background:var(--panel-2);}
+  #chart .diag{background:var(--accent-soft);color:var(--accent-deep);font-weight:700;
+    box-shadow:inset 0 0 0 1px var(--accent);}
+  #chart .head{background:var(--board);color:#fff;font-weight:700;box-shadow:none;}
+  #chart .hl{background:var(--together-soft);box-shadow:inset 0 0 0 1px var(--together);}
+  #chart .head.hl{background:var(--accent);color:var(--ink);}
+
+  /* Fullscreen: chart only, edge to edge. */
+  body.fs .toolbar,body.fs #printHeader{display:none;}
+  body.fs{background:var(--room-bg);}
+  body.fs .stage{padding:0;}
+  body.fs .sheet{border:none;border-radius:0;box-shadow:none;padding:6px;}
+  body.fs #chart{font-size:clamp(8px,calc(min(100vw,100vh) / (var(--n) + 1) * .42),96px);}
+  .fs-hint{position:fixed;bottom:10px;right:14px;font-size:12px;color:var(--muted);
+    font-family:var(--mono);opacity:0;pointer-events:none;transition:opacity .3s;}
+  body.fs .fs-hint.show{opacity:1;}
+
+  @media (max-width:640px){
+    .brand small{display:none;}
+    .stage{padding:8px;}
+  }
+
+  @media print{
+    @page{size:landscape;margin:12mm;}
+    body{background:#fff;display:block;height:auto;}
+    .toolbar,.fs-hint{display:none !important;}
+    .stage{display:block;padding:0;}
+    #printHeader{display:block;text-align:center;margin:0 0 4mm;}
+    #printHeader h1{margin:0;font-size:18pt;letter-spacing:.14em;text-transform:uppercase;}
+    .sheet{width:165mm;height:165mm;margin:0 auto;box-shadow:none;border:none;padding:0;background:#fff;}
+    #chart{font-size:calc(165mm / (var(--n) + 1) * .42);
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    #chart .hl{background:inherit;box-shadow:inherit;}
+  }
+  @media (prefers-reduced-motion:reduce){ .btn:active{transform:none;} .fs-hint{transition:none;} *{scroll-behavior:auto;} }
+</style>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Multiplication Chart <small>n × n times table</small></div>
+    <label class="field">Size <input id="n" type="number" min="2" max="30" value="12" aria-label="Chart size n"></label>
+    <label class="check"><input id="hover" type="checkbox" checked> Highlight row &amp; column</label>
+    <div class="spacer"></div>
+    <button class="btn" id="print" type="button"><span class="ic">🖨</span>Print</button>
+    <button class="btn primary" id="fullscreen" type="button"><span class="ic">⛶</span>Fullscreen</button>
+  </header>
+
+  <main class="stage">
+    <div class="sheet">
+      <div id="printHeader"><h1>Multiplication Chart</h1></div>
+      <div id="chart" role="table" aria-label="Multiplication chart"></div>
+    </div>
+  </main>
+  <div class="fs-hint" id="fsHint">Esc to exit</div>
+
+<script>
+(() => {
+  const MIN = 2, MAX = 30;
+  const chart = document.getElementById('chart');
+  const nInput = document.getElementById('n');
+  const hoverBox = document.getElementById('hover');
+  let n = 12;
+
+  function build() {
+    chart.style.setProperty('--n', n);
+    chart.textContent = '';
+    const frag = document.createDocumentFragment();
+    for (let r = 0; r <= n; r++) {
+      for (let c = 0; c <= n; c++) {
+        const d = document.createElement('div');
+        d.dataset.r = r; d.dataset.c = c;
+        if (r === 0 && c === 0) { d.textContent = '×'; d.className = 'head'; }
+        else if (r === 0 || c === 0) { d.textContent = r || c; d.className = 'head'; }
+        else {
+          d.textContent = r * c;
+          if (r === c) d.className = 'diag';
+          else if (r % 2) d.className = 'alt';
+        }
+        frag.appendChild(d);
+      }
+    }
+    chart.appendChild(frag);
+  }
+
+  // Trace the row and column up to the hovered cell, like following with a finger.
+  function setHighlight(r, c) {
+    chart.querySelectorAll('.hl').forEach(e => e.classList.remove('hl'));
+    if (r == null) return;
+    chart.querySelectorAll('div').forEach(e => {
+      const er = +e.dataset.r, ec = +e.dataset.c;
+      if ((er === r || ec === c) && er <= r && ec <= c) e.classList.add('hl');
+    });
+  }
+
+  chart.addEventListener('mouseover', e => {
+    if (!hoverBox.checked) return;
+    const t = e.target.closest('#chart > div');
+    if (t) setHighlight(+t.dataset.r, +t.dataset.c);
+  });
+  chart.addEventListener('mouseleave', () => setHighlight());
+  hoverBox.addEventListener('change', () => setHighlight());
+
+  nInput.addEventListener('input', () => {
+    const v = parseInt(nInput.value, 10);
+    if (v >= MIN && v <= MAX) { n = v; build(); }
+  });
+  nInput.addEventListener('change', () => { nInput.value = n; });
+
+  document.getElementById('print').addEventListener('click', () => window.print());
+
+  const fsBtn = document.getElementById('fullscreen');
+  const hint = document.getElementById('fsHint');
+  let hintTimer;
+  function syncFs() {
+    const on = !!document.fullscreenElement;
+    document.body.classList.toggle('fs', on);
+    hint.classList.toggle('show', on);
+    clearTimeout(hintTimer);
+    if (on) hintTimer = setTimeout(() => hint.classList.remove('show'), 3000);
+  }
+  fsBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  });
+  document.addEventListener('fullscreenchange', syncFs);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'f' && e.target.tagName !== 'INPUT') fsBtn.click();
+  });
+
+  build();
+})();
+</script>
+</body>
+</html>
