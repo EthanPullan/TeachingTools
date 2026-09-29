@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const G = vm.runInNewContext(core + `;({ niceStep, niceCeil, niceRange, resolveAxis, ticks, fmtTick, normalize, blankSpec, sampleSpec,
   serialize, parseFile, migrate, parseTSV, pasteGrid, importGrid, dropIndex, scaffoldLevel, SCAFFOLD, renderSVG, analyse,
-  computeAxes, textW, HW, crc32, readability, snapValues, svgSize, fmtTick, SCAFFOLD_V1, pngWithDpi, sizeMM, mmToPx, parseNum, cellFromText, TYPES, MAX_SERIES, MAX_ROWS })`, {});
+  computeAxes, PRESETS, parseTable, textW, HW, crc32, readability, snapValues, svgSize, fmtTick, SCAFFOLD_V1, pngWithDpi, sizeMM, mmToPx, parseNum, cellFromText, TYPES, MAX_SERIES, MAX_ROWS })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -486,4 +486,46 @@ test('every option combined still renders cleanly and round-trips', () => {
   }
   const a = G.serialize(s);
   assert.equal(G.serialize(G.parseFile(a)), a);
+});
+
+/* ---------------------------- Phase 3 ---------------------------- */
+test('parseTable picks tabs, commas or semicolons and copes with quotes and a BOM', () => {
+  assert.deepEqual(plain(G.parseTable('a\tb\n1\t2')), [['a', 'b'], ['1', '2']]);
+  assert.deepEqual(plain(G.parseTable('\ufeffTime (min),Temp\n0,20\n1,27\n')), [['Time (min)', 'Temp'], ['0', '20'], ['1', '27']]);
+  assert.deepEqual(plain(G.parseTable('a;b;c\n1;2;3')), [['a', 'b', 'c'], ['1', '2', '3']]);
+  assert.deepEqual(plain(G.parseTable('name,note\n"Smith, J","said ""hi"""\n')), [['name', 'note'], ['Smith, J', 'said "hi"']]);
+  assert.deepEqual(plain(G.parseTable('x,y\r\n1,2\r\n')), [['x', 'y'], ['1', '2']]);          // Windows line endings
+  assert.deepEqual(plain(G.parseTable('one\ntwo')), [['one'], ['two']]);                       // single column stays single
+  const s = G.blankSpec();                                                                       // a CSV imports exactly like a paste
+  assert.ok(G.importGrid(s, G.parseTable('Time (s),Distance (m)\n0,0\n1,4.9\n2,19.6')));
+  assert.equal(s.x.unit, 's'); assert.equal(s.y.unit, 'm'); assert.equal(s.rows.length, 3);
+});
+
+test('built-in presets are valid, distinct and render in both versions', () => {
+  assert.ok(G.PRESETS.length >= 4);
+  assert.equal(new Set(G.PRESETS.map(p => p.id)).size, G.PRESETS.length);
+  for (const p of G.PRESETS) {
+    const s = p.build();
+    assert.deepEqual(plain(G.normalize(s)), plain(s), p.id);            // already normalised
+    for (const version of ['key', 'question']) assert.ok(!/NaN|undefined/.test(G.renderSVG(s, { version })), p.id);
+    assert.equal(G.serialize(G.parseFile(G.serialize(s))), G.serialize(s), p.id);
+  }
+  const g4 = G.PRESETS.find(p => p.id === 'grid4').build();
+  assert.equal(g4.type, 'coordinate'); assert.equal(g4.axes, 'origin');
+  const ax = G.computeAxes(g4);
+  assert.deepEqual([ax.x.lo, ax.x.hi, ax.y.lo, ax.y.hi], [-10, 10, -10, 10]);
+  const sci = G.PRESETS.find(p => p.id === 'science-line').build();
+  assert.equal(sci.type, 'line'); assert.equal(sci.x.label, 'Time');
+  assert.notEqual(G.serialize(g4), G.serialize(G.PRESETS.find(p => p.id === 'grid1').build()));
+});
+
+test('geometry export lets the editor map a mouse position back to graph values', () => {
+  const s = G.sampleSpec(), geom = {};
+  G.renderSVG(s, { geom });
+  assert.ok(geom.x1 > geom.x0 && geom.y1 > geom.y0 && geom.ax.hi === 10 && geom.ay.hi === 80);
+  // the plot's bottom-left corner is (lo, lo); top-right is (hi, hi)
+  const xAt = px => geom.ax.lo + (px - geom.x0) / (geom.x1 - geom.x0) * (geom.ax.hi - geom.ax.lo);
+  assert.equal(xAt(geom.x0), 0); assert.ok(Math.abs(xAt(geom.x1) - 10) < 1e-9);
+  const b = G.sampleSpec(); b.type = 'bar'; const g2 = {}; G.renderSVG(b, { geom: g2 });
+  assert.equal(g2.isBar, true); assert.equal(g2.ax, null);
 });
