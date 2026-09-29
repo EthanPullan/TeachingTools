@@ -171,6 +171,9 @@
   .lib-card span.n{display:block;font-size:11px;color:var(--muted);line-height:1.35;}
   .lib-card .xbtn{position:absolute;top:4px;right:4px;background:#fff;box-shadow:var(--shadow-sm);}
   dialog.wide{width:min(760px,94vw);max-height:90vh;overflow:auto;}
+  table.keys{border-collapse:collapse;width:100%;font-size:13px;}
+  table.keys td{padding:5px 8px 5px 0;border-bottom:1px solid var(--line);}
+  kbd{font-family:var(--mono);font-size:11.5px;background:var(--panel-2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;}
   .paper.edit svg{cursor:crosshair;}
   .paper.edit svg [data-pt]{cursor:grab;}
   #printSheet{display:none;}
@@ -197,6 +200,7 @@
     <span class="sep"></span>
     <button class="btn small" id="undoBtn" type="button" title="Undo">↶ Undo</button>
     <button class="btn small" id="redoBtn" type="button" title="Redo">↷ Redo</button>
+    <button class="btn small" id="keysBtn" type="button" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts">⌨</button>
     <div class="spacer"></div>
     <button class="btn small" id="copyBtn" type="button" title="Copy the graph as an image, ready to paste into Word">Copy image</button>
     <button class="btn small" id="printBtn" type="button" title="Print this graph, or a sheet of several">Print…</button>
@@ -258,6 +262,11 @@
             </div>
             <p class="hint" style="margin-top:8px">Slices run clockwise from twelve o’clock, in table order. The category names are “X-axis numbers” and the percent / degree labels are “Point labels” on the Test tab.</p>
           </div>
+          <div data-show="boxplot">
+            <h3 class="section-title">Whiskers</h3>
+            <select data-bind="box.whiskers"><option value="iqr">Stop at 1.5 × IQR (outliers shown as open dots)</option><option value="minmax">Reach the smallest and largest values</option></select>
+            <p class="hint" style="margin-top:8px">The box runs from the lower quartile to the upper quartile with the median marked. Quartiles are the medians of the lower and upper halves (the middle value is left out when there is an odd number of values).</p>
+          </div>
           <div data-show="histogram">
             <h3 class="section-title">Bins</h3>
             <div class="row">
@@ -272,6 +281,14 @@
             <div class="row" style="margin-top:8px"><div><label class="lab">One grid square = (mm)</label><input type="number" min="1" max="50" step="any" data-bind="scale.mm"></div></div>
             <p class="hint" style="margin-top:8px">A grid square is one major step. The page grows to fit the grid, so the size above is ignored. Paste the PNG into Word at 100% (it is stamped 300 DPI) and a ruler will measure true.</p>
           </div>
+          <div data-show="coordinate,line,scatter,bar">
+            <h3 class="section-title">Error bars</h3>
+            <div class="row">
+              <div><select data-bind="errorBars.mode" aria-label="Error bar type"><option value="none">None</option><option value="fixed">± a fixed amount</option><option value="percent">± a percentage of each value</option></select></div>
+              <div data-kinds="fixed,percent" data-kindpath="errorBars.mode" style="flex:none;width:90px"><input type="number" min="0" step="any" data-bind="errorBars.value" aria-label="Error amount"></div>
+            </div>
+            <p class="hint" style="margin-top:8px">Bars run from each value minus the error to plus the error. Turn them off in the question with “Error bars” on the Test tab.</p>
+          </div>
           <div>
             <label class="lab" for="legend">Legend position</label>
             <select id="legend" data-bind="legend">
@@ -285,17 +302,18 @@
         <!-- DATA -->
         <section class="pane" data-pane="data" hidden>
           <div class="row tight" style="flex-wrap:wrap">
-            <span data-show="coordinate,line,scatter,bar,histogram,pie" style="display:contents">
+            <span data-show="coordinate,line,scatter,bar,histogram,boxplot,pie" style="display:contents">
               <button class="btn small" id="addRow" type="button">+ Row</button>
-              <button class="btn small" id="addSeries" type="button" data-show="coordinate,line,scatter,bar">+ Series</button>
+              <button class="btn small" id="addSeries" type="button" data-show="coordinate,line,scatter,bar,boxplot">+ Series</button>
               <button class="btn small" id="pasteBtn" type="button">Paste from spreadsheet…</button>
               <button class="btn small" id="csvBtn" type="button">Import CSV…</button>
             </span>
           </div>
-          <div class="tblwrap" id="tblwrap" data-show="coordinate,line,scatter,bar,histogram,pie"></div>
+          <div class="tblwrap" id="tblwrap" data-show="coordinate,line,scatter,bar,histogram,boxplot,pie"></div>
           <p class="hint" data-show="numberline" hidden>A number line has no data table: add its points, rays and intervals as marks on the Draw tab.</p>
           <p class="hint" data-show="bar" hidden>Bar graphs: the first column holds the category names; each series is a set of bars.</p>
           <p class="hint" data-show="pie" hidden>Pie graphs: category names in the first column, amounts in the second. Slices are drawn in table order.</p>
+          <p class="hint" data-show="boxplot" hidden>Box plots: each column is one box (name it in the top row). Type or paste the measurements down the column; columns can be different lengths.</p>
           <p class="hint" data-show="histogram" hidden>Histograms: paste or type one column of measurements; the tool groups them into bins.</p>
           <p class="hint">You can also paste straight into a cell: a block copied from Excel or Google Sheets fills in from that cell. Enter moves down. Red cells aren’t numbers and are left off the graph.</p>
         </section>
@@ -371,6 +389,24 @@
   <p class="hint" style="margin-top:10px">Graphs print at their real size, and smaller ones sit side by side on the page. In the print window choose “Actual size” / 100% and turn off headers and footers.</p>
   <div class="btns"><button class="btn" id="printCancel" type="button">Cancel</button><button class="btn primary" id="printGo" type="button">Print</button></div>
 </dialog>
+<dialog id="keysDlg">
+  <h3>Keyboard shortcuts</h3>
+  <table class="keys">
+    <tr><td><kbd>Ctrl</kbd> <kbd>Z</kbd></td><td>Undo</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Z</kbd> or <kbd>Ctrl</kbd> <kbd>Y</kbd></td><td>Redo</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>S</kbd></td><td>Save the graph as a .json file</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>D</kbd></td><td>Duplicate the graph</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>E</kbd></td><td>Export question + answer key</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>P</kbd></td><td>Print the graph you are editing</td></tr>
+    <tr><td><kbd>K</kbd> / <kbd>Q</kbd></td><td>Show the answer key / the question</td></tr>
+    <tr><td><kbd>E</kbd></td><td>Click-to-add / drag-to-move tool on or off</td></tr>
+    <tr><td><kbd>H</kbd></td><td>Click-to-hide tool on or off</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Turn the tools off</td></tr>
+    <tr><td><kbd>?</kbd></td><td>This list</td></tr>
+  </table>
+  <p class="hint" style="margin-top:8px">Ctrl is Cmd on a Mac. Letter keys and undo/redo are ignored while you are typing in a box, so they never get in the way of your text.</p>
+  <div class="btns"><button class="btn" id="keysClose" type="button">Close</button></div>
+</dialog>
 <div id="printSheet" aria-hidden="true"></div>
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
 <input type="file" id="csvIn" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
@@ -381,12 +417,12 @@
    the spec schema, nice-number axis maths, paste parsing and the SVG renderer.
    graph-maker.test.js loads this block on its own and tests it in Node.
    ========================================================================== */
-const SPEC_VERSION = 3;
+const SPEC_VERSION = 4;
 
 /* ---------- constants ---------- */
-const TYPES = ['coordinate', 'line', 'scatter', 'bar', 'histogram', 'pie', 'numberline'];
+const TYPES = ['coordinate', 'line', 'scatter', 'bar', 'histogram', 'boxplot', 'pie', 'numberline'];
 const TYPE_NAMES = { coordinate: 'Coordinate grid', line: 'Line graph', scatter: 'Scatter plot', bar: 'Bar graph',
-                     histogram: 'Histogram', pie: 'Pie graph', numberline: 'Number line' };
+                     histogram: 'Histogram', boxplot: 'Box plot', pie: 'Pie graph', numberline: 'Number line' };
 const GRID_TYPES = ['coordinate', 'line', 'scatter'];               // x–y graphs: can carry a best-fit line, equations and shapes
 const CATEGORICAL = ['bar', 'pie'];                                 // first column holds category names
 const isCategorical = spec => CATEGORICAL.includes(spec.type);
@@ -412,7 +448,9 @@ const FONT = "Arial, Helvetica, 'Liberation Sans', sans-serif";   // system font
 
 /* Show/hide tokens. `hidden` in the spec lists what the QUESTION version hides;
    the answer key always shows everything. */
-const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'legend', 'pointLabels', 'data', 'annotations', 'regions', 'fit'];
+const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'legend', 'pointLabels', 'data', 'annotations', 'regions', 'fit', 'errorBars'];
+const ERR_MODES = ['none', 'fixed', 'percent'];
+const BOX_WHISKERS = ['iqr', 'minmax'];
 const FORMATS = ['decimal', 'fraction', 'sci'];
 const FORMAT_NAMES = { decimal: 'Decimal', fraction: 'Fractions', sci: 'Scientific notation' };
 const KINDS = ['text', 'arrow', 'callout'];
@@ -529,6 +567,7 @@ function niceRange(min, max, target) {
 }
 /* One axis: data extent + optional manual min/max/step (null = auto) → lo/hi/step. */
 function resolveAxis(a, ext, o) {
+  if (o.log) return resolveLogAxis(a, ext);
   let dLo, dHi;
   if (o.mode === 'four') {
     const m = ext ? Math.max(Math.abs(ext.min), Math.abs(ext.max)) : 0;
@@ -552,7 +591,25 @@ function resolveAxis(a, ext, o) {
   if (!(hi > lo)) hi = clean(lo + step);
   return { lo, hi, step, minor: a.minorPerMajor, fmt: { format: a.format, decimals: a.decimals, sigfigs: a.sigfigs } };
 }
+/* Logarithmic axes (powers of 10). Helpers give every axis a uniform "position along the axis" so drawing code needn't care. */
+const axT = (ax, v) => ax.log ? Math.log10(v) : v;                   // value -> position units
+const axInv = (ax, t) => ax.log ? Math.pow(10, t) : t;
+const axSpan = ax => ax.log ? Math.log10(ax.hi / ax.lo) : ax.hi - ax.lo;
+const axStep = ax => ax.log ? 1 : ax.step;
+const LOG_TYPES = { x: ['line', 'scatter'], y: ['line', 'scatter', 'bar'] };
+const logOk = (spec, k) => spec[k].scale === 'log' && LOG_TYPES[k].includes(spec.type);
+function resolveLogAxis(a, ext) {
+  let lo = a.min > 0 ? a.min : ext ? Math.pow(10, Math.floor(Math.log10(ext.min) + 1e-9)) : 1;
+  let hi = a.max > 0 ? a.max : ext ? Math.pow(10, Math.ceil(Math.log10(ext.max) - 1e-9)) : 1000;
+  if (!(hi > lo)) hi = lo * 10;
+  return { lo: clean(lo), hi: clean(hi), step: 1, minor: 9, log: true, fmt: { format: 'decimal', decimals: null, sigfigs: null } };
+}
 function ticks(ax) {
+  if (ax.log) {
+    const out = [];
+    for (let k = Math.ceil(Math.log10(ax.lo) - 1e-9); k <= Math.floor(Math.log10(ax.hi) + 1e-9); k++) out.push(clean(Math.pow(10, k)));
+    return out;
+  }
   const out = [], n = Math.round((ax.hi - ax.lo) / ax.step + 1e-9);
   for (let i = 0; i <= n; i++) { const v = clean(ax.lo + i * ax.step); if (v <= ax.hi + ax.step * 1e-9) out.push(v); }
   return out;
@@ -594,6 +651,7 @@ function fracStr(v) {                                        // 1/2, 1 3/4, -2/3
   return null;
 }
 function fmtTick(v, ax) {
+  if (ax.log) { const k = Math.round(Math.log10(v)); return k >= 5 || k <= -4 ? '10^' + String(k).replace('-', MINUS) : String(clean(v)); }
   const f = ax.fmt || {};
   let s = null;
   if (f.format === 'fraction') s = fracStr(v);
@@ -704,6 +762,21 @@ function compileExpr(src) {
   catch (e) { return { fn: null, error: e.message }; }
 }
 
+/* ---------- box plots: five-number summary (quartiles = medians of the lower and upper halves, the middle value excluded) ---------- */
+function boxStats(values, whiskers) {
+  const v = values.filter(Number.isFinite).sort((a, b) => a - b), n = v.length;
+  if (!n) return null;
+  const med = a => { const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  const lower = v.slice(0, n >> 1), upper = v.slice((n + 1) >> 1);
+  const q1 = lower.length ? med(lower) : v[0], q3 = upper.length ? med(upper) : v[n - 1], iqr = q3 - q1;
+  let wLo = v[0], wHi = v[n - 1], outliers = [];
+  if (whiskers === 'iqr') {                                          // whiskers stop at the last value within 1.5 IQR of the box; the rest are outliers
+    const lo = q1 - 1.5 * iqr, hi = q3 + 1.5 * iqr;
+    wLo = Math.min(...v.filter(x => x >= lo)); wHi = Math.max(...v.filter(x => x <= hi)); outliers = v.filter(x => x < lo || x > hi);
+  }
+  return { n, min: v[0], q1, median: med(v), q3, max: v[n - 1], whiskerLo: wLo, whiskerHi: wHi, outliers };
+}
+
 /* ---------- line of best fit ---------- */
 function fitLine(spec, A) {
   const f = spec.fit;
@@ -748,7 +821,7 @@ const primeLabels = str => String(str).split(/\s+/).filter(Boolean).map(l => l +
    ========================================================================== */
 function newSeries(k) {
   return { name: 'Series ' + (k + 1), marker: MARKERS[k % MARKERS.length],
-           dash: Object.keys(DASHES)[k % 4], hatch: HATCHES[k % 8] };
+           dash: Object.keys(DASHES)[k % 4], hatch: HATCHES[k % 8], draw: 'bar', axis: 'left' };
 }
 function emptyRow(spec) { return { x: null, ys: spec.series.map(() => null), label: '' }; }
 
@@ -769,6 +842,7 @@ function blankSpec() {
   spec.fit = { mode: 'none', series: 0, slope: 1, intercept: 0, equation: true, dash: 'dashed' };
   spec.functions = []; spec.shapes = []; spec.marks = [];
   spec.hist = { binWidth: null, start: null }; spec.pie = { labels: 'percent' };
+  spec.errorBars = { mode: 'none', value: 1 }; spec.box = { whiskers: 'iqr' };
   for (let i = 0; i < 6; i++) spec.rows.push(emptyRow(spec));
   return normalize(spec);
 }
@@ -798,7 +872,7 @@ function normalize(raw) {
     const dp = numOrNull(a.decimals), sf = numOrNull(a.sigfigs);
     return { label: str(a.label, ''), unit: str(a.unit, ''), min: numOrNull(a.min), max: numOrNull(a.max),
              step: step > 0 ? step : null, minorPerMajor: int(a.minorPerMajor, 1, 10, 2),
-             format: pick(a.format, FORMATS, 'decimal'), decimals: dp === null ? null : clamp(Math.round(dp), 0, 8),
+             scale: pick(a.scale, ['linear', 'log'], 'linear'), format: pick(a.format, FORMATS, 'decimal'), decimals: dp === null ? null : clamp(Math.round(dp), 0, 8),
              sigfigs: sf === null ? null : clamp(Math.round(sf), 1, 10), breakMark: bool(a.breakMark, true) };
   };
   const sz = r.size && typeof r.size === 'object' ? r.size : {};
@@ -809,7 +883,8 @@ function normalize(raw) {
   let series = (Array.isArray(r.series) ? r.series : []).slice(0, MAX_SERIES).map((s, k) => {
     s = s && typeof s === 'object' ? s : {};
     return { name: str(s.name, 'Series ' + (k + 1)), marker: pick(s.marker, MARKERS, MARKERS[k % MARKERS.length]),
-             dash: pick(s.dash, Object.keys(DASHES), Object.keys(DASHES)[k % 4]), hatch: pick(s.hatch, HATCHES, HATCHES[k % 8]) };
+             dash: pick(s.dash, Object.keys(DASHES), Object.keys(DASHES)[k % 4]), hatch: pick(s.hatch, HATCHES, HATCHES[k % 8]),
+             draw: pick(s.draw, ['bar', 'line'], 'bar'), axis: pick(s.axis, ['left', 'right'], 'left') };
   });
   if (!series.length) series = [newSeries(0)];
   const nS = series.length;
@@ -849,6 +924,8 @@ function normalize(raw) {
              closed: bool(k.closed, true), closedTo: bool(k.closedTo, true), label: str(k.label, '') };
   });
   const hs = r.hist && typeof r.hist === 'object' ? r.hist : {};
+  const eb = r.errorBars && typeof r.errorBars === 'object' ? r.errorBars : {};
+  const bx = r.box && typeof r.box === 'object' ? r.box : {};
   const bw = numOrNull(hs.binWidth);
   const seen = new Set();
   const hidden = (Array.isArray(r.hidden) ? r.hidden : []).filter(t => {
@@ -875,7 +952,7 @@ function normalize(raw) {
     title: str(r.title, ''),
     size,
     quadrants: r.quadrants === 1 ? 1 : 4,
-    x: axis(r.x), y: axis(r.y),
+    x: axis(r.x), y: axis(r.y), y2: axis(r.y2),
     axes: pick(r.axes, ['edges', 'origin'], 'edges'),
     grid: { major: bool(grid.major, true), minor: bool(grid.minor, true) },
     legend: pick(r.legend, LEGENDS, 'right'),
@@ -884,6 +961,8 @@ function normalize(raw) {
              photocopySafe: bool(style.photocopySafe, false), largePrint: bool(style.largePrint, false) },
     scale: { lock: bool(sc.lock, false), mm: clamp(numOrNull(sc.mm) ?? 10, 1, 50) },
     annotations, regions, fit, functions, shapes, marks,
+    box: { whiskers: pick(bx.whiskers, BOX_WHISKERS, 'iqr') },
+    errorBars: { mode: pick(eb.mode, ERR_MODES, 'none'), value: clamp(numOrNull(eb.value) ?? 1, 0, 1e9) },
     hist: { binWidth: bw > 0 ? bw : null, start: numOrNull(hs.start) }, pie: { labels: pick(r.pie && r.pie.labels, PIE_LABELS, 'percent') },
     misleading: { truncate: bool(ml.truncate, false), unevenX: bool(ml.unevenX, false), unevenY: bool(ml.unevenY, false), shape: pick(ml.shape, SHAPES, 'none') }
   };
@@ -966,7 +1045,7 @@ const hasLabelCol = spec => LABELLED_TYPES.includes(spec.type);
 /* Table columns in display order: [Label] X Y1 Y2 … */
 function tableCols(spec) {
   const ys = spec.type === 'histogram' ? [] : spec.type === 'pie' ? [0] : spec.series.map((_, i) => i);   // a histogram is one column of values; a pie is names + amounts
-  return [...(hasLabelCol(spec) ? [{ k: 'label' }] : []), { k: 'x' }, ...ys.map(i => ({ k: 'y', i }))];
+  return [...(hasLabelCol(spec) ? [{ k: 'label' }] : []), ...(spec.type === 'boxplot' ? [] : [{ k: 'x' }]), ...ys.map(i => ({ k: 'y', i }))];   // a box plot is just one column of values per box
 }
 function splitUnit(h) {
   const m = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(String(h).trim());
@@ -1006,6 +1085,17 @@ function importGrid(spec, grid) {
   const width = Math.max(...grid.map(r => r.length));
   grid = grid.map(r => { r = r.slice(); while (r.length < width) r.push(''); return r; });
   if (spec.type === 'numberline') return false;                       // number lines take marks, not a table
+  if (spec.type === 'boxplot') {                                      // every column is a box; the first row may name them
+    const cols = []; for (let c = 0; c < width && cols.length < MAX_SERIES; c++) cols.push(c);
+    const head = grid[0].some(t => t.trim() !== '' && Number.isNaN(parseNum(t)));   // a non-numeric cell in the first row means it names the boxes
+    const body = (head ? grid.slice(1) : grid).slice(0, MAX_ROWS), old = spec.series;
+    spec.series = cols.map((c, k) => Object.assign(newSeries(k), old[k] ? { marker: old[k].marker, dash: old[k].dash, hatch: old[k].hatch, draw: old[k].draw, axis: old[k].axis, name: old[k].name } : {}, head && splitUnit(grid[0][c]).name ? { name: splitUnit(grid[0][c]).name } : {}));
+    if (head) { const u = cols.map(c => splitUnit(grid[0][c]).unit).find(Boolean); if (u) spec.y.unit = u; }
+    spec.rows = body.map(row => ({ x: null, ys: cols.map(c => cellFromText(row[c], false)), label: '' }));
+    if (!spec.rows.length) spec.rows.push(emptyRow(spec));
+    spec.hidden = spec.hidden.filter(t => !/^(pt|series):/.test(t));
+    return true;
+  }
   const asText = isCategorical(spec);
   const isNum = t => !Number.isNaN(parseNum(t));
   const labelCol = hasLabelCol(spec) && width >= 3 && grid.every(r => r[0].trim() !== '' && !isNum(r[0]));
@@ -1019,7 +1109,7 @@ function importGrid(spec, grid) {
 
   const old = spec.series;
   const series = yCols.map((c, k) => {
-    const s = Object.assign(newSeries(k), old[k] ? { marker: old[k].marker, dash: old[k].dash, hatch: old[k].hatch } : {});
+    const s = Object.assign(newSeries(k), old[k] ? { marker: old[k].marker, dash: old[k].dash, hatch: old[k].hatch, draw: old[k].draw, axis: old[k].axis } : {});
     if (header) s.name = splitUnit(grid[0][c]).name || s.name; else if (old[k]) s.name = old[k].name;
     return s;
   });
@@ -1040,6 +1130,40 @@ function importGrid(spec, grid) {
   if (!spec.rows.length) spec.rows.push(emptyRow(spec));
   spec.hidden = spec.hidden.filter(t => !/^(pt|series):/.test(t));    // old indices no longer mean anything
   return true;
+}
+
+/* ==========================================================================
+   Alternate test versions: nudge every value by a few gridlines, deterministically
+   ========================================================================== */
+function mulberry32(a) {
+  return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+/* Returns a new spec whose values sit on gridlines within ±steps of where they were (same seed, same variant), or null when the graph type has no gridded values. */
+function makeVariant(spec, seed, steps) {
+  if (!GRID_TYPES.includes(spec.type) && spec.type !== 'bar') return null;
+  const A = analyse(spec);
+  if (A.ay.log || (A.ax && A.ax.log)) return null;                  // even nudges make no sense on a log axis
+  const v = normalize(JSON.parse(JSON.stringify(spec))), rnd = mulberry32(seed | 0);
+  const k = Math.max(1, Math.round(steps));
+  for (const a of ['x', 'y', 'y2']) {                               // pin the axes so every version has the same grid
+    const r = { x: A.ax, y: A.ay, y2: A.ay2 }[a];
+    if (!r) continue;
+    if (v[a].min === null) v[a].min = r.lo; if (v[a].max === null) v[a].max = r.hi; if (v[a].step === null) v[a].step = r.step;
+  }
+  let changed = 0, first = null;
+  v.rows.forEach(row => row.ys.forEach((yv, j) => {
+    const y = parseNum(yv);
+    if (Number.isNaN(y)) return;
+    const d = Math.round(rnd() * 2 * k - k);
+    const axs = axisOfSeries(A, spec, j), g = gridStepFor(axs, spec);
+    const onLine = axs.lo + Math.round((y - axs.lo) / g) * g;               // snap to the nearest gridline first, then nudge by whole gridlines
+    let ny = clean(clamp(onLine + d * g, axs.lo, axs.hi));
+    if (first === null) first = [row, j, axs, g];
+    if (ny !== y) changed++;
+    row.ys[j] = ny;
+  }));
+  if (!changed && first) { const y = parseNum(first[0].ys[first[1]]); const [, , fa, fg] = first, base = clean(fa.lo + Math.round((y - fa.lo) / fg) * fg); first[0].ys[first[1]] = clean(base + fg <= fa.hi && base + fg !== y ? base + fg : base - fg); }   // never return an identical graph
+  return normalize(v);
 }
 
 /* ==========================================================================
@@ -1075,6 +1199,16 @@ const PRESETS = [
     const s = blankSpec(); s.type = 'pie'; s.x.label = 'Favourite fruit'; s.title = '';
     s.rows = [['Apples', 40], ['Bananas', 25], ['Grapes', 20], ['Oranges', 15]].map(([x, v]) => ({ x, ys: [v], label: '' }));
     return normalize(s); } },
+  { id: 'boxplot', name: 'Box plot', note: 'Two classes side by side; whiskers stop at 1.5 × IQR', build() {
+    const s = blankSpec(); s.type = 'boxplot'; s.y.label = 'Test score'; s.y.unit = '%';
+    const A = [55, 62, 64, 68, 70, 71, 73, 75, 78, 80, 84, 95], B = [48, 58, 60, 61, 63, 65, 66, 70, 72, 74, 75, 100, 30];
+    s.series = [Object.assign(newSeries(0), { name: 'Class A' }), Object.assign(newSeries(1), { name: 'Class B' })];
+    s.rows = B.map((b, i) => ({ x: null, ys: [i < A.length ? A[i] : null, b], label: '' })); return normalize(s); } },
+  { id: 'climatograph', name: 'Climate graph (bars + line)', note: 'Rainfall as bars on the left axis, temperature as a line on the right', build() {
+    const s = blankSpec(); s.type = 'bar'; s.title = ''; s.y.label = 'Rainfall'; s.y.unit = 'mm'; s.y2.label = 'Temperature'; s.y2.unit = '°C';
+    s.series = [Object.assign(newSeries(0), { name: 'Rainfall' }), Object.assign(newSeries(1), { name: 'Temperature', draw: 'line', axis: 'right', marker: 'circle', dash: 'solid' })];
+    const M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], R = [65, 50, 55, 45, 50, 40, 35, 45, 50, 65, 70, 70], Tm = [4, 5, 8, 11, 15, 18, 20, 20, 17, 12, 8, 5];
+    s.rows = M.map((m, i) => ({ x: m, ys: [R[i], Tm[i]], label: '' })); return normalize(s); } },
   { id: 'bar', name: 'Bar graph', note: 'Categories along the bottom', build() {
     const s = blankSpec(); s.type = 'bar'; s.x.label = 'Category'; s.y.label = 'Amount'; return normalize(s); } }
 ];
@@ -1084,22 +1218,23 @@ const PRESETS = [
    ========================================================================== */
 function analyse(spec) {
   const { w: W, h: H } = sizeMM(spec.size);
-  const T = spec.type, isBar = T === 'bar';
+  const T = spec.type, isBar = T === 'bar' || T === 'boxplot';           // a box plot shares the bar graph's category axis
   const pts = spec.series.map(() => []);       // x–y types: [{r,x,y,label}]
   const cats = [];                             // bar / pie: [{r,name,vals[]}]
   spec.rows.forEach((row, r) => {
-    if (isBlank(row.x) && row.ys.every(isBlank)) return;
+    if (T === 'boxplot' || (isBlank(row.x) && row.ys.every(isBlank))) return;
     if (isBar || T === 'pie') {
       cats.push({ r, name: isBlank(row.x) ? '' : String(row.x),
-                  vals: row.ys.map(v => { const n = parseNum(v); return Number.isNaN(n) ? null : n; }) });
+                  vals: row.ys.map(v => { const n = parseNum(v); return Number.isNaN(n) || (isBar && logOk(spec, 'y') && n <= 0) ? null : n; }) });
     } else if (T !== 'numberline' && T !== 'histogram') {
       const x = parseNum(row.x);
       row.ys.forEach((yv, j) => {
         const y = parseNum(yv);
-        if (!Number.isNaN(x) && !Number.isNaN(y)) pts[j].push({ r, x, y, label: row.label });
+        if (!Number.isNaN(x) && !Number.isNaN(y) && !(logOk(spec, 'x') && x <= 0) && !(logOk(spec, 'y') && y <= 0)) pts[j].push({ r, x, y, label: row.label });   // zero and negative values have no place on a log axis
       });
     }
   });
+  if (T === 'boxplot') spec.series.forEach((sr, j) => cats.push({ r: j, name: sr.name || 'Series ' + (j + 1), vals: spec.rows.map(row => parseNum(row.ys[j])).filter(Number.isFinite) }));
   if (T === 'line') pts.forEach(p => p.sort((a, b) => a.x - b.x));   // stable: keeps table order for ties
   const ext = arr => arr.length ? { min: Math.min(...arr), max: Math.max(...arr) } : null;
   const dummy = () => ({ lo: 0, hi: 1, step: 1, minor: 1, fmt: {} });   // pie and number line have no y axis
@@ -1112,8 +1247,10 @@ function analyse(spec) {
   if (T === 'histogram') return analyseHist(spec, W, H, pts, cats, ty);
   const all = pts.flat();
   const shapePts = GRID_TYPES.includes(T) ? spec.shapes.flatMap(h => h.points) : [];      // shapes count towards the automatic range
-  const xsAll = [...all.map(p => p.x), ...shapePts.map(q => q.x)], ysAll = [...all.map(p => p.y), ...shapePts.map(q => q.y)];
-  const extY = isBar ? ext(cats.flatMap(c => c.vals.filter(v => v !== null))) : ext(ysAll);
+  const xsAll = [...all.map(p => p.x), ...shapePts.map(q => q.x)], ysAll = [...withErr(spec, all.map(p => p.y)), ...shapePts.map(q => q.y)];    // error bars count towards the range
+  const dual = T === 'bar' && spec.series.some(sr => sr.axis === 'right');              // combo graph: some series ride a second y axis
+  const valsOn = side => cats.flatMap(c => c.vals.filter((v, j) => v !== null && (!dual || (spec.series[j].axis === 'right') === (side === 'right'))));
+  const extY = isBar ? ext(withErr(spec, valsOn('left'))) : ext(ysAll);
   const mode = T === 'coordinate' ? (spec.quadrants === 1 ? 'one' : 'four') : null;
   let ax, ay;
   if (mode) {
@@ -1126,11 +1263,13 @@ function analyse(spec) {
     ay = resolveAxis(Object.assign({}, spec.y, { step: spec.y.step || step }), shared, { target: 10, mode });
   } else {
     const tx = clamp(Math.round((W - 30) / 12), 4, 40);   // ~1 major tick per 12 mm
-    ax = isBar ? null : resolveAxis(spec.x, ext(xsAll), { target: tx });
+    const lx = logOk(spec, 'x'), ly = logOk(spec, 'y'), pos = (arr, on) => on ? arr.filter(v => v > 0) : arr;
+    ax = isBar ? null : resolveAxis(spec.x, ext(pos(xsAll, lx)), { target: tx, log: lx });
     const trunc = spec.misleading.truncate;
-    ay = resolveAxis(spec.y, extY, { target: ty, forceZero: isBar && !trunc, truncate: trunc });
+    ay = resolveAxis(spec.y, ly ? ext(pos(isBar ? withErr(spec, cats.flatMap(c => c.vals.filter(v => v !== null))) : ysAll, true)) : extY, { target: ty, forceZero: T === 'bar' && !trunc, truncate: trunc, log: ly });
   }
-  return { W, H, isBar, pts, cats, ax, ay, mode };
+  const ay2 = dual ? resolveAxis(spec.y2, ext(withErr(spec, valsOn('right'))), { target: ty, forceZero: spec.series.some(sr => sr.axis === 'right' && sr.draw === 'bar') }) : null;
+  return { W, H, isBar, pts, cats, ax, ay, ay2, mode, box: T === 'boxplot' ? cats.map(c => boxStats(c.vals, spec.box.whiskers)) : null };
 }
 /* Histogram: bins are [start + k*w, start + (k+1)*w); the axis follows the bins. */
 function analyseHist(spec, W, H, pts, cats, ty) {
@@ -1154,15 +1293,21 @@ function analyseHist(spec, W, H, pts, cats, ty) {
   if (ay.step < 1 && spec.y.step === null) ay = resolveAxis(Object.assign({}, spec.y, { step: 1 }), yExt, { target: ty, forceZero: true });   // counts are whole numbers
   return { W, H, isBar: false, pts, cats, ax, ay, mode: null, hist: { edges, counts, w } };
 }
-const computeAxes = spec => { const a = analyse(spec); return { x: a.ax, y: a.ay }; };
+const computeAxes = spec => { const a = analyse(spec); return { x: a.ax, y: a.ay, y2: a.ay2 || null }; };
+const axisOfSeries = (A, spec, j) => A.ay2 && spec.series[j] && spec.series[j].axis === 'right' ? A.ay2 : A.ay;
+
+/* Error bars: ± a fixed amount, or ± a percentage of each value. */
+const errAmount = (spec, y) => spec.errorBars.mode === 'fixed' ? spec.errorBars.value : spec.errorBars.mode === 'percent' ? Math.abs(y) * spec.errorBars.value / 100 : 0;
+const withErr = (spec, ys) => spec.errorBars.mode === 'none' ? ys : ys.flatMap(y => { const e = errAmount(spec, y); return [y - e, y + e]; });
 
 /* Readability: does each plotted value sit exactly on a gridline that is actually drawn? */
 const gridStepFor = (ax, spec) => spec.grid.minor && ax.minor > 1 ? ax.step / ax.minor : ax.step;
-const onGrid = (v, ax, spec) => { const k = (v - ax.lo) / gridStepFor(ax, spec); return Math.abs(k - Math.round(k)) < 1e-6; };
+const onGrid = (v, ax, spec) => { if (ax.log) return true;     // log axes have no even grid to sit on
+   const k = (v - ax.lo) / gridStepFor(ax, spec); return Math.abs(k - Math.round(k)) < 1e-6; };
 function readability(spec) {
   if (!GRID_TYPES.includes(spec.type) && spec.type !== 'bar') return [];
   const A = analyse(spec), issues = [];
-  if (A.isBar) A.cats.forEach(c => c.vals.forEach((v, j) => { if (v !== null && !onGrid(v, A.ay, spec)) issues.push({ j, r: c.r, axis: 'y', value: v }); }));
+  if (A.isBar) A.cats.forEach(c => c.vals.forEach((v, j) => { if (v !== null && !onGrid(v, axisOfSeries(A, spec, j), spec)) issues.push({ j, r: c.r, axis: 'y', value: v }); }));
   else A.pts.forEach((p, j) => p.forEach(pt => {
     if (!onGrid(pt.x, A.ax, spec)) issues.push({ j, r: pt.r, axis: 'x', value: pt.x });
     if (!onGrid(pt.y, A.ay, spec)) issues.push({ j, r: pt.r, axis: 'y', value: pt.y });
@@ -1177,7 +1322,7 @@ function snapValues(spec) {
   let n = 0;
   spec.rows.forEach(row => {
     if (!A.isBar) { const x = parseNum(row.x); if (!Number.isNaN(x) && !onGrid(x, A.ax, spec)) { row.x = snap(x, A.ax); n++; } }
-    row.ys = row.ys.map(yv => { const y = parseNum(yv); if (Number.isNaN(y) || onGrid(y, A.ay, spec)) return yv; n++; return snap(y, A.ay); });
+    row.ys = row.ys.map((yv, j) => { const y = parseNum(yv), axs = axisOfSeries(A, spec, j); if (Number.isNaN(y) || onGrid(y, axs, spec)) return yv; n++; return snap(y, axs); });
   });
   return n;
 }
@@ -1397,13 +1542,15 @@ function renderSVG(spec, o) {
   const { S, FS, FT, FH, PAD, TICK, lw, isQ, hid, txt, axisHas, axisText } = K;
   const uX = spec.misleading.unevenX, uY = spec.misleading.unevenY;
   const ghost = new Set(!isQ && o.ghost ? spec.hidden.filter(t => /^(pt|series):/.test(t)) : []);
-  const colour = spec.style.colour, nS = spec.type === 'histogram' ? 1 : spec.series.length;
+  const colour = spec.style.colour, nS = spec.type === 'histogram' || spec.type === 'boxplot' ? 1 : spec.series.length;
   const out = [];
 
   /* ----- tick labels ----- */
   const xT = isBar ? [] : ticks(ax), yT = ticks(ay);
   const xL = xT.map(v => fmtTick(v, ax)), yL = yT.map(v => fmtTick(v, ay));
   const yLabW = Math.max(0, ...yL.map(s => textW(s, FT)));
+  const ay2 = A.ay2, y2T = ay2 ? ticks(ay2) : [], y2L = y2T.map(v => fmtTick(v, ay2)), y2LabW = Math.max(0, ...y2L.map(t => textW(t, FT)));
+  const y2Sp = ay2 ? y2LabW + TICK + 1.6 + (axisHas(spec.y2) ? FS * 1.35 + 1.4 : 0) : 0;   // room for the right-hand axis of a combo graph
 
   /* ----- axis placement ----- */
   const origin = spec.axes === 'origin';
@@ -1429,7 +1576,7 @@ function renderSVG(spec, o) {
   const halfFirst = xL.length ? textW(xL[0], FT) / 2 : 0, halfLast = xL.length ? textW(xL[xL.length - 1], FT) / 2 : 0;
   const yTickSp = yAtLeft ? yLabW + TICK + 1.4 : halfFirst + .8;       // interior axis: just keep the title clear of the corner label
   const L = PAD + yTitleSp + yTickSp;
-  const R = PAD + legR + halfLast;
+  const R = PAD + legR + halfLast + y2Sp;
   const T = PAD + titleSp + legT + FT * .6;
   let catLines = [], bandW = 0;
   if (isBar) {
@@ -1455,9 +1602,11 @@ function renderSVG(spec, o) {
   }
   if (isBar) bandW = (x1 - x0) / Math.max(1, cats.length);
   const warp = (t, on) => on && t > 0 ? Math.pow(t, .55) : t;      // uneven intervals: squeeze the high end
-  const sx = v => x0 + warp((v - ax.lo) / (ax.hi - ax.lo), uX) * (x1 - x0);
-  const sy = v => y1 - warp((v - ay.lo) / (ay.hi - ay.lo), uY) * (y1 - y0);
-  if (o.geom) Object.assign(o.geom, { x0, x1, y0, y1, ax, ay, uX, uY, isBar, W, H });      // lets the editor turn a mouse position back into graph values
+  const sx = v => x0 + warp((axT(ax, v) - axT(ax, ax.lo)) / (axT(ax, ax.hi) - axT(ax, ax.lo)), uX && !ax.log) * (x1 - x0);
+  const sy = v => y1 - warp((axT(ay, v) - axT(ay, ay.lo)) / (axT(ay, ay.hi) - axT(ay, ay.lo)), uY && !ay.log) * (y1 - y0);
+  if (o.geom) Object.assign(o.geom, { x0, x1, y0, y1, ax, ay, ay2, uX, uY, isBar, W, H });      // lets the editor turn a mouse position back into graph values
+  const sy2 = ay2 ? v => y1 - (v - ay2.lo) / (ay2.hi - ay2.lo) * (y1 - y0) : null;
+  const syFor = j => sy2 && spec.series[j].axis === 'right' ? sy2 : sy;
   const axX = v => isBar ? x0 + (v - .5) * bandW : sx(v);           // annotations/regions: bar graphs count categories from 1
   const xAx = isBar ? x0 : sx(yAxisV), yAx = sy(xAxisV);
 
@@ -1465,6 +1614,14 @@ function renderSVG(spec, o) {
   /* ----- gridlines ----- */
   const minorPath = [], majorPath = [];
   const gridLines = (axis, isX) => {
+    if (axis.log) {                                                  // decades are major lines, 2-9 x 10^k are minor
+      for (let k = Math.floor(Math.log10(axis.lo)); k <= Math.ceil(Math.log10(axis.hi)); k++) for (let m = 1; m <= 9; m++) {
+        const v = clean(m * Math.pow(10, k)), major = m === 1;
+        if (v < axis.lo * (1 - 1e-9) || v > axis.hi * (1 + 1e-9) || (major ? !spec.grid.major : !spec.grid.minor)) continue;
+        (major ? majorPath : minorPath).push(isX ? `M${f3(sx(v))},${f3(y0)}V${f3(y1)}` : `M${f3(x0)},${f3(sy(v))}H${f3(x1)}`);
+      }
+      return;
+    }
     const m = axis.minor, n = Math.round((axis.hi - axis.lo) / (axis.step / m) + 1e-9);
     for (let i = 0; i <= n; i++) {
       const v = clean(axis.lo + i * axis.step / m), major = i % m === 0;
@@ -1489,8 +1646,8 @@ function renderSVG(spec, o) {
     out.push(`<rect x="${f3(w[0])}" y="${f3(w[1])}" width="${f3(w[2])}" height="${f3(w[3])}" fill="#fff"/><polyline points="${z.join(' ')}" fill="none" stroke="#000" stroke-width="${lw(.5)}" stroke-linejoin="round"/>`);
   };
   if (!spec.misleading.truncate) {
-    if (!isBar && spec.type !== 'histogram' && spec.x.breakMark && ax.lo > 0 && yAtLeft) brk(x0 + 5 * S, yAx, true);
-    if (spec.y.breakMark && ay.lo > 0 && xAtBottom) brk(xAx, y1 - 5 * S, false);
+    if (!isBar && spec.type !== 'histogram' && !ax.log && spec.x.breakMark && ax.lo > 0 && yAtLeft) brk(x0 + 5 * S, yAx, true);
+    if (spec.y.breakMark && !ay.log && ay.lo > 0 && xAtBottom) brk(xAx, y1 - 5 * S, false);
   }
   if (origin && !isBar) {                                            // arrowheads on an axes-through-origin plane
     out.push(`<path d="M${f3(x1 + .6)},${f3(yAx)}L${f3(x1 - 1.6)},${f3(yAx - .8)}V${f3(yAx + .8)}Z M${f3(xAx)},${f3(y0 - .6)}L${f3(xAx - .8)},${f3(y0 + 1.6)}H${f3(xAx + .8)}Z" fill="#000"/>`);
@@ -1507,7 +1664,7 @@ function renderSVG(spec, o) {
   if (!hid.has('regions')) spec.regions.forEach((g, i) => {
     if (hid.has('region:' + i)) return;
     const a = clamp(Math.min(axX(g.from), axX(g.to)), x0, x1), b = clamp(Math.max(axX(g.from), axX(g.to)), x0, x1);
-    if (b - a < .2) return;
+    if (!(b - a >= .2)) return;                                     // also skips NaN (a log axis has no zero)
     let fill = 'none';
     if (g.shade === 'light') fill = 'rgba(0,0,0,.09)';
     else if (g.shade === 'hatch') { fill = `url(#${o.id}-rg)`; }
@@ -1525,6 +1682,10 @@ function renderSVG(spec, o) {
   /* ----- data (clipped to the plot) ----- */
   const clipId = o.id + '-clip';
   const data = [], labels = [];
+  const errBar = (cx, v, e, f) => {                                 // a vertical bar from v-e to v+e with small caps
+    f = f || sy; const a = f(v - e), b = f(v + e), c = 1.3 * S;
+    return `<path d="M${f3(cx)},${f3(a)}V${f3(b)}M${f3(cx - c)},${f3(a)}H${f3(cx + c)}M${f3(cx - c)},${f3(b)}H${f3(cx + c)}" stroke="#000" stroke-width="${lw(.4)}" fill="none"/>`;
+  };
   const flagRing = (cx, cy) => `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="${f3(2.8 * S)}" fill="none" stroke="#c43d35" stroke-width=".4" stroke-dasharray="1 .7"/>`;   // editor-only: value between gridlines
   const hitAttr = (j, r) => o.hits ? ` data-pt="${j}:${r}" style="cursor:pointer"` : '';
   const hit = (cx, cy) => o.hits ? `<circle cx="${f3(cx)}" cy="${f3(cy)}" r="2.6" fill="transparent"/>` : '';
@@ -1532,15 +1693,42 @@ function renderSVG(spec, o) {
     if (hid.has('series:' + j) || (spec.type === 'histogram' && j > 0)) return;
     const col = colour ? PALETTE[j % PALETTE.length] : '#000';
     const parts = [];
-    if (isBar) {
-      const groupW = bandW * .78, barW = groupW / nS, base = clamp(0, ay.lo, ay.hi);
+    if (spec.type === 'boxplot') {
+      const b = A.box[j];
+      if (!b) return;
+      const cx = x0 + (j + .5) * bandW, w = Math.min(bandW * .5, 24 * S), cap = w * .45;
+      const hf = colour ? { fill: col, def: '' } : hatchFill(`${o.id}-h${j}`, st.hatch);
+      if (hf.def) defs.push(hf.def);
+      parts.push(`<path d="M${f3(cx)},${f3(sy(b.q3))}V${f3(sy(b.whiskerHi))}M${f3(cx - cap)},${f3(sy(b.whiskerHi))}H${f3(cx + cap)}M${f3(cx)},${f3(sy(b.q1))}V${f3(sy(b.whiskerLo))}M${f3(cx - cap)},${f3(sy(b.whiskerLo))}H${f3(cx + cap)}" stroke="#000" stroke-width="${lw(.5)}" fill="none"/>`,
+        `<rect x="${f3(cx - w / 2)}" y="${f3(sy(b.q3))}" width="${f3(w)}" height="${f3(Math.max(0, sy(b.q1) - sy(b.q3)))}" fill="${hf.fill}"${colour ? ' fill-opacity=".35"' : ''} stroke="#000" stroke-width="${lw(.5)}"/>`,
+        `<path d="M${f3(cx - w / 2)},${f3(sy(b.median))}H${f3(cx + w / 2)}" stroke="#000" stroke-width="${lw(1.1)}" fill="none"/>`);
+      b.outliers.forEach(v => parts.push(markerSVG('ring', cx, sy(v), 1.35 * S, '#000', S)));
+    } else if (isBar && st.draw === 'line') {                       // combo graph: this series is a line through the category centres
+      const f = syFor(j), r = 1.35 * S, showMk = spec.style.lineMarkers;
+      let run = [];
+      const flush = () => { if (run.length > 1) parts.push(`<polyline points="${run.join(' ')}" fill="none" stroke="${col}" stroke-width="${lw(.5)}" stroke-linejoin="round"${DASHES[st.dash] ? ` stroke-dasharray="${DASHES[st.dash]}"` : ''}/>`); run = []; };
+      cats.forEach((c, i) => { const v = c.vals[j]; if (v === null) return; if (hid.has(`pt:${j}:${c.r}`)) flush(); else run.push(`${f3(x0 + (i + .5) * bandW)},${f3(f(v))}`); });
+      flush();
+      cats.forEach((c, i) => {
+        const v = c.vals[j], tok = `pt:${j}:${c.r}`;
+        if (v === null || hid.has(tok)) return;
+        const cx = x0 + (i + .5) * bandW, cy = f(v);
+        parts.push(`<g${ghost.has(tok) ? ' opacity=".3"' : ''}${hitAttr(j, c.r)}>${showMk ? markerSVG(st.marker, cx, cy, r, col, S) : ''}${hit(cx, cy)}</g>`);
+        if (o.flags && o.flags.has(j + ':' + c.r)) parts.push(flagRing(cx, cy));
+        if (!hid.has('errorBars')) { const e = errAmount(spec, v); if (e > 0) parts.push(errBar(cx, v, e, f)); }
+      });
+    } else if (isBar) {
+      const barIdx = spec.series.map((q, k) => q.draw === 'line' ? -1 : k).filter(k => k >= 0), nB = barIdx.length, slot = barIdx.indexOf(j);   // bars share each category; lines don't take a slot
+      const f = syFor(j), axb = sy2 && st.axis === 'right' ? ay2 : ay;
+      const groupW = bandW * .78, barW = groupW / nB, base = clamp(0, axb.lo, axb.hi);
       const hf = colour ? { fill: col, def: '' } : hatchFill(`${o.id}-h${j}`, st.hatch);
       if (hf.def) defs.push(hf.def);
       cats.forEach((c, i) => {
         const v = c.vals[j], tok = `pt:${j}:${c.r}`;
         if (v === null || (hid.has(tok))) return;
-        const bx = x0 + i * bandW + (bandW - groupW) / 2 + j * barW;
-        const ya = sy(base), yb = sy(v);
+        if (!hid.has('errorBars')) { const e = errAmount(spec, v); if (e > 0) parts.push(errBar(x0 + i * bandW + (bandW - groupW) / 2 + (slot + .5) * barW, v, e, f)); }
+        const bx = x0 + i * bandW + (bandW - groupW) / 2 + slot * barW;
+        const ya = f(base), yb = f(v);
         parts.push(`<rect x="${f3(bx)}" y="${f3(Math.min(ya, yb))}" width="${f3(barW)}" height="${f3(Math.abs(ya - yb))}" fill="${hf.fill}" stroke="#000" stroke-width="${lw(.3)}"${ghost.has(tok) ? ' opacity=".3"' : ''}${hitAttr(j, c.r)}/>`);
         if (o.flags && o.flags.has(j + ':' + c.r)) parts.push(flagRing(bx + barW / 2, Math.min(ya, yb)));
       });
@@ -1568,6 +1756,7 @@ function renderSVG(spec, o) {
         const cx = sx(p.x), cy = sy(p.y), gh = ghost.has(tok) ? ' opacity=".3"' : '';
         if (showMk || o.hits) parts.push(`<g${gh}${hitAttr(j, p.r)}>${showMk ? markerSVG(st.marker, cx, cy, r, col, S) : ''}${hit(cx, cy)}</g>`);
         if (o.flags && o.flags.has(j + ':' + p.r)) parts.push(flagRing(cx, cy));
+        if (!hid.has('errorBars')) { const e = errAmount(spec, p.y); if (e > 0) parts.push(errBar(cx, p.y, e)); }
         if (p.label && !hid.has('pointLabels') && LABELLED_TYPES.includes(spec.type) && p.x >= ax.lo && p.x <= ax.hi && p.y >= ay.lo && p.y <= ay.hi) {
           const left = cx > x1 - 9;
           labels.push(`<g${gh}>${txt(left ? cx - r - .9 : cx + r + .9, cy - r - .2, p.label, { anchor: left ? 'end' : 'start', bold: true })}</g>`);
@@ -1586,15 +1775,20 @@ function renderSVG(spec, o) {
     const plate = (x, y, w, anchor) => `<rect x="${f3(anchor === 'end' ? x - w : x - w / 2)}" y="${f3(y - FS * .85)}" width="${f3(w)}" height="${f3(FS * 1.3)}" fill="#fff"/>`;
     const onCurve = fn => {                                           // right-most spot where the curve is comfortably inside the plot (for its equation label)
       for (let k = 0; k < 70; k++) {
-        const x = ax.hi - (ax.hi - ax.lo) * (.03 + k * .013), y = fn(x);
-        if (Number.isFinite(y) && y >= ay.lo + (ay.hi - ay.lo) * .08 && y <= ay.hi - (ay.hi - ay.lo) * .08 && (Math.abs(sy(y) - 2.6 * S - yAx) > 5.5 * S || yAx <= y0 + 1 || yAx >= y1 - 1)) return { x, y };   // and the label clear of the x-axis numbers
+        const x = axInv(ax, axT(ax, ax.hi) - (axT(ax, ax.hi) - axT(ax, ax.lo)) * (.03 + k * .013)), y = fn(x), yt = axT(ay, y);
+        if (Number.isFinite(y) && yt >= axT(ay, ay.lo) + (axT(ay, ay.hi) - axT(ay, ay.lo)) * .08 && yt <= axT(ay, ay.hi) - (axT(ay, ay.hi) - axT(ay, ay.lo)) * .08 && (Math.abs(sy(y) - 2.6 * S - yAx) > 5.5 * S || yAx <= y0 + 1 || yAx >= y1 - 1)) return { x, y };   // and the label clear of the x-axis numbers
       }
       return null;
     };
-    const yLo = ay.lo - (ay.hi - ay.lo) * 5, yHi = ay.hi + (ay.hi - ay.lo) * 5;
+    const yLo = ay.log ? ay.lo / 1e3 : ay.lo - (ay.hi - ay.lo) * 5, yHi = ay.log ? ay.hi * 1e3 : ay.hi + (ay.hi - ay.lo) * 5;
+    const yFinite = y => Number.isFinite(y) && (!ay.log || y > 0);
     const fit = hid.has('fit') ? null : fitLine(spec, A);
     if (fit) {
-      ov.push(`<line x1="${f3(sx(ax.lo))}" y1="${f3(sy(fit.m * ax.lo + fit.c))}" x2="${f3(sx(ax.hi))}" y2="${f3(sy(fit.m * ax.hi + fit.c))}" stroke="#000" stroke-width="${lw(.5)}"${dashAttr(spec.fit.dash)}/>`);
+      if (ax.log || ay.log) {                                         // a straight line in x and y bends on a log axis, so draw it as a curve
+        const pl = [];
+        for (let k = 0; k <= 60; k++) { const x = axInv(ax, axT(ax, ax.lo) + (axT(ax, ax.hi) - axT(ax, ax.lo)) * k / 60), y = fit.m * x + fit.c; if (yFinite(y)) pl.push(`${f3(sx(x))},${f3(sy(clamp(y, yLo, yHi)))}`); }
+        if (pl.length > 1) ov.push(`<polyline points="${pl.join(' ')}" fill="none" stroke="#000" stroke-width="${lw(.5)}"${dashAttr(spec.fit.dash)}/>`);
+      } else ov.push(`<line x1="${f3(sx(ax.lo))}" y1="${f3(sy(fit.m * ax.lo + fit.c))}" x2="${f3(sx(ax.hi))}" y2="${f3(sy(fit.m * ax.hi + fit.c))}" stroke="#000" stroke-width="${lw(.5)}"${dashAttr(spec.fit.dash)}/>`);
       if (spec.fit.equation) {
         const eq = equationText(fit.m, fit.c), w = textW(eq, FS) + 1.6, at = onCurve(x => fit.m * x + fit.c);
         if (at) ovLabels.push(plate(sx(at.x), sy(at.y) - 2.6 * S, w, 'end') + txt(sx(at.x) - .8, sy(at.y) - 2.6 * S + FS * .3, eq, { anchor: 'end' }));
@@ -1606,9 +1800,9 @@ function renderSVG(spec, o) {
       if (!c.fn) return;
       const N = 240, runs = []; let run = [], prev = null;
       for (let k = 0; k <= N; k++) {
-        const x = ax.lo + (ax.hi - ax.lo) * k / N, y = c.fn(x);
-        const bad = !Number.isFinite(y) || (prev !== null && Math.abs(y - prev) > (ay.hi - ay.lo) * 3);   // gaps and asymptotes break the curve
-        if (bad) { if (run.length > 1) runs.push(run); run = []; prev = Number.isFinite(y) ? y : null; if (!Number.isFinite(y)) continue; }
+        const x = axInv(ax, axT(ax, ax.lo) + (axT(ax, ax.hi) - axT(ax, ax.lo)) * k / N), y = c.fn(x);
+        const bad = !yFinite(y) || (prev !== null && Math.abs(axT(ay, y) - axT(ay, prev)) > axSpan(ay) * 3);   // gaps and asymptotes break the curve
+        if (bad) { if (run.length > 1) runs.push(run); run = []; prev = yFinite(y) ? y : null; if (!yFinite(y)) continue; }
         run.push(`${f3(sx(x))},${f3(sy(clamp(y, yLo, yHi)))}`); prev = y;
       }
       if (run.length > 1) runs.push(run);
@@ -1623,7 +1817,9 @@ function renderSVG(spec, o) {
     });
     spec.shapes.forEach((sh, i) => {
       if (hid.has('shape:' + i) || !sh.points.length) return;
-      const sp = sh.points.map(q => [sx(q.x), sy(q.y)]), pl = sp.map(q => f3(q[0]) + ',' + f3(q[1])).join(' ');
+      const sp = sh.points.map(q => [sx(q.x), sy(q.y)]);
+      if (!sp.every(q => Number.isFinite(q[0]) && Number.isFinite(q[1]))) return;      // a vertex off a log axis: skip the shape
+      const pl = sp.map(q => f3(q[0]) + ',' + f3(q[1])).join(' ');
       let fill = 'none';
       if (sh.fill === 'light') fill = 'rgba(0,0,0,.09)'; else if (sh.fill === 'hatch') { ensureRg(); fill = `url(#${o.id}-rg)`; }
       if (sp.length > 1) ov.push(sh.kind === 'polygon' && sp.length > 2
@@ -1655,7 +1851,7 @@ function renderSVG(spec, o) {
     if (isBar) {
       cats.forEach((c, i) => catLines[i].forEach((ln, k) => lab.push(txt(x0 + (i + .5) * bandW, y1 + TICK + 1.3 + FT * .9 + k * FT * 1.15, ln, { fs: FT }))));
     } else {
-      const spacing = (x1 - x0) * ax.step / (ax.hi - ax.lo), kEvery = Math.max(1, Math.ceil((Math.max(...xL.map(s => textW(s, FT))) + 1.6) / spacing));
+      const spacing = (x1 - x0) * axStep(ax) / axSpan(ax), kEvery = Math.max(1, Math.ceil((Math.max(...xL.map(s => textW(s, FT))) + 1.6) / spacing));
       const anchor = anchorIndex(ax);
       xT.forEach((v, i) => {
         if ((i - anchor) % kEvery || (skip0 && v === 0)) return;
@@ -1666,7 +1862,7 @@ function renderSVG(spec, o) {
     }
   }
   if (!hid.has('yTicks')) {
-    const spacing = (y1 - y0) * ay.step / (ay.hi - ay.lo), kEvery = Math.max(1, Math.ceil(FT * 1.25 / spacing));
+    const spacing = (y1 - y0) * axStep(ay) / axSpan(ay), kEvery = Math.max(1, Math.ceil(FT * 1.25 / spacing));
     const anchor = anchorIndex(ay);
     yT.forEach((v, i) => {
       if ((i - anchor) % kEvery || (skip0 && v === 0)) return;
@@ -1679,11 +1875,21 @@ function renderSVG(spec, o) {
     lab.push(halo(xAx - 1.3, yAx + FT * 1.1, '0', 'end'), txt(xAx - 1.3, yAx + FT * 1.1, '0', { fs: FT, anchor: 'end' }));
   }
   out.push(...lab);
+  if (ay2) {                                                        // the right-hand axis of a combo graph
+    out.push(`<path d="M${f3(x1)},${f3(y0)}V${f3(y1)}" stroke="#000" stroke-width="${lw(.5)}" fill="none"/><path d="${y2T.map(v => `M${f3(x1)},${f3(sy2(v))}H${f3(x1 + TICK)}`).join('')}" stroke="#000" stroke-width="${lw(.35)}" fill="none"/>`);
+    if (!hid.has('yTicks')) {
+      const sp2 = (y1 - y0) * axStep(ay2) / axSpan(ay2), every = Math.max(1, Math.ceil(FT * 1.25 / sp2)), an2 = anchorIndex(ay2);
+      y2T.forEach((v, i) => { if ((i - an2) % every === 0) out.push(txt(x1 + TICK + 1.1, sy2(v) + FT * .35, y2L[i], { fs: FT, anchor: 'start' })); });
+    }
+    const t2 = axisText(spec.y2, 'yTitle', y1 - y0);
+    if (t2) out.push(txt(x1 + TICK + 1.1 + y2LabW + 1.6, (y0 + y1) / 2, t2, { rot: 90 }));
+  }
 
   /* ----- annotations: text, arrows, callouts (positions are in data coordinates) ----- */
   if (!hid.has('annotations')) spec.annotations.forEach((a, i) => {
     if (hid.has('ann:' + i)) return;
     const px = axX(a.x), py = sy(a.y), qx = axX(a.x2), qy = sy(a.y2), text = a.text;
+    if (![px, py, qx, qy].every(Number.isFinite)) return;
     const plate = (cx, cy, w, stroke) => `<rect x="${f3(cx - w / 2)}" y="${f3(cy - FS * .85)}" width="${f3(w)}" height="${f3(FS * 1.35)}" fill="#fff"${stroke ? ` stroke="#000" stroke-width="${lw(.3)}" rx=".8"` : ''}/>`;
     const head = (fx, fy, tx, ty) => {                                  // arrowhead at (tx,ty), coming from (fx,fy)
       const d = Math.hypot(tx - fx, ty - fy) || 1, ux = (tx - fx) / d, uy = (ty - fy) / d, L = 2.4 * S, W2 = 1 * S;
@@ -1722,12 +1928,13 @@ function renderSVG(spec, o) {
     legend.items.forEach((it, j) => {
       const st = spec.series[j], col = colour ? PALETTE[j % PALETTE.length] : '#000';
       const iy = ly + it.y + legend.rowH / 2, ix = lx + it.x, sw = legend.symW;
-      if (isBar) {
+      const lineLike = spec.type === 'line' || (spec.type === 'bar' && st.draw === 'line');
+      if (spec.type === 'boxplot' || (isBar && !lineLike)) {
         const hf = colour ? { fill: col } : hatchFill(`${o.id}-h${j}`, st.hatch);
         out.push(`<rect x="${f3(ix)}" y="${f3(iy - 1.5)}" width="${sw - 1.5}" height="3" fill="${hf.fill}" stroke="#000" stroke-width="${lw(.25)}"/>`);
       } else {
-        if (spec.type === 'line') out.push(`<line x1="${f3(ix)}" y1="${f3(iy)}" x2="${f3(ix + sw - 1.5)}" y2="${f3(iy)}" stroke="${col}" stroke-width="${lw(.5)}"${DASHES[st.dash] ? ` stroke-dasharray="${DASHES[st.dash]}"` : ''}/>`);
-        if (spec.type !== 'line' || spec.style.lineMarkers) out.push(markerSVG(st.marker, ix + (sw - 1.5) / 2, iy, 1.2 * S, col, S));
+        if (lineLike) out.push(`<line x1="${f3(ix)}" y1="${f3(iy)}" x2="${f3(ix + sw - 1.5)}" y2="${f3(iy)}" stroke="${col}" stroke-width="${lw(.5)}"${DASHES[st.dash] ? ` stroke-dasharray="${DASHES[st.dash]}"` : ''}/>`);
+        if (!lineLike || spec.style.lineMarkers) out.push(markerSVG(st.marker, ix + (sw - 1.5) / 2, iy, 1.2 * S, col, S));
       }
       out.push(txt(ix + sw + legend.gap, iy + FS * .35, it.name, { anchor: 'start' }));
     });
@@ -1793,10 +2000,10 @@ function pngWithDpi(u8, dpi) {
     ['title', 'Title', true], ['xTitle', 'X-axis title', true], ['yTitle', 'Y-axis title', true],
     ['units', 'Units in axis titles', true], ['xTicks', 'X-axis numbers'], ['yTicks', 'Y-axis numbers'],
     ['legend', 'Legend'], ['pointLabels', 'Point labels (A, B, C…)'], ['annotations', 'Annotations (all)'], ['regions', 'Labelled regions (all)'],
-    ['fit', 'Best-fit line'], ['data', 'All data (points, bars, lines, shapes, marks)']
+    ['fit', 'Best-fit line'], ['errorBars', 'Error bars'], ['data', 'All data (points, bars, lines, shapes, marks)']
   ];
-  const XY_BAR = ['coordinate', 'line', 'scatter', 'bar', 'histogram'];
-  const VIS_ONLY = { pointLabels: POINT_LABEL_TYPES, fit: GRID_TYPES, annotations: XY_BAR, regions: XY_BAR,      // items that mean nothing on a pie or number line are left off the list
+  const XY_BAR = ['coordinate', 'line', 'scatter', 'bar', 'histogram', 'boxplot'];
+  const VIS_ONLY = { pointLabels: POINT_LABEL_TYPES, fit: GRID_TYPES, errorBars: ['coordinate', 'line', 'scatter', 'bar'], annotations: XY_BAR, regions: XY_BAR,      // items that mean nothing on a pie or number line are left off the list
                      xTitle: [...XY_BAR, 'numberline'], units: [...XY_BAR, 'numberline'], yTitle: XY_BAR, yTicks: XY_BAR,
                      legend: ['coordinate', 'line', 'scatter', 'bar'] };
 
@@ -1831,7 +2038,7 @@ function pngWithDpi(u8, dpi) {
   const optList = (names, keys) => (keys || Object.keys(names)).map(k => `<option value="${k}">${esc(names[k])}</option>`).join('');
 
   function buildTypes() {
-    const icons = { coordinate: '▦', line: '📈', scatter: '⁙', bar: '📊', histogram: '▥', pie: '◔', numberline: '↔' };
+    const icons = { coordinate: '▦', line: '📈', scatter: '⁙', bar: '📊', histogram: '▥', boxplot: '⊟', pie: '◔', numberline: '↔' };
     $('#types').innerHTML = TYPES.map(t => `<button type="button" data-type="${t}"><span class="ic">${icons[t]}</span>${TYPE_NAMES[t]}</button>`).join('');
     $('#sizePreset').innerHTML = Object.keys(SIZES).map(k => `<option value="${k}">${SIZES[k].name} — ${SIZES[k].w} × ${SIZES[k].h} mm</option>`).join('') + '<option value="custom">Custom size</option>';
   }
@@ -1842,11 +2049,16 @@ function pngWithDpi(u8, dpi) {
     const unitShow = x ? showFor('coordinate,line,scatter,histogram,numberline') : '';
     const rangeShow = x ? showFor('coordinate,line,scatter,numberline') : '';
     const fmtShow = x ? showFor('coordinate,line,scatter,histogram,numberline') : '';
-    const breakShow = x ? showFor('coordinate,line,scatter') : '';
-    return `<div class="card" ${x ? showFor('coordinate,line,scatter,bar,histogram,numberline') : showFor('coordinate,line,scatter,bar,histogram')}><h4>${title}</h4>
+    const y2 = k === 'y2', breakShow = x ? showFor('coordinate,line,scatter') : y2 ? showFor('none') : '';
+    return `<div class="card" ${x ? showFor('coordinate,line,scatter,bar,histogram,boxplot,numberline') : y2 ? showFor('bar') : showFor('coordinate,line,scatter,bar,histogram,boxplot')}><h4>${title}</h4>${y2 ? '<p class="hint" style="margin:0">Used by series set to “Right axis” on the Style tab, e.g. temperature as a line over rainfall bars.</p>' : ''}
       <div class="row">
         <div><label class="lab">Label</label><input type="text" data-bind="${k}.label" placeholder="${x ? 'e.g. Time' : 'e.g. Temperature'}"></div>
         <div ${unitShow}><label class="lab">Unit</label><input type="text" data-bind="${k}.unit" placeholder="e.g. ${x ? 'min' : '°C'}"></div>
+      </div>
+      <div ${x ? showFor('line,scatter') : y2 ? showFor('none') : showFor('line,scatter,bar')}>
+        <label class="lab">Scale</label>
+        <select data-bind="${k}.scale"><option value="linear">Linear</option><option value="log">Logarithmic (powers of 10)</option></select>
+        <p class="hint" style="margin-top:4px">A log axis runs in powers of 10 (0.1, 1, 10, 100…). Zero and negative values can’t be drawn on it and are left off.</p>
       </div>
       <div ${rangeShow}>
         <div class="row">
@@ -1868,14 +2080,14 @@ function pngWithDpi(u8, dpi) {
       <label class="check" ${breakShow}><input type="checkbox" data-bind="${k}.breakMark"> Zigzag break if the axis doesn’t start at zero</label></div>`;
   }
   function buildAxes() {
-    $('#axesPane').innerHTML = axisCard('x', 'X axis') + axisCard('y', 'Y axis') + `
-      <p class="hint" data-show="coordinate,line,scatter,bar,histogram,numberline">Blank Min / Max / Step use automatic “nice” values (shown in grey). Type a number to override any of them. Significant figures win over decimal places; fractions fall back to decimals where no simple fraction fits.</p>
+    $('#axesPane').innerHTML = axisCard('x', 'X axis') + axisCard('y', 'Y axis') + axisCard('y2', 'Right-hand y axis') + `
+      <p class="hint" data-show="coordinate,line,scatter,bar,histogram,boxplot,numberline">Blank Min / Max / Step use automatic “nice” values (shown in grey). Type a number to override any of them. Significant figures win over decimal places; fractions fall back to decimals where no simple fraction fits.</p>
       <p class="hint" data-show="histogram">On a histogram the x-axis follows the bins: change them with Bin width and Start on the Graph tab.</p>
       <p class="hint" data-show="pie">A pie graph has no axes. Slice labels are set on the Graph tab.</p>
-      <div data-show="coordinate,line,scatter,bar,histogram"><h3 class="section-title">Axes position</h3>
+      <div data-show="coordinate,line,scatter,bar,histogram,boxplot"><h3 class="section-title">Axes position</h3>
         <div class="seg" data-seg="axes"><button type="button" data-v="edges">Along the edges</button><button type="button" data-v="origin">Through the origin</button></div></div>
-      <div data-show="coordinate,line,scatter,bar,histogram,numberline"><h3 class="section-title">Gridlines</h3>
-        <label class="check" style="margin-bottom:8px" data-show="coordinate,line,scatter,bar,histogram"><input type="checkbox" data-bind="grid.major"> Major gridlines</label>
+      <div data-show="coordinate,line,scatter,bar,histogram,boxplot,numberline"><h3 class="section-title">Gridlines</h3>
+        <label class="check" style="margin-bottom:8px" data-show="coordinate,line,scatter,bar,histogram,boxplot"><input type="checkbox" data-bind="grid.major"> Major gridlines</label>
         <label class="check"><input type="checkbox" data-bind="grid.minor"> Minor gridlines <span class="hint" data-show="numberline">(short ticks between numbers)</span></label></div>`;
   }
 
@@ -1883,7 +2095,7 @@ function pngWithDpi(u8, dpi) {
     const rows = VIS_ROWS.filter(r => !VIS_ONLY[r[0]] || VIS_ONLY[r[0]].includes(spec.type)).map(([tok, name, blankable]) =>
       `<label class="check"><input type="checkbox" data-vis="${tok}"> ${name}</label>` +
       (blankable ? `<label class="check sm" data-blankwrap="${tok}"><input type="checkbox" data-blank="${tok}"> Answer line</label>` : '<span></span>')).join('');
-    const ser = !['coordinate', 'line', 'scatter', 'bar'].includes(spec.type) ? '' : spec.series.map((s, j) =>
+    const ser = !['coordinate', 'line', 'scatter', 'bar', 'boxplot'].includes(spec.type) ? '' : spec.series.map((s, j) =>
       `<label class="check"><input type="checkbox" data-vis="series:${j}"> <span data-text="series.${j}.name"></span></label><span></span>`).join('');
     $('#testPane').innerHTML = `
       <div><h3 class="section-title">Scaffold level <span class="pill" id="levelPill"></span></h3>
@@ -1894,6 +2106,13 @@ function pngWithDpi(u8, dpi) {
         <p class="hint" style="margin-top:8px">“Answer line” draws a blank (e.g. <b>Title: ________</b>) where a hidden label was.</p></div>
       ${ser ? `<div><h3 class="section-title">Series</h3><div class="vis">${ser}</div></div>` : ''}
       <div data-show="coordinate,line,scatter,bar"><h3 class="section-title">Readability check</h3><div id="readBox"></div></div>
+      <div data-show="coordinate,line,scatter,bar"><h3 class="section-title">Alternate versions</h3>
+        <div class="row" style="align-items:flex-end">
+          <div><label class="lab" for="varSteps">Move each value by up to ± (gridlines)</label><input type="number" id="varSteps" min="1" max="10" step="1" value="1"></div>
+          <div><label class="lab" for="varSeed">Seed</label><input type="number" id="varSeed" step="1" placeholder="random"></div>
+        </div>
+        <div class="row tight" style="margin-top:8px"><button class="btn small" type="button" data-act="variant">Create a variant as a new graph</button></div>
+        <p class="hint" style="margin-top:8px">Makes “Version B” of this graph: every value is nudged by a random whole number of gridlines (so it still sits on a line) and the axes are pinned so both versions share one grid. The same seed always gives the same variant; your original stays in Presets &amp; recent.</p></div>
       <div><h3 class="section-title">Individual points and bars <span class="pill" id="markPill"></span></h3>
         <label class="check"><input type="checkbox" id="pick"> Click a point, bar, slice or mark in the preview to hide it</label>
         <div class="row tight" style="margin-top:8px"><button class="btn small" type="button" data-act="showMarks">Show all points, bars, slices and marks</button></div>
@@ -1995,9 +2214,18 @@ function pngWithDpi(u8, dpi) {
   }
 
   function buildStyle() {
-    const isBar = spec.type === 'bar' || spec.type === 'histogram';                 // fills instead of markers
+    const isBar = spec.type === 'bar' || spec.type === 'histogram' || spec.type === 'boxplot';   // fills instead of markers
     const styled = spec.type === 'pie' || spec.type === 'numberline' ? [] : spec.type === 'histogram' ? [spec.series[0]] : spec.series;
-    const cards = styled.map((s, j) => `<div class="card"><h4 data-text="series.${j}.name"></h4>
+    const combo = j => `<div class="card"><h4 data-text="series.${j}.name"></h4>
+      <div class="row">
+        <div><label class="lab">Name</label><input type="text" data-bind="series.${j}.name"></div>
+        <div><label class="lab">Draw as</label><select data-bind="series.${j}.draw"><option value="bar">Bars</option><option value="line">Line</option></select></div>
+        <div><label class="lab">Axis</label><select data-bind="series.${j}.axis"><option value="left">Left axis</option><option value="right">Right axis</option></select></div>
+      </div>
+      <div class="row" data-kinds="bar" data-kindpath="series.${j}.draw"><div><label class="lab">Bar fill</label><select data-bind="series.${j}.hatch">${optList(HATCH_NAMES)}</select></div></div>
+      <div class="row" data-kinds="line" data-kindpath="series.${j}.draw"><div><label class="lab">Marker</label><select data-bind="series.${j}.marker">${optList(MARKER_NAMES)}</select></div>
+        <div><label class="lab">Line</label><select data-bind="series.${j}.dash">${optList(DASH_NAMES)}</select></div></div></div>`;
+    const cards = styled.map((s, j) => spec.type === 'bar' ? combo(j) : `<div class="card"><h4 data-text="series.${j}.name"></h4>
       <div class="row">
         <div><label class="lab">Name</label><input type="text" data-bind="series.${j}.name"></div>
         ${isBar
@@ -2008,14 +2236,15 @@ function pngWithDpi(u8, dpi) {
     $('#stylePane').innerHTML = `
       <div><label class="check"><input type="checkbox" data-bind="style.colour"> Use colour</label>
         <p class="hint" style="margin-top:6px">Off by default: graphs are black and white for photocopying. Series stay distinguishable without colour through marker shapes, dash patterns and hatched bar fills. With colour on, bars use solid colours.</p></div>
-      <div data-show="line"><label class="check"><input type="checkbox" data-bind="style.lineMarkers"> Show markers on lines</label></div>
+      <div data-show="line,bar"><label class="check"><input type="checkbox" data-bind="style.lineMarkers"> Show markers on lines</label></div>
+      <p class="hint" data-show="bar">Combo graph: set a series to “Line” and “Right axis” to draw it over the bars with its own scale (set that scale on the Axes tab).</p>
       <div><h3 class="section-title">Print</h3>
         <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="style.largePrint"> Large print (text, lines and markers ×1.35)</label>
         <label class="check"><input type="checkbox" data-bind="style.photocopySafe"> Photocopy-safe gridlines (darker)</label>
         <p class="hint" style="margin-top:6px">Large print keeps the page size, so the plot gets smaller; enlarge the size on the Graph tab if you need more room. The grey levels for photocopy-safe are starting values: do a test print on your school copier and tell me if they need adjusting.</p></div>
-      ${cards ? `<div><h3 class="section-title">${spec.type === 'histogram' ? 'Bars' : 'Series'}</h3><div style="display:grid;gap:10px">${cards}</div></div>`
+      ${cards ? `<div><h3 class="section-title">${spec.type === 'histogram' ? 'Bars' : spec.type === 'boxplot' ? 'Boxes' : 'Series'}</h3><div style="display:grid;gap:10px">${cards}</div></div>`
         : '<p class="hint">Pie slices and number-line marks are told apart by hatching (black and white) or colour automatically.</p>'}
-      <div data-show="coordinate,line,scatter,bar,histogram"><h3 class="section-title">Misleading graph</h3>
+      <div data-show="coordinate,line,scatter,bar,histogram,boxplot"><h3 class="section-title">Misleading graph</h3>
         <p class="hint" style="margin-bottom:8px">For “what is wrong with this graph?” questions. Everything else (scaffolds, hiding, exports) works as normal.</p>
         <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="misleading.truncate"> Truncated y-axis (starts near the data, no break mark)</label>
         <label class="check" style="margin-bottom:8px"><input type="checkbox" data-bind="misleading.unevenY"> Uneven intervals on the y-axis</label>
@@ -2248,6 +2477,15 @@ function pngWithDpi(u8, dpi) {
     spec.regions.push({ from, to, label: nextLetter(), shade: 'light' });
     commit(null, true);
   }
+  function createVariant() {
+    const seed = $('#varSeed').value.trim() === '' ? 1 + Math.floor(Math.random() * 9999) : Math.round(Number($('#varSeed').value)), steps = Number($('#varSteps').value) || 1;
+    saveRecent();
+    const v = makeVariant(spec, seed, steps);
+    if (!v) return toast('Variants need a graph with plotted values.', 'err');
+    const m = /^(.*?)\s*\(version ([A-Z])\)$/.exec(spec.title), base = m ? m[1] : spec.title, letter = m ? String.fromCharCode(Math.min(90, m[2].charCodeAt(0) + 1)) : 'B';
+    v.title = (base || 'Untitled graph') + ' (version ' + letter + ')';
+    start(v); toast('Created version ' + letter + ' (seed ' + seed + '). Undo goes back; the original is in Presets & recent.', 'ok');
+  }
   function snapAll() {
     const n = snapValues(spec);
     spec = normalize(spec); commit(null, true);
@@ -2349,6 +2587,7 @@ function pngWithDpi(u8, dpi) {
     else if (b.dataset.act === 'delAnn') { spec.annotations.splice(+b.dataset.i, 1); dropIndex(spec, 'ann', +b.dataset.i); commit(null, true); }
     else if (b.dataset.act === 'delRegion') { spec.regions.splice(+b.dataset.i, 1); dropIndex(spec, 'region', +b.dataset.i); commit(null, true); }
     else if (b.dataset.act === 'snap') snapAll();
+    else if (b.dataset.act === 'variant') createVariant();
     else if (b.dataset.act === 'addFn') addFn();
     else if (b.dataset.act === 'delFn') { spec.functions.splice(+b.dataset.i, 1); dropIndex(spec, 'fn', +b.dataset.i); commit(null, true); }
     else if (b.dataset.act === 'addShape') addShape(b.dataset.kind);
@@ -2481,16 +2720,18 @@ function pngWithDpi(u8, dpi) {
     pt.x = e.clientX; pt.y = e.clientY;
     const p = pt.matrixTransform(svg.getScreenCTM().inverse());
     const tx = clamp((p.x - g.x0) / (g.x1 - g.x0), 0, 1), ty = clamp((g.y1 - p.y) / (g.y1 - g.y0), 0, 1);
-    return { x: g.ax ? g.ax.lo + unwarp(tx, g.uX) * (g.ax.hi - g.ax.lo) : 0, y: g.ay.lo + unwarp(ty, g.uY) * (g.ay.hi - g.ay.lo),
+    const inv = (ax, t, on) => axInv(ax, axT(ax, ax.lo) + unwarp(t, on && !ax.log) * (axT(ax, ax.hi) - axT(ax, ax.lo)));   // works for linear and log axes
+    return { x: g.ax ? inv(g.ax, tx, g.uX) : 0, y: inv(g.ay, ty, g.uY), y2: g.ay2 ? inv(g.ay2, ty, false) : undefined,
              inside: p.x >= g.x0 && p.x <= g.x1 && p.y >= g.y0 && p.y <= g.y1 };
   }
   function snapTo(v, axis) {
+    if (axis.log) return +v.toPrecision(3);                        // no even grid on a log axis
     const step = $('#snapTool').checked ? gridStepFor(axis, spec) : axis.step / 20;
     return clean(axis.lo + Math.round((v - axis.lo) / step) * step);
   }
   function freezeAxes() {                                           // hold the auto ranges still while a point is being moved
     const a = computeAxes(spec), saved = {};
-    for (const k of ['x', 'y']) {
+    for (const k of ['x', 'y', 'y2']) {
       if (!a[k]) continue;
       saved[k] = { min: spec[k].min, max: spec[k].max, step: spec[k].step };
       if (spec[k].min === null) spec[k].min = a[k].lo;
@@ -2531,7 +2772,8 @@ function pngWithDpi(u8, dpi) {
     else {
       const row = spec.rows[drag.r];
       if (!g.isBar) row.x = snapTo(d.x, g.ax);
-      row.ys[drag.j] = snapTo(d.y, g.ay);
+      const rightAxis = g.ay2 && spec.series[drag.j].axis === 'right';                // combo graphs: this series reads the right-hand axis
+      row.ys[drag.j] = snapTo(rightAxis ? d.y2 : d.y, rightAxis ? g.ay2 : g.ay);
     }
     renderPreview();                                                // light redraw while dragging; the table catches up on release
   });
@@ -2581,6 +2823,30 @@ function pngWithDpi(u8, dpi) {
   };
   window.addEventListener('beforeprint', () => { if (!state.printJob) fillSheet([spec], state.view); });   // Ctrl+P prints the current graph
   window.addEventListener('afterprint', () => { state.printJob = null; $('#printSheet').innerHTML = ''; });
+
+  /* ---------- keyboard shortcuts ---------- */
+  const typing = t => t && (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' ||
+    (t.tagName === 'INPUT' && !['checkbox', 'radio', 'range', 'button', 'file'].includes(t.type)));
+  document.addEventListener('keydown', e => {
+    if (e.defaultPrevented || document.querySelector('dialog[open]')) return;          // open dialogs handle their own keys (Esc closes them)
+    const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    if (mod && k === 's') { e.preventDefault(); saveJSON(); return; }
+    if (mod && k === 'd') { e.preventDefault(); duplicate(); return; }
+    if (mod && e.shiftKey && k === 'e') { e.preventDefault(); exportPair(); return; }
+    if (typing(e.target)) return;                                                     // undo/redo and letters belong to the text box while typing
+    if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); goto(idx - 1); return; }
+    if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); goto(idx + 1); return; }
+    if (mod || e.altKey) return;
+    const click = sel => { const el = $(sel); if (el && !el.disabled) el.click(); };
+    if (k === 'k') click('#viewSeg [data-view="key"]');
+    else if (k === 'q') click('#viewSeg [data-view="question"]');
+    else if (k === 'e') click('#editTool');
+    else if (k === 'h') click('#pick');
+    else if (k === 'escape') { if (state.edit) click('#editTool'); if (state.pick) click('#pick'); }
+    else if (e.key === '?') $('#keysDlg').showModal();
+  });
+  $('#keysBtn').onclick = () => $('#keysDlg').showModal();
+  $('#keysClose').onclick = () => $('#keysDlg').close();
 
   /* ---------- go ---------- */
   buildTypes(); buildAxes(); rebuildStructure();

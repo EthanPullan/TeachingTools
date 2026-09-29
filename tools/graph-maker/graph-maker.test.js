@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const G = vm.runInNewContext(core + `;({ niceStep, niceCeil, niceRange, resolveAxis, ticks, fmtTick, normalize, blankSpec, sampleSpec,
   serialize, parseFile, migrate, parseTSV, pasteGrid, importGrid, dropIndex, scaffoldLevel, SCAFFOLD, renderSVG, analyse,
-  computeAxes, tableCols, PRESETS, parseTable, compileExpr, fitLine, equationText, transformPoints, primeLabels, OP_SYMBOL, textW, HW, crc32, readability, snapValues, svgSize, fmtTick, SCAFFOLD_V1, pngWithDpi, sizeMM, mmToPx, parseNum, cellFromText, TYPES, MAX_SERIES, MAX_ROWS })`, {});
+  computeAxes, boxStats, ticks, axT, axInv, logOk, makeVariant, errAmount, mulberry32, gridStepFor, tableCols, PRESETS, parseTable, compileExpr, fitLine, equationText, transformPoints, primeLabels, OP_SYMBOL, textW, HW, crc32, readability, snapValues, svgSize, fmtTick, SCAFFOLD_V1, pngWithDpi, sizeMM, mmToPx, parseNum, cellFromText, TYPES, MAX_SERIES, MAX_ROWS })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -92,7 +92,7 @@ test('normalize is idempotent and fixes bad input', () => {
   assert.equal(n1.x.step, null);
   assert.equal(n1.x.minorPerMajor, 10);
   assert.deepEqual(plain(G.normalize(n1)), plain(n1));
-  assert.equal(G.normalize(null).specVersion, 3);
+  assert.equal(G.normalize(null).specVersion, 4);
 });
 
 test('save -> load round-trip is byte-identical', () => {
@@ -105,7 +105,7 @@ test('save -> load round-trip is byte-identical', () => {
   const text1 = G.serialize(s);
   const text2 = G.serialize(G.parseFile(text1));
   assert.equal(text2, text1);
-  assert.equal(JSON.parse(text1).specVersion, 3);
+  assert.equal(JSON.parse(text1).specVersion, 4);
   for (const type of G.TYPES) {
     const t = G.sampleSpec(); t.type = type; t.quadrants = 1;
     const a = G.serialize(t);
@@ -460,7 +460,7 @@ test('v1 files migrate: new fields default, scaffold level survives', () => {
   for (const level of ['axes', 'blank']) {
     v1.hidden = [...G.SCAFFOLD_V1[level]];
     const s = G.parseFile(JSON.stringify(v1));
-    assert.equal(s.specVersion, 3);
+    assert.equal(s.specVersion, 4);
     assert.equal(G.scaffoldLevel(s), level);
     assert.equal(s.x.format, 'decimal'); assert.equal(s.x.breakMark, true);
     assert.deepEqual(plain(s.annotations), []);
@@ -763,7 +763,7 @@ test('v2 files migrate to v3 with defaults for the new fields', () => {
   for (const k of ['fit', 'functions', 'shapes', 'marks', 'hist', 'pie']) delete v2[k];
   v2.specVersion = 2;
   const s = G.parseFile(JSON.stringify(v2));
-  assert.equal(s.specVersion, 3); assert.equal(s.fit.mode, 'none'); assert.deepEqual(plain(s.functions), []);
+  assert.equal(s.specVersion, 4); assert.equal(s.fit.mode, 'none'); assert.deepEqual(plain(s.functions), []);
   assert.equal(s.pie.labels, 'percent'); assert.equal(s.hist.binWidth, null);
   assert.equal(G.renderSVG(s), G.renderSVG(G.sampleSpec()), 'an old graph draws exactly as before');
 });
@@ -802,4 +802,174 @@ test('coordinate grids use whole-unit steps once they are a few units wide', () 
 test('histograms never get an axis-break zigzag over their bars', () => {
   const s = G.PRESETS.find(p => p.id === 'histogram').build(); s.hist = { binWidth: 5, start: 145 };
   assert.ok(!/<rect x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" fill="#fff"\/><polyline/.test(G.renderSVG(s)));
+});
+
+/* ---------------------------- Phase 5 ---------------------------- */
+test('error bars: fixed and percentage, on points and bars, hidden by token, counted in the range', () => {
+  const s = G.blankSpec(); s.type = 'scatter';
+  s.rows = [{ x: 1, ys: [10], label: '' }, { x: 2, ys: [20], label: '' }];
+  const caps = svg => (svg.match(/<path d="M[\d.]+,[\d.]+V[\d.]+M[\d.]+,[\d.]+H[\d.]+M[\d.]+,[\d.]+H[\d.]+" stroke="#000"/g) || []).length;
+  assert.equal(caps(G.renderSVG(s)), 0);
+  s.errorBars = { mode: 'fixed', value: 2 };
+  assert.equal(caps(G.renderSVG(s)), 2);
+  assert.equal(G.errAmount(s, 50), 2);
+  s.errorBars = { mode: 'percent', value: 10 }; assert.equal(G.errAmount(s, -50), 5);
+  s.errorBars = { mode: 'fixed', value: 15 };                               // 20 + 15 = 35 must fit on the axis
+  assert.ok(G.computeAxes(s).y.hi >= 35, 'axis grows to hold the bar tops');
+  s.hidden = ['errorBars']; assert.equal(caps(G.renderSVG(s, { version: 'question' })), 0);
+  s.hidden = ['data']; assert.equal(caps(G.renderSVG(s, { version: 'question' })), 0);
+  const b = G.sampleSpec(); b.type = 'bar'; b.rows = [{ x: 'a', ys: [5, 6], label: '' }, { x: 'b', ys: [7, 8], label: '' }];
+  b.errorBars = { mode: 'fixed', value: 1 }; assert.equal(caps(G.renderSVG(G.normalize(b))), 4, 'one per bar');
+  for (const type of G.TYPES) { const x = G.sampleSpec(); x.type = type; x.errorBars = { mode: 'percent', value: 20 }; assert.ok(!/NaN|undefined/.test(G.renderSVG(G.normalize(x))), type); }
+  assert.deepEqual(plain(G.normalize({ errorBars: { mode: 'zzz', value: -5 } }).errorBars), { mode: 'none', value: 0 });
+});
+
+test('variants: deterministic, on the grid, within bounds, never identical, axes pinned', () => {
+  const s = G.sampleSpec(); s.x.step = 1;
+  const a = G.makeVariant(s, 42, 1), b = G.makeVariant(s, 42, 1), c = G.makeVariant(s, 43, 1);
+  assert.equal(G.serialize(a), G.serialize(b), 'same seed, same variant');
+  assert.notEqual(G.serialize(a), G.serialize(c), 'different seed, different variant');
+  assert.notEqual(G.serialize(a), G.serialize(s));
+  const g = G.gridStepFor(G.analyse(s).ay, s);
+  s.rows.forEach((row, i) => row.ys.forEach((y, j) => {
+    const ny = a.rows[i].ys[j];
+    assert.ok(Math.abs(ny - y) <= 1.5 * g + 1e-9, `row ${i}: moved too far (${y} -> ${ny})`);   // half a gridline to snap, plus one nudge
+    assert.equal(G.readability(Object.assign(G.normalize(plain(a)), {})).filter(q => q.r === i && q.j === j && q.axis === 'y').length, 0, 'still on a gridline');
+  }));
+  assert.deepEqual(plain(a.rows.map(r => r.x)), plain(s.rows.map(r => r.x)), 'x values untouched');
+  assert.ok(a.y.min !== null && a.y.max !== null && a.y.step !== null, 'axes pinned');
+  assert.deepEqual([a.y.min, a.y.max], [G.computeAxes(s).y.lo, G.computeAxes(s).y.hi]);
+  const big = G.makeVariant(s, 7, 3);
+  s.rows.forEach((row, i) => row.ys.forEach((y, j) => assert.ok(Math.abs(big.rows[i].ys[j] - y) <= 3.5 * g + 1e-9)));
+  const tiny = G.blankSpec(); tiny.rows = [{ x: 1, ys: [5], label: '' }];   // a single value still changes
+  assert.notEqual(G.makeVariant(tiny, 1, 1).rows[0].ys[0], 5);
+  const bar = G.sampleSpec(); bar.type = 'bar'; bar.rows = [{ x: 'a', ys: [10, 20], label: '' }, { x: 'b', ys: [30, 40], label: '' }];
+  const bv = G.makeVariant(G.normalize(bar), 5, 2); assert.deepEqual(plain(bv.rows.map(r => r.x)), ['a', 'b']);
+  for (const type of ['pie', 'histogram', 'numberline']) { const x = G.sampleSpec(); x.type = type; assert.equal(G.makeVariant(x, 1, 1), null, type); }
+  const r1 = G.mulberry32(9), r2 = G.mulberry32(9); assert.equal(r1(), r2()); assert.ok(r1() >= 0 && r1() < 1);
+});
+
+test('log axes: decade ticks, mapping, gridlines, dropped non-positive values', () => {
+  const s = G.blankSpec(); s.type = 'scatter'; s.y.scale = 'log';
+  s.rows = [1, 10, 100, 1000, 20000].map((y, i) => ({ x: i + 1, ys: [y], label: '' })).concat([{ x: 9, ys: [0], label: '' }, { x: 10, ys: [-5], label: '' }]);
+  const ay = G.computeAxes(s).y;
+  assert.equal(ay.log, true); assert.deepEqual([ay.lo, ay.hi], [1, 100000]);
+  assert.deepEqual(plain(G.ticks(ay)), [1, 10, 100, 1000, 10000, 100000]);
+  const svg = G.renderSVG(s), geom = {}; G.renderSVG(s, { geom });
+  assert.ok(!/NaN|undefined|Infinity/.test(svg));
+  assert.ok(svg.includes('>10<tspan') && svg.includes('>1000<'), 'labels: 1000 plain, 10^5 raised');
+  assert.equal((svg.match(/<circle [^>]*r="1\.35"/g) || []).length, 5, 'zero and negative values are left off');
+  // equal decades take equal heights
+  const at = v => geom.y1 - (G.axT(ay, v) - G.axT(ay, ay.lo)) / (G.axT(ay, ay.hi) - G.axT(ay, ay.lo)) * (geom.y1 - geom.y0);
+  assert.ok(Math.abs((at(1) - at(10)) - (at(10) - at(100))) < 1e-9 && Math.abs((at(100) - at(1000)) - (at(1) - at(10))) < 1e-9);
+  assert.equal(G.axInv(ay, 3), 1000);
+  const grid = /<path d="([^"]*)" stroke="#c4c4c4"/.exec(svg)[1];
+  assert.equal((grid.match(/H/g) || []).length, 5 * 8, 'minor lines at 2..9 in each of 5 decades');
+  s.grid.minor = false; assert.ok(!/stroke="#c4c4c4"/.test(G.renderSVG(s)));
+  s.y.scale = 'linear'; assert.equal(G.computeAxes(s).y.log, undefined);
+  const x = G.blankSpec(); x.type = 'coordinate'; x.y.scale = 'log'; assert.equal(G.computeAxes(x).y.log, undefined, 'coordinate grids stay linear');
+  const b = G.sampleSpec(); b.type = 'bar'; b.y.scale = 'log'; b.rows = [{ x: 'a', ys: [10, 500], label: '' }, { x: 'b', ys: [0, 3], label: '' }];
+  const bs = G.renderSVG(G.normalize(b)); assert.ok(!/NaN|undefined/.test(bs)); assert.equal(G.computeAxes(G.normalize(b)).y.lo, 1);
+  const mn = G.blankSpec(); mn.type = 'line'; mn.x.scale = 'log'; mn.x.min = 5; mn.x.max = 500;
+  mn.rows = [{ x: 10, ys: [1], label: '' }, { x: 100, ys: [2], label: '' }];
+  assert.deepEqual(plain(G.ticks(G.computeAxes(mn).x)), [10, 100], 'manual limits keep only the decades inside');
+});
+
+test('log axes with everything else: equations, fits, shapes, annotations, regions, print styles', () => {
+  const s = G.sampleSpec(); s.type = 'scatter'; s.x.scale = 'log'; s.y.scale = 'log'; s.rows = [1, 2, 5, 10, 50].map(x => ({ x, ys: [x * x, x * 3], label: '' }));
+  s.functions = [{ expr: 'x^2', dash: 'solid', label: true }, { expr: 'x - 5', dash: 'solid', label: true }];
+  s.fit = { mode: 'calc', series: 0, slope: 1, intercept: 0, equation: true, dash: 'dashed' };
+  s.shapes = [{ kind: 'polygon', points: [{ x: 1, y: 1 }, { x: 10, y: 1 }, { x: -3, y: 10 }], vlabels: 'A B C', fill: 'hatch', dash: 'solid' }];
+  s.annotations = [{ kind: 'arrow', text: 'a', x: 0, y: -1, x2: 10, y2: 10 }]; s.regions = [{ from: -2, to: 5, label: 'R', shade: 'hatch' }];
+  s.errorBars = { mode: 'percent', value: 20 }; s.style = { colour: true, lineMarkers: true, photocopySafe: true, largePrint: true };
+  for (const version of ['key', 'question']) for (const level of ['complete', 'labels', 'axes', 'blank']) {
+    s.hidden = [...G.SCAFFOLD[level]];
+    const svg = G.renderSVG(G.normalize(s), { version, ghost: true, hits: true, flags: new Set(), geom: {} });
+    assert.ok(!/NaN|undefined|Infinity/.test(svg), version + '/' + level);
+  }
+  assert.equal(G.makeVariant(G.normalize(s), 1, 1), null, 'no variants on log axes');
+  assert.equal(G.readability(G.normalize(s)).length, 0);
+  assert.equal(G.serialize(G.parseFile(G.serialize(s))), G.serialize(s));
+});
+
+test('box plot statistics: quartiles, whiskers, outliers', () => {
+  const b = G.boxStats([7, 15, 36, 39, 40, 41], 'minmax');
+  assert.deepEqual([b.min, b.q1, b.median, b.q3, b.max], [7, 15, 37.5, 40, 41], 'even count: halves of three');
+  const odd = G.boxStats([1, 2, 3, 4, 5, 6, 7], 'minmax');
+  assert.deepEqual([odd.q1, odd.median, odd.q3], [2, 4, 6], 'odd count: the middle value is left out of both halves');
+  const one = G.boxStats([5], 'iqr'); assert.deepEqual([one.q1, one.median, one.q3, one.outliers.length], [5, 5, 5, 0]);
+  assert.equal(G.boxStats([], 'iqr'), null); assert.equal(G.boxStats([NaN], 'iqr'), null);
+  const o = G.boxStats([1, 2, 3, 4, 5, 6, 7, 8, 9, 30], 'iqr');   // q1 3, q3 8, iqr 5, fence 15.5
+  assert.deepEqual([o.q1, o.q3, o.whiskerHi, o.whiskerLo], [3, 8, 9, 1]); assert.deepEqual(plain(o.outliers), [30]);
+  const all = G.boxStats([1, 2, 3, 4, 5, 6, 7, 8, 9, 30], 'minmax'); assert.equal(all.whiskerHi, 30); assert.equal(all.outliers.length, 0);
+  assert.deepEqual([G.boxStats([9, 1, 5], 'minmax').min, G.boxStats([9, 1, 5], 'minmax').median], [1, 5], 'input order does not matter');
+});
+
+test('box plot: one box per column, hiding, table shape, import', () => {
+  const s = G.PRESETS.find(p => p.id === 'boxplot').build();
+  const key = G.renderSVG(s);
+  const boxes = svg => (svg.match(/<rect x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" fill="[^"]*" stroke="#000" stroke-width="0\.5"\/>/g) || []).length;
+  assert.equal(boxes(key), 2);
+  assert.ok(key.includes('>Class A<') && key.includes('>Class B<'), 'box names sit on the category axis');
+  assert.equal((key.match(/<circle [^>]*fill="#fff" stroke="#000"/g) || []).length, 2, 'Class B has two outliers (30 and 100)');
+  s.hidden = ['series:1']; assert.equal(boxes(G.renderSVG(s, { version: 'question' })), 1);
+  s.hidden = ['data']; assert.equal(boxes(G.renderSVG(s, { version: 'question' })), 0);
+  s.hidden = [...G.SCAFFOLD.blank]; assert.ok(!G.renderSVG(s, { version: 'question' }).includes('Class A'));
+  s.hidden = []; s.box.whiskers = 'minmax'; assert.equal((G.renderSVG(s).match(/<circle [^>]*fill="#fff" stroke="#000"/g) || []).length, 0);
+  assert.deepEqual(plain(G.tableCols(s)), [{ k: 'y', i: 0 }, { k: 'y', i: 1 }], 'no x column');
+  const a = G.analyse(s); assert.equal(a.isBar, true); assert.equal(a.box.length, 2);
+  assert.ok(a.ay.hi >= 100, 'axis holds the outliers');
+  const t = G.blankSpec(); t.type = 'boxplot';
+  assert.ok(G.importGrid(t, G.parseTable('Girls (cm),Boys (cm),Staff\n150,152,160\n155,158,170\n160,,175')));
+  assert.deepEqual(plain(t.series.map(x => x.name)), ['Girls', 'Boys', 'Staff']); assert.equal(t.y.unit, 'cm');
+  assert.deepEqual(plain(t.rows.map(r => r.ys)), [[150, 152, 160], [155, 158, 170], [160, null, 175]]);
+  const u = G.blankSpec(); u.type = 'boxplot'; G.importGrid(u, G.parseTable('1,2\n3,4')); assert.equal(u.series.length, 2, 'no header: columns are simply boxes');
+  assert.equal(G.readability(s).length, 0); assert.equal(G.makeVariant(s, 1, 1), null);
+  const e = G.blankSpec(); e.type = 'boxplot'; assert.ok(!/NaN|undefined/.test(G.renderSVG(e)), 'an empty box plot still draws');
+  for (const opt of [{ colour: true }, { largePrint: true }, { photocopySafe: true }]) { const z = G.PRESETS.find(p => p.id === 'boxplot').build(); Object.assign(z.style, opt); assert.ok(!/NaN|undefined/.test(G.renderSVG(z))); }
+  assert.equal(G.serialize(G.parseFile(G.serialize(s))), G.serialize(s));
+});
+
+test('combo graph: bars on the left axis, a line on the right axis', () => {
+  const s = G.PRESETS.find(p => p.id === 'climatograph').build();
+  const a = G.analyse(s);
+  assert.ok(a.ay2 && a.ay2.hi >= 20 && a.ay.hi >= 70, 'two independent axes');
+  assert.notDeepEqual([a.ay.lo, a.ay.hi], [a.ay2.lo, a.ay2.hi]);
+  const svg = G.renderSVG(s);
+  const bars = v => (v.match(/<rect x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" fill="[^"]*" stroke="#000" stroke-width="0\.3"/g) || []).length;
+  assert.equal(bars(svg), 12, 'only the bar series draws bars');
+  assert.equal((svg.match(/<polyline points=/g) || []).length, 1, 'the line series draws one polyline');
+  assert.ok(svg.includes('>Temperature (°C)<') && svg.includes('>Rainfall (mm)<'), 'both axis titles');
+  const q = G.renderSVG(Object.assign(s, { hidden: ['yTicks'] }), { version: 'question' }); s.hidden = [];
+  assert.ok(!/<text[^>]*text-anchor="start"[^>]*>\d+<\/text>/.test(q), 'hiding y numbers hides the right-hand ones too');
+  s.hidden = ['series:1']; const hq = G.renderSVG(s, { version: 'question' });
+  assert.equal((hq.match(/<polyline points=/g) || []).length, 0); assert.equal(bars(hq), 12);
+  s.hidden = ['pt:1:3']; assert.equal((G.renderSVG(s, { version: 'question' }).match(/<polyline points=/g) || []).length, 2, 'a hidden point breaks the line');
+  s.hidden = []; const clip = v => /<clipPath[^>]*><rect ([^>]*)\/>/.exec(v)[1];
+  const w0 = +/width="([\d.]+)"/.exec(clip(svg))[1]; s.series[1].axis = 'left'; s.series[1].draw = 'bar';
+  const plain2 = G.renderSVG(s); assert.ok(+/width="([\d.]+)"/.exec(clip(plain2))[1] > w0, 'without a right axis the plot is wider');
+  assert.equal(G.analyse(s).ay2, null);
+  s.series[1].draw = 'line';                                        // a line on the left axis is fine too
+  assert.ok(!/NaN|undefined/.test(G.renderSVG(s)) && (G.renderSVG(s).match(/<polyline points=/g) || []).length === 1);
+  s.series[1].axis = 'right'; s.series[1].draw = 'bar';             // two bar series, one per axis
+  const two = G.renderSVG(s); assert.equal(bars(two), 24); assert.ok(!/NaN|undefined/.test(two));
+});
+
+test('combo graph: legend, readability, snapping, variants and every style use the right axis', () => {
+  const s = G.PRESETS.find(p => p.id === 'climatograph').build();
+  const legend = G.renderSVG(s);
+  assert.ok(/<line [^>]*stroke="#000"[^>]*\/>/.test(legend) && legend.includes('>Rainfall<') && legend.includes('>Temperature<'));
+  s.rows[0].ys[1] = 4.3; s.y2.step = 2; s.y2.min = 0; s.y2.max = 24; s.y2.minorPerMajor = 1;
+  const r = G.readability(s).filter(q => q.j === 1); assert.ok(r.some(q => q.r === 0 && q.value === 4.3), 'judged against the right axis grid (step 2)');
+  assert.ok(G.snapValues(s) >= 1); assert.equal(s.rows[0].ys[1] % 2, 0, 'snapped to the right axis gridlines');
+  const v = G.makeVariant(s, 3, 1);
+  v.rows.forEach((row, i) => { assert.equal(row.ys[1] % 2, 0, 'right-axis values stay on its grid'); assert.ok(row.ys[1] >= 0 && row.ys[1] <= 24); });
+  assert.ok(v.y2.min === 0 && v.y2.max === 24 && v.y2.step === 2, 'right axis pinned');
+  for (const opt of [{ colour: true }, { largePrint: true }, { photocopySafe: true }]) for (const version of ['key', 'question']) {
+    const z = G.PRESETS.find(p => p.id === 'climatograph').build(); Object.assign(z.style, opt); z.errorBars = { mode: 'percent', value: 10 };
+    z.hidden = version === 'question' ? [...G.SCAFFOLD.axes] : [];
+    assert.ok(!/NaN|undefined/.test(G.renderSVG(z, { version, ghost: true, hits: true, flags: new Set(['1:2']), geom: {} })), JSON.stringify(opt));
+  }
+  const n = G.normalize({ series: [{ draw: 'zzz', axis: 'up' }] }); assert.equal(n.series[0].draw, 'bar'); assert.equal(n.series[0].axis, 'left');
+  assert.equal(G.serialize(G.parseFile(G.serialize(s))), G.serialize(s));
 });
