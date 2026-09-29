@@ -235,18 +235,33 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
   its reflection can collide when a vertex sits near the mirror line (label placement is greedy, not global). Mirror lines drawn exactly over
   the axes are not drawn at all (the axis is the line). Paper: no real printer test (margins under about 6 mm are warned about, not verified).
 
+- Phase 5–7: the data displays, multiple-choice pages and print sheets were checked by eye in Chromium only; a real print (Letter and A4) and a paste into
+  Word or Google Docs are still to be tried. Very dense pages (24 categories × 4 series, 400-value histograms) render and stay readable in tests, but
+  were not judged for taste. The default sample data and the choice of six pattern fills are mine, not the teacher's.
+- Phase 7: recents, user presets and the course setting use `localStorage`; a private window or blocked storage makes them silently absent (the tool
+  says so when saving a preset or a test look). Course tagging is a judgement (see the Phase 7 notes).
+
 ## Smells noticed while building (not fixed; for separate issues)
-- The toolbar is crowded (also true of the science tool); a menu for exports would tidy it.
+- The toolbar was crowded (also true of the science tool); everything added in Phase 7 went into a "More" menu, and the transparent-background switch
+  moved there too. The Export buttons are still four; an "Export ▾" menu would tidy them.
+- The tab strip now has up to eight tabs. It fits, barely. If Phases 8–12 add more, group them (Build / Look / Test) rather than adding a ninth.
+- `index.html` is about 400 KB in one file: the core script is ~265 KB and the UI ~115 KB. Fine to run offline, awkward to review. The unit tests already
+  cut the core out by its `<script id="core">` tag; a small concat build (core, ui, css → one file) would let them live as separate files without
+  breaking "one file per tool".
+- Two `freezeAxes` exist: a core function (for multiple choice) and an editor helper inside the UI closure (holds the range still while dragging a point).
+  They do different things with one name; the editor one should be renamed.
 - The science tool's `renderSVG` and this one share a lot of tick/axis code by copy. If both tools live on,
   consider the `SYNC.md`-style shared source or a small concat build. Not added: it does not hurt yet.
 - `data-bind` paths use array positions (`objects.3.marker`). Ids are stable, but the UI rebuilds on every
   add/delete, so positions are always current. Worth remembering if a UI ever edits objects while reordering.
 
 ## Open questions for the teacher
-1. Which high-school streams to support (decides Phases 8–12).
-2. Quartile method used in the class resource (Phase 5).
-3. Diploma-exam look for the exam-style preset (Phase 6): needs a few released items to compare against.
-4. Photocopier grey levels (Phase 6) need a test print.
+1. **Which high-school streams to support** (decides Phases 8–12; nothing beyond Phase 7 has been started).
+2. Quartile method used in the class resource (Phase 5). Built as a setting; the default (TI-84) is unconfirmed.
+3. Diploma-exam look for the exam-style preset (Phase 6): needs a few released items to compare against. What is built is "ticks, no gridlines".
+4. Photocopier grey levels ("photocopy-safe", Phase 6) need a test print.
+5. Which tools belong to which course (Phase 7 course mode): the tagging is my judgement (distance and midpoint, circles, sign charts, the vertical line test and
+   intersections count as high school; everything else shows in all courses except that calculus hides the middle-school Geometry tab and data displays).
 
 ## Progress
 - [x] Phase 1: MVP (`tools/math-graph-maker/`, specVersion 1)
