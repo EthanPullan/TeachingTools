@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const G = vm.runInNewContext(core + `;({ niceStep, niceCeil, niceRange, resolveAxis, ticks, fmtTick, normalize, blankSpec, sampleSpec,
   serialize, parseFile, migrate, parseTSV, pasteGrid, importGrid, dropIndex, scaffoldLevel, SCAFFOLD, renderSVG, analyse,
-  computeAxes, PRESETS, parseTable, textW, HW, crc32, readability, snapValues, svgSize, fmtTick, SCAFFOLD_V1, pngWithDpi, sizeMM, mmToPx, parseNum, cellFromText, TYPES, MAX_SERIES, MAX_ROWS })`, {});
+  computeAxes, tableCols, PRESETS, parseTable, compileExpr, fitLine, equationText, transformPoints, primeLabels, OP_SYMBOL, textW, HW, crc32, readability, snapValues, svgSize, fmtTick, SCAFFOLD_V1, pngWithDpi, sizeMM, mmToPx, parseNum, cellFromText, TYPES, MAX_SERIES, MAX_ROWS })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -92,7 +92,7 @@ test('normalize is idempotent and fixes bad input', () => {
   assert.equal(n1.x.step, null);
   assert.equal(n1.x.minorPerMajor, 10);
   assert.deepEqual(plain(G.normalize(n1)), plain(n1));
-  assert.equal(G.normalize(null).specVersion, 2);
+  assert.equal(G.normalize(null).specVersion, 3);
 });
 
 test('save -> load round-trip is byte-identical', () => {
@@ -105,7 +105,7 @@ test('save -> load round-trip is byte-identical', () => {
   const text1 = G.serialize(s);
   const text2 = G.serialize(G.parseFile(text1));
   assert.equal(text2, text1);
-  assert.equal(JSON.parse(text1).specVersion, 2);
+  assert.equal(JSON.parse(text1).specVersion, 3);
   for (const type of G.TYPES) {
     const t = G.sampleSpec(); t.type = type; t.quadrants = 1;
     const a = G.serialize(t);
@@ -460,7 +460,7 @@ test('v1 files migrate: new fields default, scaffold level survives', () => {
   for (const level of ['axes', 'blank']) {
     v1.hidden = [...G.SCAFFOLD_V1[level]];
     const s = G.parseFile(JSON.stringify(v1));
-    assert.equal(s.specVersion, 2);
+    assert.equal(s.specVersion, 3);
     assert.equal(G.scaffoldLevel(s), level);
     assert.equal(s.x.format, 'decimal'); assert.equal(s.x.breakMark, true);
     assert.deepEqual(plain(s.annotations), []);
@@ -528,4 +528,278 @@ test('geometry export lets the editor map a mouse position back to graph values'
   assert.equal(xAt(geom.x0), 0); assert.ok(Math.abs(xAt(geom.x1) - 10) < 1e-9);
   const b = G.sampleSpec(); b.type = 'bar'; const g2 = {}; G.renderSVG(b, { geom: g2 });
   assert.equal(g2.isBar, true); assert.equal(g2.ax, null);
+});
+
+/* ---------------------------- Phase 4 ---------------------------- */
+const f = (src, x) => { const c = G.compileExpr(src); assert.equal(c.error, null, src + ': ' + c.error); return c.fn(x); };
+const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg || ''} ${a} vs ${b}`);
+
+test('equation parser: arithmetic, precedence and implicit multiplication', () => {
+  near(f('2x+1', 3), 7); near(f('2 * x + 1', 3), 7); near(f('y = 3x - 2', 2), 4); near(f('f(x) = x/2', 5), 2.5);
+  near(f('-x^2', 3), -9, 'unary minus binds looser than ^');
+  near(f('(-x)^2', 3), 9); near(f('2^3^2', 0), 512, 'right associative'); near(f('2^-1', 0), 0.5);
+  near(f('3(x+1)', 2), 9); near(f('(x+1)(x-1)', 3), 8); near(f('2x^2+3x-5', 2), 9);
+  near(f('1/2x', 4), 2, '(1/2)x'); near(f('x/2x', 4), 8, 'left to right: (x/2)*x');
+  near(f('10 - 4 - 3', 0), 3, 'left associative'); near(f('.5x + 1.25', 2), 2.25);
+  near(f('x\u00b2 - 4', 3), 5); near(f('2\u00d7x \u2212 1', 3), 5); near(f('\u03c0x', 1), Math.PI);
+  near(f('sqrt(x)+1', 9), 4); near(f('abs(x)', -3), 3); near(f('sin(x)^2 + cos(x)^2', 1.3), 1);
+  near(f('2sin x', Math.PI / 2), 2); near(f('ln(e)', 0), 1); near(f('log(1000)', 0), 3); near(f('exp(0)', 0), 1);
+  near(f('xsin(x)', Math.PI / 2), Math.PI / 2, 'letters run together split into names');
+  near(f('2e3', 0), 2000, 'scientific notation'); near(f('2e', 0), 2 * Math.E, '2e is 2 times e');
+  assert.ok(Number.isNaN(f('sqrt(x)', -1))); assert.equal(f('1/x', 0), Infinity);
+});
+
+test('equation parser: clear errors, and no eval anywhere', () => {
+  for (const bad of ['', '   ', '2+', '(x', 'x)', '2 $ x', 'foo(x)', 'x=', 'y=x+y', '*3', '2**', '1 2 +']) {
+    const c = G.compileExpr(bad);
+    assert.ok(c.error && c.fn === null, `"${bad}" should fail`);
+  }
+  assert.match(G.compileExpr('foo(x)').error, /Unknown name/);
+  assert.match(G.compileExpr('(x').error, /bracket/);
+  assert.equal(G.compileExpr('2x').error, null);
+  assert.ok(!/\beval\s*\(|new Function|\bFunction\s*\(/.test(core), 'core must never use eval or Function()');
+  assert.doesNotThrow(() => G.compileExpr('x'.repeat(200) + '+' + '('.repeat(50)));   // hostile input fails, never hangs
+});
+
+test('line of best fit: least squares, manual, degenerate, equation text', () => {
+  const s = G.blankSpec(); s.type = 'scatter';
+  s.rows = [[1, 3], [2, 5], [3, 7], [4, 9]].map(([x, y]) => ({ x, ys: [y], label: '' }));
+  s.fit.mode = 'calc';
+  let fit = G.fitLine(s); near(fit.m, 2); near(fit.c, 1);
+  s.rows = [[0, 1], [1, 3], [2, 2], [3, 5], [4, 4]].map(([x, y]) => ({ x, ys: [y], label: '' }));
+  fit = G.fitLine(s); near(fit.m, 0.8); near(fit.c, 1.4, 'textbook example');
+  s.fit.mode = 'manual'; s.fit.slope = -0.5; s.fit.intercept = 3;
+  assert.deepEqual(plain(G.fitLine(s)), { m: -0.5, c: 3 });
+  s.fit.mode = 'none'; assert.equal(G.fitLine(s), null);
+  s.fit.mode = 'calc'; s.rows = [{ x: 2, ys: [1], label: '' }, { x: 2, ys: [5], label: '' }];
+  assert.equal(G.fitLine(s), null, 'vertical data has no unique line');
+  s.rows = [{ x: 2, ys: [1], label: '' }]; assert.equal(G.fitLine(s), null, 'one point is not enough');
+  assert.equal(G.equationText(2, 1), 'y = 2x + 1'); assert.equal(G.equationText(1, 0), 'y = x');
+  assert.equal(G.equationText(-1, -2.5), 'y = \u2212x \u2212 2.5'); assert.equal(G.equationText(0, 4), 'y = 4');
+  assert.equal(G.equationText(2.34567, 10.9876), 'y = 2.35x + 11');
+});
+
+test('best fit, equations and shapes render, and hide by token', () => {
+  const s = G.PRESETS.find(p => p.id === 'function').build();
+  assert.ok(G.renderSVG(s).includes('y = 2x + 1'));
+  s.hidden = ['fn:0']; assert.ok(!G.renderSVG(s, { version: 'question' }).includes('y = 2x + 1'));
+  s.hidden = ['data']; assert.ok(!G.renderSVG(s, { version: 'question' }).includes('y = 2x + 1'));
+  const t = G.sampleSpec(); t.fit = { mode: 'calc', series: 0, slope: 1, intercept: 0, equation: true, dash: 'dashed' };
+  assert.ok(/y = [\d.]+x/.test(G.renderSVG(t)));
+  t.hidden = ['fit']; const q = G.renderSVG(t, { version: 'question' });
+  assert.ok(!/y = [\d.]+x/.test(q) && q.includes('<polyline'), 'the data stay, only the fit is hidden');
+  const tr = G.PRESETS.find(p => p.id === 'transform').build();
+  const key = G.renderSVG(tr);
+  assert.equal((key.match(/<polygon points="[^"]*" fill="none" stroke="#000"/g) || []).length, 2);
+  for (const l of ['A', 'B', 'C', "A'", "B'", "C'"]) assert.ok(key.includes('>' + l.replace("'", "'") + '<'), l);
+  tr.hidden = ['shape:1']; const q2 = G.renderSVG(tr, { version: 'question' });
+  assert.equal((q2.match(/<polygon points="[^"]*" fill="none" stroke="#000"/g) || []).length, 1);
+  assert.ok(!q2.includes(">A'<") && q2.includes('>A<'), 'original stays, image is hidden');
+  const bad = G.PRESETS.find(p => p.id === 'function').build(); bad.functions[0].expr = '2x +';
+  assert.ok(!/NaN|undefined/.test(G.renderSVG(bad)), 'a broken equation just draws nothing');
+});
+
+test('functions: asymptotes and domain errors do not draw across gaps', () => {
+  const s = G.PRESETS.find(p => p.id === 'grid4').build();
+  s.functions = [{ expr: '1/x', dash: 'solid', label: false }];
+  const svg = G.renderSVG(s);
+  assert.equal((svg.match(/<polyline points/g) || []).length, 2, 'two branches, not one line through the asymptote');
+  s.functions = [{ expr: 'sqrt(x)', dash: 'solid', label: false }];
+  assert.equal((G.renderSVG(s).match(/<polyline points/g) || []).length, 1, 'only the real half is drawn');
+  s.functions = [{ expr: 'x^2', dash: 'dashed', label: true }];
+  assert.ok(G.renderSVG(s).includes('stroke-dasharray'));
+});
+
+test('shape transformations', () => {
+  const tri = [{ x: 1, y: 1 }, { x: 4, y: 1 }, { x: 1, y: 3 }], t = (op) => plain(G.transformPoints(tri, op));
+  assert.deepEqual(t({ t: 'translate', dx: -6, dy: -5 }), [{ x: -5, y: -4 }, { x: -2, y: -4 }, { x: -5, y: -2 }]);
+  assert.deepEqual(t({ t: 'reflectX' }), [{ x: 1, y: -1 }, { x: 4, y: -1 }, { x: 1, y: -3 }]);
+  assert.deepEqual(t({ t: 'reflectY' })[1], { x: -4, y: 1 });
+  assert.deepEqual(t({ t: 'reflectYX' })[2], { x: 3, y: 1 });
+  assert.deepEqual(t({ t: 'rot90' })[1], { x: -1, y: 4 });
+  assert.deepEqual(t({ t: 'rot180' })[1], { x: -4, y: -1 });
+  assert.deepEqual(t({ t: 'rot270' })[1], { x: 1, y: -4 });
+  assert.deepEqual(t({ t: 'dilate', k: 2 })[2], { x: 2, y: 6 });
+  assert.deepEqual(t({ t: 'dilate', k: 0.5 })[1], { x: 2, y: 0.5 });
+  const back = G.transformPoints(G.transformPoints(tri, { t: 'rot90' }), { t: 'rot270' });
+  assert.deepEqual(plain(back), plain(tri), 'rot90 then rot270 is the identity');
+  assert.equal(G.primeLabels('A B C'), "A' B' C'");
+  assert.ok(Object.is(G.transformPoints([{ x: 0, y: 0 }], { t: 'reflectX' })[0].y, 0), 'no negative zero');
+});
+
+test('histogram: bins, counts, axes and hiding', () => {
+  const s = G.PRESETS.find(p => p.id === 'histogram').build();
+  const a = G.analyse(s), h = a.hist;
+  assert.equal(h.counts.reduce((x, y) => x + y, 0), 18, 'every value lands in exactly one bin');
+  assert.equal(h.edges.length, h.counts.length + 1);
+  h.edges.slice(1).forEach((e, i) => near(e - h.edges[i], h.w, 'equal-width bins'));
+  assert.ok(h.edges[0] <= 148 && h.edges[h.edges.length - 1] > 175);
+  assert.deepEqual([a.ax.lo, a.ax.hi, a.ax.step], [h.edges[0], h.edges[h.edges.length - 1], h.w]);
+  assert.ok(a.ay.step >= 1 && a.ay.lo === 0 && a.ay.hi >= Math.max(...h.counts), 'frequency axis is whole numbers from zero');
+  s.hist = { binWidth: 5, start: 145 };
+  const h2 = G.analyse(s).hist;
+  assert.deepEqual(plain(h2.edges), [145, 150, 155, 160, 165, 170, 175, 180]);
+  assert.deepEqual(plain(h2.counts), [1, 3, 5, 5, 2, 1, 1], 'counts by [a,b): 175 belongs to 175-180');
+  assert.equal(h2.counts.reduce((x, y) => x + y, 0), 18);
+  s.hist = { binWidth: 10, start: 140 };
+  assert.deepEqual(plain(G.analyse(s).hist.counts), [1, 8, 7, 2]);
+  const key = G.renderSVG(s), bars = svg => (svg.match(/<rect [^>]*stroke="#000" stroke-width="0\.3"/g) || []).length;
+  assert.equal(bars(key), G.analyse(s).hist.counts.filter(Boolean).length);
+  s.hidden = ['pt:0:1']; assert.equal(bars(G.renderSVG(s, { version: 'question' })), bars(key) - 1);
+  s.hidden = ['data']; assert.equal(bars(G.renderSVG(s, { version: 'question' })), 0);
+  const empty = G.blankSpec(); empty.type = 'histogram';
+  assert.ok(!/NaN|undefined/.test(G.renderSVG(empty)));
+  assert.equal(G.analyse(empty).hist.counts.length, 5, 'an empty histogram still draws a usable grid');
+});
+
+test('histogram: a single column pastes straight in', () => {
+  const s = G.blankSpec(); s.type = 'histogram';
+  assert.ok(G.importGrid(s, G.parseTable('Height (cm)\n148\n151\n152\n')));
+  assert.deepEqual(plain(s.rows.map(r => r.x)), [148, 151, 152]);
+  assert.equal(s.x.label, 'Height'); assert.equal(s.x.unit, 'cm');
+  assert.deepEqual(plain(G.tableCols(s)), [{ k: 'x' }]);
+  const r = G.pasteGrid(s, [['1', '2', '3']], 0, 0);
+  assert.equal(r.ignored, 2, 'extra columns are ignored, not turned into series');
+  assert.equal(s.series.length, 1);
+});
+
+test('pie graph: slices, angles, percent/degree labels, hiding', () => {
+  const s = G.PRESETS.find(p => p.id === 'pie').build();       // 40, 25, 20, 15 -> 100
+  const key = G.renderSVG(s);
+  for (const l of ['40%', '25%', '20%', '15%', 'Apples', 'Bananas']) assert.ok(key.includes('>' + l + '<'), l);
+  assert.equal((key.match(/<path d="M[^"]*A/g) || []).length, 4);
+  s.pie.labels = 'degrees'; const deg = G.renderSVG(s);
+  for (const l of ['144\u00b0', '90\u00b0', '72\u00b0', '54\u00b0']) assert.ok(deg.includes('>' + l + '<'), l);
+  s.pie.labels = 'value'; s.y.unit = 'kg'; assert.ok(G.renderSVG(s).includes('>40 kg<'));
+  s.pie.labels = 'percent'; s.y.decimals = 0;
+  s.rows = [{ x: 'A', ys: [1], label: '' }, { x: 'B', ys: [2], label: '' }]; assert.ok(G.renderSVG(s).includes('>33%<'));
+  s.y.decimals = null; assert.ok(G.renderSVG(s).includes('>33.3%<'));
+  s.rows = [{ x: 'Only', ys: [5], label: '' }]; assert.ok(!/NaN/.test(G.renderSVG(s)), 'a single slice is a full circle');
+  const p = G.PRESETS.find(q => q.id === 'pie').build();
+  p.hidden = ['pointLabels']; let q = G.renderSVG(p, { version: 'question' });
+  assert.ok(!q.includes('>40%<') && q.includes('>Apples<'), 'values hidden, names kept');
+  p.hidden = ['xTicks']; q = G.renderSVG(p, { version: 'question' });
+  assert.ok(q.includes('>40%<') && !q.includes('>Apples<'));
+  p.hidden = ['pt:0:1']; assert.equal((G.renderSVG(p, { version: 'question' }).match(/<path d="M[^"]*A/g) || []).length, 3);
+  p.hidden = [...G.SCAFFOLD.labels]; q = G.renderSVG(p, { version: 'question' });
+  assert.ok(!q.includes('<path d="M') && q.includes('<circle'), 'a hidden pie leaves the empty circle to draw on');
+  const z = G.blankSpec(); z.type = 'pie'; assert.ok(!/NaN|undefined/.test(G.renderSVG(z)));
+  const neg = G.blankSpec(); neg.type = 'pie'; neg.rows = [{ x: 'a', ys: [-3], label: '' }, { x: 'b', ys: [4], label: '' }];
+  assert.ok(!/NaN|undefined/.test(G.renderSVG(neg)), 'negative amounts count as zero');
+});
+
+test('pie slices add up to a full turn', () => {
+  const s = G.PRESETS.find(p => p.id === 'pie').build();
+  const svg = G.renderSVG(s), cx = 165 / 2;
+  const arcs = [...svg.matchAll(/<path d="M[\d.-]+,[\d.-]+L([\d.-]+),([\d.-]+)A/g)];
+  assert.equal(arcs.length, 4);
+  const cy = +[...svg.matchAll(/<circle cx="[\d.]+" cy="([\d.]+)" r="([\d.]+)" fill="none"/g)].pop()[1];   // the outline circle (patterns have circles too)
+  const angs = arcs.map(m => (Math.atan2(+m[2] - cy, +m[1] - cx) * 180 / Math.PI + 90 + 360) % 360);
+  const deg = (a, b, m) => assert.ok(Math.abs(a - b) < 0.05, `${m || ''} ${a} vs ${b}`);   // coordinates are rounded to 0.001 mm
+  deg(angs[0], 0, 'first slice starts at twelve o\u2019clock'); deg(angs[1], 144); deg(angs[2], 234); deg(angs[3], 306);
+});
+
+test('number line: ticks, marks, inequality notation, hiding', () => {
+  const s = G.PRESETS.find(p => p.id === 'numberline').build();
+  const key = G.renderSVG(s);
+  assert.ok(key.includes('>\u221210<') && key.includes('>0<') && key.includes('>10<'));
+  assert.ok(key.includes('>x \u2265 2<'), 'notation label');
+  const dots = svg => [...svg.matchAll(/<circle [^>]*r="1\.7[^"]*" fill="([^"]+)"/g)].map(m => m[1]);
+  assert.deepEqual(dots(key), ['#000'], 'x \u2265 2 has a closed dot');
+  s.marks[0].op = 'gt'; assert.deepEqual(dots(G.renderSVG(s)), ['#fff'], 'x > 2 has an open dot');
+  s.marks = [{ kind: 'point', at: -3, to: 0, op: 'ge', closed: true, closedTo: true, label: '' },
+             { kind: 'interval', at: 1, to: 6, op: 'ge', closed: false, closedTo: true, label: '1 < x \u2264 6' }];
+  assert.deepEqual(dots(G.renderSVG(s)), ['#000', '#fff', '#000']);
+  s.hidden = ['mark:0']; assert.equal(dots(G.renderSVG(s, { version: 'question' })).length, 2);
+  s.hidden = [...G.SCAFFOLD.blank]; const q = G.renderSVG(s, { version: 'question' });
+  assert.equal(dots(q).length, 0); assert.ok(!/>\u221210</.test(q) && q.includes('<path d="M'), 'blank number line: axis and ticks only');
+  s.x.format = 'fraction'; s.x.min = -2; s.x.max = 2; s.x.step = 0.5; s.hidden = [];
+  const fr = G.renderSVG(s); assert.ok(fr.includes('>\u22121 1/2<') && fr.includes('>1/2<'), 'fractions on a number line');
+  const dims = G.svgSize(s); assert.equal(dims.w, 165); assert.ok(dims.h < 50, 'height follows the content');
+  s.style.largePrint = true; assert.ok(G.svgSize(s).h > dims.h);
+  const empty = G.blankSpec(); empty.type = 'numberline'; assert.ok(!/NaN|undefined/.test(G.renderSVG(empty)));
+  assert.equal(OPS_OK(G), true);
+});
+const OPS_OK = G => ['lt', 'le', 'gt', 'ge'].every(k => typeof G.OP_SYMBOL[k] === 'string');
+
+test('new types work with scaffold levels, hiding, colour, print styles and exports (one code path)', () => {
+  const kinds = ['function', 'transform', 'numberline', 'histogram', 'pie', 'grid4', 'science-line'];
+  for (const id of kinds) for (const level of ['complete', 'labels', 'axes', 'blank']) for (const variant of ['plain', 'colour', 'large', 'safe', 'misc']) {
+    const s = G.PRESETS.find(p => p.id === id).build();
+    s.hidden = [...G.SCAFFOLD[level]]; s.blanks = ['title', 'xTitle', 'yTitle', 'units'];
+    s.title = 'T'; s.x.label = 'X'; s.x.unit = 'u'; s.y.label = 'Y'; s.y.unit = 'v';
+    s.annotations = [{ kind: 'callout', text: 'n', x: 1, y: 1, x2: 2, y2: 2 }]; s.regions = [{ from: 1, to: 2, label: 'A', shade: 'hatch' }];
+    if (variant === 'colour') s.style.colour = true;
+    if (variant === 'large') s.style.largePrint = true;
+    if (variant === 'safe') s.style.photocopySafe = true;
+    if (variant === 'misc') { s.legend = 'bottom'; s.axes = 'origin'; s.misleading.unevenY = true; s.misleading.shape = 'wide'; s.scale = { lock: true, mm: 8 }; }
+    const n = G.normalize(s);
+    for (const version of ['key', 'question']) {
+      const svg = G.renderSVG(n, { version, ghost: true, hits: true, flags: new Set(['0:0']), geom: {} });
+      assert.ok(svg.startsWith('<svg') && svg.endsWith('</svg>'), [id, level, variant, version].join('/'));
+      assert.ok(!/NaN|undefined|Infinity/.test(svg), [id, level, variant, version].join('/') + ' has a bad number');
+      assert.ok(/viewBox="0 0 [\d.]+ [\d.]+"/.test(svg));
+    }
+    assert.equal(G.serialize(G.parseFile(G.serialize(n))), G.serialize(n));
+    assert.equal(G.renderSVG(G.parseFile(G.serialize(n))), G.renderSVG(n), 'save/load draws the identical graph');
+    assert.ok(Array.isArray(G.readability(n)));
+    G.snapValues(G.normalize(n));                                    // never throws on any type
+  }
+});
+
+test('question versions keep the same page and plot as the key for every new type', () => {
+  for (const id of ['histogram', 'pie', 'numberline', 'function']) {
+    const s = G.PRESETS.find(p => p.id === id).build(); s.title = 'Title'; s.x.label = 'X'; s.y.label = 'Y';
+    const size = svg => /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg).slice(1).join('x');
+    const base = size(G.renderSVG(s, { version: 'key' }));
+    for (const level of ['labels', 'axes', 'blank']) { s.hidden = [...G.SCAFFOLD[level]]; assert.equal(size(G.renderSVG(s, { version: 'question' })), base, id + '/' + level); }
+    const clip = svg => (/<clipPath[^>]*><rect ([^>]*)\/>/.exec(svg) || [])[1];
+    if (id !== 'pie' && id !== 'numberline') { s.hidden = []; const k = clip(G.renderSVG(s)); for (const level of ['labels', 'axes', 'blank']) { s.hidden = [...G.SCAFFOLD[level]]; assert.equal(clip(G.renderSVG(s, { version: 'question' })), k, id + '/' + level); } }
+  }
+});
+
+test('v2 files migrate to v3 with defaults for the new fields', () => {
+  const v2 = plain(G.sampleSpec());
+  for (const k of ['fit', 'functions', 'shapes', 'marks', 'hist', 'pie']) delete v2[k];
+  v2.specVersion = 2;
+  const s = G.parseFile(JSON.stringify(v2));
+  assert.equal(s.specVersion, 3); assert.equal(s.fit.mode, 'none'); assert.deepEqual(plain(s.functions), []);
+  assert.equal(s.pie.labels, 'percent'); assert.equal(s.hist.binWidth, null);
+  assert.equal(G.renderSVG(s), G.renderSVG(G.sampleSpec()), 'an old graph draws exactly as before');
+});
+
+test('normalize sanitises the new fields', () => {
+  const s = G.normalize({ type: 'pie', fit: { mode: 'weird', series: 9, slope: 'x' }, functions: [{ expr: 5 }, null],
+    shapes: [{ kind: 'blob', points: [{ x: 'a', y: 2 }, null] }], marks: [{ kind: 'zzz', op: 'no', at: 'q' }],
+    hist: { binWidth: -2, start: 'x' }, pie: { labels: 'nope' }, hidden: ['fn:1', 'fn:2', 'shape:0', 'shape:3', 'mark:0', 'mark:1', 'fit'] });
+  assert.equal(s.fit.mode, 'none'); assert.equal(s.fit.series, 0); assert.equal(s.fit.slope, 0);
+  assert.deepEqual(plain(s.functions.map(f => f.expr)), ['', '']);
+  assert.deepEqual(plain(s.shapes[0].points), [{ x: 0, y: 2 }, { x: 0, y: 0 }]); assert.equal(s.shapes[0].kind, 'polygon');
+  assert.equal(s.marks[0].kind, 'point'); assert.equal(s.marks[0].op, 'ge'); assert.equal(s.marks[0].at, 0);
+  assert.equal(s.hist.binWidth, null); assert.equal(s.hist.start, null); assert.equal(s.pie.labels, 'percent');
+  assert.deepEqual(plain(s.hidden), ['fn:1', 'shape:0', 'mark:0', 'fit']);
+  const h = G.normalize({ type: 'histogram', hidden: ['pt:0:40'] }); assert.deepEqual(plain(h.hidden), ['pt:0:40'], 'histogram tokens count bins');
+  const l = G.normalize({ type: 'line', hidden: ['pt:0:40'] }); assert.deepEqual(plain(l.hidden), []);
+  const d = { shapes: [{}, {}, {}], hidden: ['shape:0', 'shape:1', 'shape:2', 'fn:0'], functions: [{}] };
+  const n = G.normalize(d); n.shapes.splice(1, 1); G.dropIndex(n, 'shape', 1);
+  assert.deepEqual(plain(n.hidden), ['shape:0', 'shape:1', 'fn:0']);
+});
+
+test('only the digits after ^ are raised, so "x^2 - 4" keeps its minus on the line', () => {
+  const s = G.PRESETS.find(p => p.id === 'function').build(); s.functions[0].expr = 'x^2 - 4';
+  const svg = G.renderSVG(s);
+  assert.match(svg, />y = x<tspan dy="-[\d.]+" font-size="[\d.]+">2<\/tspan><tspan dy="[\d.]+"> - 4<\/tspan><\/text>/);
+  s.functions[0].expr = '2^-1x'; assert.ok(!/NaN|undefined/.test(G.renderSVG(s)));
+});
+
+test('coordinate grids use whole-unit steps once they are a few units wide', () => {
+  const s = G.PRESETS.find(p => p.id === 'transform').build();     // shapes only reach 5
+  const ax = G.computeAxes(s); assert.equal(ax.x.step, 1); assert.equal(ax.y.step, 1);
+  const tiny = G.PRESETS.find(p => p.id === 'grid4').build(); tiny.rows = [{ x: 0.5, ys: [1.5], label: '' }];
+  assert.ok(G.computeAxes(tiny).x.step < 1, 'a grid only 1.5 wide still gets fine steps');
+});
+
+test('histograms never get an axis-break zigzag over their bars', () => {
+  const s = G.PRESETS.find(p => p.id === 'histogram').build(); s.hist = { binWidth: 5, start: 145 };
+  assert.ok(!/<rect x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" fill="#fff"\/><polyline/.test(G.renderSVG(s)));
 });
