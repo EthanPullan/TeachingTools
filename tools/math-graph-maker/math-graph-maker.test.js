@@ -20,7 +20,8 @@ const G = vm.runInNewContext(core + `;({ SPEC_VERSION, TOOL, SCAFFOLD, SCAFFOLD_
   interceptPoints, intersectionPoints, lineCross, slopeTriangle, suggestXs, relatedEq,
   resolveObjects, readability, snapPoints, pasteRows, dropRow, fillRows, tableLayout, MAX_ROWS, TABLE_COLS,
   analyseLine, applyLinePreset, dropLineRow, ineqSegments, ineqText, intervalText, setText, noteTexts, signChartData, findPoles, valText, renderNumberLine, LINE_PRESETS,
-  translatePt, reflectPt, rotatePt, dilatePt, mirrorLine, parseK, transformer, transformWords, transformMapping, primes, stripPrimes })`, {});
+  translatePt, reflectPt, rotatePt, dilatePt, mirrorLine, parseK, transformer, transformWords, transformMapping, primes, stripPrimes,
+  polyArea, polyPerimeter, pointInPoly, cellsInside, symmetryOf, rightAngles, equalGroups, distanceText, circleEq, sideSquares, pythagText, shapeOf })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -1247,4 +1248,118 @@ test('transformations: spec round trip, idempotent normalize, names, extent grow
   assert.equal(G.objName(n.objects[1], n.objects), 'Rotation of Polygon ABC');
   const big = tfSpec({ how: 'dilate', k: 10, center: { x: 0, y: 0 } }); const A = G.analyse(big);
   assert.ok(A.ax.hi >= 40 && A.ay.hi >= 30, 'the window grows to show the image: ' + A.ax.hi + ',' + A.ay.hi);
+});
+
+
+/* ================= Phase 4B: geometry on the grid ================= */
+const pts = v => v.map(([x, y]) => ({ x, y }));
+const geoSpec = (verts, kind, props, extra) => {
+  const s = Object.assign(G.blankSpec(), extra || {});
+  s.objects.push(G.makeObject(s, 'polygon', { vertices: verts, labels: verts.map((_, i) => 'ABCDEFGH'[i]) }));
+  if (kind) s.objects.push(G.makeObject(s, kind, Object.assign({ of: 'pg1' }, props)));
+  return s;
+};
+const RECT = [[-4, -2], [4, -2], [4, 2], [-4, 2]], SQUARE = [[-3, -3], [3, -3], [3, 3], [-3, 3]], ISO = [[-3, -3], [3, -3], [0, 4]], LSHAPE = [[-3, -3], [3, -3], [3, 0], [0, 0], [0, 3], [-3, 3]];
+const REGULAR = n => Array.from({ length: n }, (_, k) => [Math.cos(2 * Math.PI * k / n) * 4, Math.sin(2 * Math.PI * k / n) * 4]);
+
+test('area, perimeter and unit squares', () => {
+  assert.equal(G.polyArea(pts(RECT)), 32); assert.equal(G.polyPerimeter(pts(RECT), true), 24);
+  assert.equal(G.polyArea(pts([[0, 0], [5, 0], [0, 3]])), 7.5); assert.equal(G.polyArea(pts([[0, 0], [1, 1]])), 0);
+  assert.equal(G.polyArea(pts(RECT.slice().reverse())), 32, 'orientation does not matter');
+  assert.equal(G.polyPerimeter(pts([[0, 0], [3, 4]]), false), 5, 'an open path is not closed');
+  assert.ok(Math.abs(G.polyPerimeter(pts([[0, 0], [3, 0], [0, 4]]), true) - 12) < 1e-9);
+  assert.equal(G.cellsInside(pts(LSHAPE)).length, 27, 'counting squares gives the exact area for a shape drawn along gridlines');
+  assert.equal(G.polyArea(pts(LSHAPE)), 27);
+  assert.equal(G.cellsInside(pts([[0, 0], [2, 0]])).length, 0);
+  assert.ok(G.pointInPoly({ x: 0.5, y: 0.5 }, pts([[0, 0], [2, 0], [2, 2], [0, 2]])) && !G.pointInPoly({ x: 3, y: 1 }, pts([[0, 0], [2, 0], [2, 2], [0, 2]])));
+});
+
+test('symmetry: lines and rotational order for known shapes (properties)', () => {
+  const S = v => G.symmetryOf(pts(v), true), count = v => S(v).lines.length, order = v => S(v).order;
+  assert.deepEqual([count(RECT), order(RECT)], [2, 2]); assert.deepEqual([count(SQUARE), order(SQUARE)], [4, 4]);
+  assert.deepEqual([count(ISO), order(ISO)], [1, 1]); assert.deepEqual([count(LSHAPE), order(LSHAPE)], [1, 1]);
+  assert.deepEqual([count([[0, 0], [4, 0], [5, 2], [1, 2]]), order([[0, 0], [4, 0], [5, 2], [1, 2]])], [0, 2], 'a parallelogram: none, but order 2');
+  assert.deepEqual([count([[0, 0], [2, 0], [3, 2], [1, 2]]), order([[0, 0], [2, 0], [3, 2], [1, 2]])], [0, 2]);
+  assert.deepEqual([count([[0, 0], [4, 0], [3, 2], [1, 2]])], [1], 'an isosceles trapezoid: one line');
+  assert.deepEqual([count([[0, 0], [2, 0], [4, 3], [0, 3]])], [0], 'a right trapezoid: none');
+  assert.deepEqual([count([[2, 0], [0, 3], [-2, 0], [0, -3]]), order([[2, 0], [0, 3], [-2, 0], [0, -3]])], [2, 2], 'a rhombus');
+  for (const n of [3, 4, 5, 6, 8]) assert.deepEqual([count(REGULAR(n)), order(REGULAR(n))], [n, n], 'regular ' + n + '-gon');
+  assert.deepEqual([count([[0, 0], [3, 0], [3, 1], [1, 1], [1, 3], [0, 3]])], [1], 'an L: the diagonal');
+  assert.equal(count([[0, 0], [4, 0], [4, 2], [3, 2], [3, 1], [1, 1], [1, 2], [0, 2]]), 1, 'a U: the vertical through its centre');
+  assert.equal(count([[0, 0], [4, 0], [4, 1], [3, 1], [3, 2], [2, 2], [2, 1], [1, 1], [1, 2], [0, 2]]), 0, 'a lopsided castle wall');
+  const T = G.symmetryOf(pts([[0, 0], [2, 0], [1, 1]]), true); assert.deepEqual(plain(T.lines.map(l => [l.dx, l.dy])), [[0, 1]], 'the line comes back as a unit direction');
+  assert.deepEqual(plain(G.symmetryOf(pts([[0, 0], [1, 1], [2, 0]]), false).lines.length), 1, 'an open V has one line');
+  /* rotating or moving a symmetric shape keeps its symmetry */
+  const shifted = REGULAR(6).map(([x, y]) => [x + 7.5, y - 2]); assert.equal(count(shifted), 6);
+});
+
+test('right angles and equal sides', () => {
+  assert.deepEqual(plain(G.rightAngles(pts(RECT), true)), [0, 1, 2, 3]); assert.deepEqual(plain(G.rightAngles(pts(ISO), true)), []);
+  assert.deepEqual(plain(G.rightAngles(pts([[0, 0], [3, 0], [3, 4]]), true)), [1]);
+  assert.deepEqual(plain(G.rightAngles(pts([[0, 0], [3, 0], [3, 4]]), false)), [1]); assert.deepEqual(plain(G.rightAngles(pts([[0, 0], [3, 0], [3, 4], [0, 4]]), false)), [1, 2], 'ends of an open path have no corner');
+  assert.deepEqual(plain(G.equalGroups(pts(RECT), true)), [{ edge: 0, count: 1 }, { edge: 1, count: 2 }, { edge: 2, count: 1 }, { edge: 3, count: 2 }]);
+  assert.deepEqual(plain(G.equalGroups(pts(ISO), true)), [{ edge: 1, count: 1 }, { edge: 2, count: 1 }], 'isosceles: the two equal sides, base unmarked');
+  assert.deepEqual(plain(G.equalGroups(pts(SQUARE), true)).map(e => e.count), [1, 1, 1, 1]);
+  assert.deepEqual(plain(G.equalGroups(pts([[0, 0], [3, 0], [3, 4]]), true)), [], 'a scalene triangle has no equal sides');
+});
+
+test('distance and midpoint text; circle equation; Pythagorean squares', () => {
+  assert.equal(G.distanceText({ x: 0, y: 0 }, { x: 3, y: 4 }), 'd = √(3² + 4²) = 5');
+  assert.equal(G.distanceText({ x: -3, y: -2 }, { x: 4, y: 3 }), 'd = √(7² + 5²) = √74 ≈ 8.6');
+  assert.equal(G.distanceText({ x: 0, y: 0 }, { x: 1.5, y: 2 }), 'd = √(1.5² + 2²) = 2.5');
+  assert.equal(G.circleEq(0, 0, 3), 'x^2 + y^2 = 9'); assert.equal(G.circleEq(2, -1, 5), '(x − 2)^2 + (y + 1)^2 = 25'); assert.equal(G.circleEq(0, 2, 1.5), 'x^2 + (y − 2)^2 = 2.25');
+  const sq = G.sideSquares(pts([[0, 0], [3, 0], [3, 4]]));
+  assert.deepEqual(plain(sq.map(q => q.area)), [9, 16, 25]); assert.equal(G.pythagText(sq), '3² + 4² = 5²');
+  assert.equal(G.pythagText(G.sideSquares(pts([[0, 0], [3, 0], [3, 3]]))), '9 + 9 = 18', 'irrational hypotenuse: use areas');
+  assert.equal(G.pythagText(G.sideSquares(pts([[0, 0], [4, 0], [4, 4.5]]))).includes('≠'), false);
+  assert.equal(G.pythagText(G.sideSquares(pts([[0, 0], [3, 0], [3, 5]]))), '9 + 25 = 34');
+  assert.match(G.pythagText(G.sideSquares(pts([[0, 0], [4, 0], [1, 3]]))), /≠/, 'not a right triangle');
+  const outward = G.sideSquares(pts([[0, 0], [3, 0], [3, 4]])), cw = G.sideSquares(pts([[0, 0], [3, 4], [3, 0]]));
+  const inside = (P, q) => G.pointInPoly(q.centre, P);
+  assert.ok(outward.every(q => !inside(pts([[0, 0], [3, 0], [3, 4]]), q)) && cw.every(q => !inside(pts([[0, 0], [3, 4], [3, 0]]), q)), 'squares go outward for either orientation');
+});
+
+test('geometry objects: resolve, captions, hiding, and the same page in the question', () => {
+  const vb = v => /viewBox="([^"]+)"/.exec(v)[1];
+  const cap = s => plain(G.resolveObjects(s).res(s.objects[s.objects.length - 1].id)).shape && G.OBJECT_KINDS[s.objects[s.objects.length - 1].kind].captions(G.resolveObjects(s).res(s.objects[s.objects.length - 1].id));
+  let s = geoSpec(LSHAPE, 'areacount', { area: true, perimeter: true });
+  assert.deepEqual(plain(cap(s)), [{ head: 'Area', text: '27 square units' }, { head: 'Perimeter', text: '24 units' }]);
+  s.objects[1].unit = 'cm'; assert.deepEqual(plain(cap(s)).map(l => l.text), ['27 cm²', '24 cm']);
+  s = geoSpec([[0, 0], [5, 0], [0, 3]], 'areacount', { area: true, perimeter: true }); assert.match(plain(cap(s))[1].text, /^≈ 13\.83 units$/);
+  s = geoSpec(RECT, 'symmetry', { count: true, order: true });
+  assert.deepEqual(plain(cap(s)), [{ head: 'Lines of symmetry', text: '2' }, { head: 'Order of rotational symmetry', text: '2' }]);
+  s = geoSpec([[0, 0], [3, 0], [3, 4]], 'pythag', { equation: true }); assert.deepEqual(plain(cap(s)), [{ head: 'Pythagorean theorem', text: '3² + 4² = 5²' }]);
+  assert.ok(G.analyse(s).ay.hi >= 7, 'the window grows to fit the squares');
+  const p = geoSpec([[0, 0], [3, 0], [3, 4]], 'pythag', { equation: true, areas: true });
+  const key = G.renderSVG(p, { version: 'key' }); noBad(key); assert.ok(/data-obj="py1"/.test(key) && />25</.test(key));
+  const q1 = G.renderSVG(Object.assign({}, p, { hidden: ['py1'] }), { version: 'question' });
+  assert.ok(!/data-obj="py1"/.test(q1) && !/>25</.test(q1) && /Pythagorean theorem/.test(q1) && vb(q1) === vb(key), 'the squares hide by name, the equation by "notation"');
+  const q2 = G.renderSVG(Object.assign({}, p, { hidden: ['results'] }), { version: 'question' }); assert.ok(!/>25</.test(q2) && /data-obj="py1"/.test(q2) && vb(q2) === vb(key));
+  /* measure */
+  const m = G.blankSpec(); pt(m, { x: -3, y: -2, label: 'A' }); pt(m, { x: 4, y: 3, label: 'B' }); m.objects.push(G.makeObject(m, 'measure', { of: ['pt1', 'pt2'], legs: 'labelled', mid: 'labelled', distance: true, midpoint: true }));
+  const mk = G.renderSVG(m, { version: 'key' }); noBad(mk); const mt = plainText(mk); assert.ok(/Δx = 7/.test(mt) && /Δy = 5/.test(mt) && /M\(0\.5, 0\.5\)/.test(mt) && /Midpoint: \(0\.5, 0\.5\)/.test(mt) && /Distance: d = √\(7² \+ 5²\)/.test(mt), mt);
+  const mq = G.renderSVG(Object.assign({}, m, { hidden: ['results', 'notation'], blanks: ['notation'] }), { version: 'question' });
+  const qt = plainText(mq); assert.ok(!/Δx|M\(/.test(qt) && /Distance: _+/.test(qt) && !/√/.test(qt) && vb(mq) === vb(mk), 'answers and text hidden, page unchanged');
+  G.removeObject(m, 'pt2'); assert.equal(m.objects[m.objects.length - 1].of[1], '', 'deleting an endpoint clears the pointer'); assert.match(G.readability(m)[0].text, /choose two points/); noBad(G.renderSVG(m, {}));
+  /* circle */
+  const c = G.blankSpec(); c.objects.push(G.makeObject(c, 'circle', { cx: 1, cy: -1, r: 4, radius: true, centre: 'coords', equation: true }));
+  const ck = G.renderSVG(c, {}); noBad(ck); assert.ok(/<ellipse/.test(ck) && /r = 4/.test(ck) && /Equation:/.test(ck) && /\(1, −1\)/.test(ck));
+  const A = G.analyse(c); assert.ok(A.ax.lo <= -3 && A.ax.hi >= 5 && A.ay.lo <= -5 && A.ay.hi >= 3, 'the window shows the whole circle');
+  c.objects[0].r = 0; assert.match(G.readability(c)[0].text, /radius above zero/); noBad(G.renderSVG(c, {}));
+  /* marks and a shape that is not there */
+  s = geoSpec(RECT, 'mark', { what: 'equal', at: -1 }); assert.equal((G.renderSVG(s, {}).match(/<line /g) || []).length - (G.renderSVG(geoSpec(RECT), {}).match(/<line /g) || []).length, 6, 'ticks: 1+2+1+2');
+  s = geoSpec(RECT, 'mark', { what: 'rightangle', at: 2 }); assert.equal((G.renderSVG(s, {}).match(/<polyline /g) || []).length - (G.renderSVG(geoSpec(RECT), {}).match(/<polyline /g) || []).length, 1, 'one marker, at vertex C');
+  s = geoSpec(RECT, 'symmetry', {}); G.removeObject(s, 'pg1'); assert.match(G.readability(s)[0].text, /choose a polygon/); noBad(G.renderSVG(s, {}));
+  s = geoSpec(RECT, 'symmetry', {}); s.objects[1].of = 'sy1'; noBad(G.renderSVG(s, {}));
+});
+
+test('geometry works on a transformation image; edits follow; spec round trip', () => {
+  const s = geoSpec([[1, 1], [4, 1], [4, 3], [1, 3]]);
+  s.objects.push(G.makeObject(s, 'transform', { of: 'pg1', how: 'translate', dx: 5, dy: 0 }), G.makeObject(s, 'areacount', { of: 'tf1', area: true }));
+  const R = () => G.resolveObjects(s).res('ac1'); assert.equal(R().area, 6);
+  s.objects[0].vertices[1] = [5, 1]; s.objects[0].vertices[2] = [5, 3]; assert.equal(R().area, 8, 'edit the original, the image and its area follow');
+  const n = G.normalize(s); assert.deepEqual(plain(G.normalize(n)), plain(n)); assert.deepEqual(plain(G.parseFile(G.serialize(n))), plain(n));
+  assert.equal(G.objName(n.objects[2], n.objects), 'Area and perimeter of Translation of Polygon ABCD');
+  const many = G.normalize({ objects: [{ kind: 'mark', at: 999, count: 9, what: 'x' }, { kind: 'measure', of: 'oops' }, { kind: 'circle', centre: 'spiral' }] });
+  assert.deepEqual(plain(many.objects.map(o => o.kind)), ['mark', 'measure', 'circle']); assert.equal(many.objects[0].count, 4); assert.equal(many.objects[0].what, 'rightangle'); assert.deepEqual(plain(many.objects[1].of), ['', '']); assert.equal(many.objects[2].centre, 'dot');
 });

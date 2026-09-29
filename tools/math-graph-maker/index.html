@@ -50,8 +50,8 @@
   .main{flex:1;display:flex;min-height:0;}
   .panel{width:400px;flex:none;background:var(--panel);border-right:1px solid var(--line);
     display:flex;flex-direction:column;min-height:0;}
-  .tabs{display:flex;border-bottom:1px solid var(--line);}
-  .tab{flex:1;border:none;background:none;padding:11px 2px;cursor:pointer;font-weight:600;
+  .tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto;}
+  .tab{flex:1 1 auto;border:none;background:none;padding:11px 4px;white-space:nowrap;cursor:pointer;font-weight:600;
     font-size:12px;color:var(--muted);border-bottom:2px solid transparent;letter-spacing:.02em;}
   .tab:hover{color:var(--ink);}
   .tab.active{color:var(--board);border-bottom-color:var(--accent);}
@@ -188,8 +188,9 @@
     <aside class="panel">
       <nav class="tabs" id="tabs" role="tablist">
         <button class="tab active" data-tab="graph" role="tab">Graph</button>
-        <button class="tab" data-tab="objects" data-types="plane" role="tab">Points &amp; shapes</button>
+        <button class="tab" data-tab="objects" data-types="plane" role="tab">Shapes</button>
         <button class="tab" data-tab="functions" data-types="plane" role="tab">Equations</button>
+        <button class="tab" data-tab="geometry" data-types="plane" role="tab">Geometry</button>
         <button class="tab" data-tab="line" data-types="numberline" role="tab" hidden>Number line</button>
         <button class="tab" data-tab="axes" role="tab">Axes</button>
         <button class="tab" data-tab="test" role="tab">Test</button>
@@ -253,6 +254,9 @@
           <div id="transformsWrap"></div>
           <p class="hint">You can also click on the graph: turn on “Click to add points” above the preview. Drag a point or a corner to move it. In the table, paste a block copied from Excel or Google Sheets into any cell (label, x, y or just x, y). Enter moves down. Red cells aren’t numbers and are left off the graph.</p>
         </section>
+
+        <!-- GEOMETRY -->
+        <section class="pane" data-pane="geometry" hidden id="geometryPane"></section>
 
         <!-- EQUATIONS -->
         <section class="pane" data-pane="functions" hidden id="functionsPane"></section>
@@ -974,7 +978,11 @@ function removeObject(spec, id) {
   });
 }
 const vertsOf = o => o.vertices.map((v, k) => ({ x: parseNum(v[0]), y: parseNum(v[1]), label: o.labels[k] || '', k })).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
-const objName = (o, all, depth) => o.kind === 'transform' ? HOW_NAMES[o.how] + ' of ' + ((() => { const s = all && o.of && (depth || 0) < 8 ? all.find(x => x.id === o.of) : null; return s ? objName(s, all, (depth || 0) + 1) : o.of || '…'; })())
+const ofName = (o, all, depth) => { const src = all && o.of && (depth || 0) < 8 ? all.find(x => x.id === o.of) : null; return src ? objName(src, all, (depth || 0) + 1) : o.of || '…'; };
+const objName = (o, all, depth) => ['symmetry', 'areacount', 'pythag', 'mark'].includes(o.kind) ? OBJECT_KINDS[o.kind].name + ' of ' + ofName(o, all, depth)
+  : o.kind === 'measure' ? 'Distance and midpoint' + (o.of[0] && o.of[1] ? ' ' + o.of.join('–') : '')
+  : o.kind === 'circle' ? 'Circle' + (!isBlank(o.r) ? ', radius ' + o.r : '')
+  : o.kind === 'transform' ? HOW_NAMES[o.how] + ' of ' + ofName(o, all, depth)
   : o.kind === 'point' ? 'Point' + (o.label ? ' ' + o.label : '')
   : o.kind === 'function' ? 'Equation ' + (o.expr.trim() || '(empty)')
   : o.kind === 'related' ? (o.rel === 'parallel' ? 'Parallel line' : 'Perpendicular line')
@@ -1387,6 +1395,8 @@ function readability(spec) {
   const perp = objs.some(o => o.kind === 'related' && o.rel === 'perpendicular' && o.rightAngle);
   const stepsDiffer = Math.abs(A.ax.step - A.ay.step) > 1e-9;
   objs.forEach(o => {
+    const todo = OBJECT_KINDS[o.kind].todo && OBJECT_KINDS[o.kind].todo(o);
+    if (todo) { issues.push({ id: o.id, text: objName(o, spec.objects) + ': ' + todo }); return; }
     if (o.kind === 'point') {
       const x = parseNum(o.x), y = parseNum(o.y);
       if (isFin(x) && isFin(y) && insidePlane(x, y, A) && !(onG(x, A.ax) && onG(y, A.ay))) issues.push({ id: o.id, fix: 'snap', text: objName(o) + ' ' + at(x, y) + ' falls between gridlines.' });
@@ -2598,6 +2608,287 @@ function transformAids(o, C) {
   return { shape, label };
 }
 
+/* ==========================================================================
+   Phase 4B: geometry on the grid. Pure helpers, then six object kinds that work on shapes already on the graph
+   (symmetry, area and perimeter by counting, squares on the sides, distance and midpoint, marks, circles).
+   ========================================================================== */
+const near2 = (p, q) => Math.abs(p.x - q.x) < 1e-7 && Math.abs(p.y - q.y) < 1e-7;
+const shoelace = pts => { let a = 0; pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; a += p.x * q.y - q.x * p.y; }); return a / 2; };
+const polyArea = pts => pts.length < 3 ? 0 : clean(Math.abs(shoelace(pts)));
+const dist2 = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+const approx = v => fmtNum(Math.round(v * 100) / 100);                 // 8.60, not 8.6023
+const polyPerimeter = (pts, closed) => clean(pts.reduce((a, p, i) => a + (i + 1 < pts.length || closed && pts.length > 2 ? dist2(p, pts[(i + 1) % pts.length]) : 0), 0));
+function pointInPoly(p, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i], b = pts[j];
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+/* Unit squares (one graph unit) whose centre lies inside the shape: for a shape drawn along gridlines this is exactly its area. */
+function cellsInside(pts) {
+  if (pts.length < 3) return [];
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y), out = [];
+  const x0 = Math.floor(Math.min(...xs)), x1 = Math.ceil(Math.max(...xs)), y0 = Math.floor(Math.min(...ys)), y1 = Math.ceil(Math.max(...ys));
+  if ((x1 - x0) * (y1 - y0) > 4000) return out;
+  for (let i = x0; i < x1; i++) for (let j = y0; j < y1; j++) if (pointInPoly({ x: i + .5, y: j + .5 }, pts)) out.push({ i, j });
+  return out;
+}
+/* Is R (the image of V point by point) the same shape as V? Closed shapes may start anywhere and run either way round. */
+function mapsOnto(V, R, closed) {
+  const n = V.length;
+  if (!closed) return R.every((p, k) => near2(p, V[k])) || R.every((p, k) => near2(p, V[n - 1 - k]));
+  for (let s = 0; s < n; s++) for (const d of [1, -1]) if (R.every((p, k) => near2(p, V[(((s + d * k) % n) + n) % n]))) return true;
+  return false;
+}
+/* Lines of symmetry (each a point and a unit direction) and the order of rotational symmetry (1 = none), about the vertex mean. */
+function symmetryOf(pts, closed) {
+  const n = pts.length;
+  if (n < 2) return { lines: [], order: 1, centre: null };
+  const c = { x: pts.reduce((a, p) => a + p.x, 0) / n, y: pts.reduce((a, p) => a + p.y, 0) / n };
+  const dirs = [];
+  const addDir = (dx, dy) => { const l = Math.hypot(dx, dy); if (l < 1e-9) return; dx /= l; dy /= l; if (dx < -1e-9 || (Math.abs(dx) < 1e-9 && dy < 0)) { dx = -dx; dy = -dy; } if (!dirs.some(d => Math.abs(d.x - dx) < 1e-7 && Math.abs(d.y - dy) < 1e-7)) dirs.push({ x: dx, y: dy }); };
+  pts.forEach((p, i) => {
+    addDir(p.x - c.x, p.y - c.y);
+    const q = pts[(i + 1) % n];
+    if (i + 1 < n || closed) { addDir((p.x + q.x) / 2 - c.x, (p.y + q.y) / 2 - c.y); addDir(q.x - p.x, q.y - p.y); addDir(-(q.y - p.y), q.x - p.x); }
+  });
+  const lines = dirs.filter(d => mapsOnto(pts, pts.map(p => reflectPt(p, { a: -d.y, b: d.x, c: -d.y * c.x + d.x * c.y })), closed)).map(d => ({ x: c.x, y: c.y, dx: clean(d.x), dy: clean(d.y) }));
+  let order = 1;
+  for (let m = 2; m <= Math.max(2, n); m++) if (mapsOnto(pts, pts.map(p => rotatePt(p, c, 360 / m, false)), closed)) order = m;
+  return { lines, order, centre: c };
+}
+function rightAngles(pts, closed) {
+  const n = pts.length, out = [];
+  if (n < 3) return out;
+  for (let k = 0; k < n; k++) {
+    if (!closed && (k === 0 || k === n - 1)) continue;
+    const a = pts[(k + n - 1) % n], v = pts[k], b = pts[(k + 1) % n], u = [a.x - v.x, a.y - v.y], w = [b.x - v.x, b.y - v.y], lu = Math.hypot(...u), lw = Math.hypot(...w);
+    if (lu > 1e-9 && lw > 1e-9 && Math.abs(u[0] * w[0] + u[1] * w[1]) / (lu * lw) < 1e-9) out.push(k);
+  }
+  return out;
+}
+/* Edges of equal length share a tick count: 1, 2, 3, … per group; an edge with no partner gets none. Edge k runs from vertex k to k + 1. */
+function equalGroups(pts, closed) {
+  const n = pts.length, m = closed ? n : n - 1, len = [], groups = [], out = [];
+  for (let k = 0; k < m; k++) len.push(dist2(pts[k], pts[(k + 1) % n]));
+  len.forEach((l, k) => { let g = groups.findIndex(v => Math.abs(v.l - l) <= 1e-7 * Math.max(1, l)); if (g < 0) { groups.push({ l, edges: [] }); g = groups.length - 1; } groups[g].edges.push(k); });
+  let count = 0;
+  groups.forEach(g => { if (g.edges.length > 1) { count++; g.edges.forEach(k => out.push({ edge: k, count: Math.min(count, 4) })); } });
+  return out.sort((p, q) => p.edge - q.edge);
+}
+/* d = √(3² + 4²) = 5 */
+function distanceText(a, b) {
+  const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y), n = clean(dx * dx + dy * dy), d = Math.sqrt(n), sq = v => fmtNum(v) + '²';
+  const r3 = Math.round(d * 1000) / 1000, exact = Math.abs(r3 * r3 - n) < 1e-9;      // 5 and 2.5 are exact; √74 is not
+  return 'd = √(' + sq(dx) + ' + ' + sq(dy) + ') ' + (exact ? '= ' + fmtNum(r3) : Number.isInteger(n) ? '= √' + fmtNum(n) + ' ≈ ' + approx(d) : '≈ ' + approx(d));
+}
+const circleEq = (cx, cy, r) => {
+  const t = (v, a) => a === 0 ? v + '^2' : '(' + v + ' ' + (a > 0 ? MINUS : '+') + ' ' + fmtNum(Math.abs(a)) + ')^2';
+  return t('x', cx) + ' + ' + t('y', cy) + ' = ' + fmtNum(clean(r * r));
+};
+/* The points of a shape, a point, or a transformation's image, or null. */
+function shapeOf(src) {
+  if (!src) return null;
+  if (src.kind === 'polygon' || src.kind === 'path') { const pts = vertsOf(src).map(p => ({ x: p.x, y: p.y, label: p.label })); return { pts, closed: src.kind === 'polygon' && pts.length > 2 }; }
+  if (src.kind === 'transform' && src.img && src.img.ok) { const pts = src.img.pts.filter(p => isFin(p.x) && isFin(p.y)); return { pts, closed: src.img.shape === 'polygon' && pts.length > 2 }; }
+  return null;
+}
+const SHAPE_KINDS = ['polygon', 'path', 'transform'];
+const ofNorm = r => vStr(r.of, '');
+const resolveShape = (o, res) => ({ shape: shapeOf(res(o.of)) });
+const geomStroke = (C, w) => `stroke="${C.col}" stroke-width="${C.lw(w)}"`;
+const dashAttr = d => DASHES[d] ? ` stroke-dasharray="${DASHES[d]}"` : '';
+const unitText = (unit, sq) => unit ? unit + (sq ? '²' : '') : sq ? 'square units' : 'units';
+
+/* ---------- lines and order of symmetry ---------- */
+OBJECT_KINDS.symmetry = {
+  name: 'Symmetry', prefix: 'sy',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'symmetry', of: ofNorm(r), lines: vBool(r.lines, true), centre: vBool(r.centre, false), dash: vPick(r.dash, Object.keys(DASHES), 'dashed'), count: vBool(r.count, false), order: vBool(r.order, false) }),
+  resolve(o, res) { const shape = shapeOf(res(o.of)); return { shape, sym: shape && shape.pts.length > 1 ? symmetryOf(shape.pts, shape.closed) : null }; },
+  bounds: () => [],
+  captions(o) {
+    if (!o.sym) return [];
+    const out = [];
+    if (o.count) out.push({ head: 'Lines of symmetry', text: String(o.sym.lines.length) });
+    if (o.order) out.push({ head: 'Order of rotational symmetry', text: String(o.sym.order) });
+    return out;
+  },
+  draw(o, C) {
+    if (!o.sym) return null;
+    const pts = o.shape.pts, c = o.sym.centre, R = Math.max(...pts.map(p => dist2(p, c))) * 1.2 + 1e-9;
+    let s = '';
+    if (o.lines) o.sym.lines.forEach(l => { s += `<line x1="${f3(C.sx(l.x - l.dx * R))}" y1="${f3(C.sy(l.y - l.dy * R))}" x2="${f3(C.sx(l.x + l.dx * R))}" y2="${f3(C.sy(l.y + l.dy * R))}" ${geomStroke(C, .4)}${dashAttr(o.dash)} fill="none"/>`; });
+    if (o.centre && o.sym.order > 1) s += markerSVG('cross', C.sx(c.x), C.sy(c.y), 1.5 * C.S, C.col, C.S, false);
+    return s ? { shape: s, label: '' } : null;
+  }
+};
+
+/* ---------- area and perimeter by counting squares ---------- */
+OBJECT_KINDS.areacount = {
+  name: 'Area and perimeter', prefix: 'ac',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'areacount', of: ofNorm(r), shade: vBool(r.shade, true), area: vBool(r.area, true), perimeter: vBool(r.perimeter, false), unit: vStr(r.unit, '') }),
+  resolve(o, res) {
+    const shape = shapeOf(res(o.of));
+    if (!shape || shape.pts.length < 3) return { shape: null };
+    const P = polyPerimeter(shape.pts, true), whole = shape.pts.every((p, i) => { const q = shape.pts[(i + 1) % shape.pts.length]; return p.x === q.x || p.y === q.y; });
+    return { shape, area: polyArea(shape.pts), perim: P, perimExact: whole, cells: cellsInside(shape.pts) };
+  },
+  bounds: () => [],
+  captions(o) {
+    if (!o.shape) return [];
+    const out = [];
+    if (o.area) out.push({ head: 'Area', text: fmtNum(o.area) + ' ' + unitText(o.unit, true) });
+    if (o.perimeter) out.push({ head: 'Perimeter', text: (o.perimExact ? fmtNum(o.perim) : '≈ ' + approx(o.perim)) + ' ' + unitText(o.unit, false) });
+    return out;
+  },
+  draw(o, C) {
+    if (!o.shape || !o.shade || !o.cells.length) return null;
+    const d = o.cells.map(({ i, j }) => `M${f3(C.sx(i))},${f3(C.sy(j))}H${f3(C.sx(i + 1))}V${f3(C.sy(j + 1))}H${f3(C.sx(i))}Z`).join('');
+    return { shape: `<path d="${d}" fill="rgba(0,0,0,.14)" stroke="none"/>`, label: '' };
+  }
+};
+
+/* ---------- squares on the sides of a right triangle ---------- */
+function sideSquares(pts) {
+  const ccw = shoelace(pts) > 0;
+  return pts.map((p, i) => {
+    const q = pts[(i + 1) % pts.length], dx = q.x - p.x, dy = q.y - p.y, n = ccw ? { x: dy, y: -dx } : { x: -dy, y: dx };
+    const corners = [p, q, { x: q.x + n.x, y: q.y + n.y }, { x: p.x + n.x, y: p.y + n.y }];
+    return { corners, area: clean(dx * dx + dy * dy), len: Math.hypot(dx, dy), centre: { x: (p.x + q.x) / 2 + n.x / 2, y: (p.y + q.y) / 2 + n.y / 2 } };
+  });
+}
+function pythagText(sq) {
+  const s = sq.slice().sort((a, b) => a.area - b.area), ok = Math.abs(s[0].area + s[1].area - s[2].area) < 1e-7 * Math.max(1, s[2].area), whole = s.every(q => Math.abs(q.len - Math.round(q.len)) < 1e-9);
+  return whole ? fmtNum(Math.round(s[0].len)) + '² + ' + fmtNum(Math.round(s[1].len)) + '² ' + (ok ? '=' : '≠') + ' ' + fmtNum(Math.round(s[2].len)) + '²'
+               : fmtNum(s[0].area) + ' + ' + fmtNum(s[1].area) + ' ' + (ok ? '=' : '≠') + ' ' + fmtNum(s[2].area);
+}
+OBJECT_KINDS.pythag = {
+  name: 'Squares on the sides', prefix: 'py',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'pythag', of: ofNorm(r), areas: vBool(r.areas, true), equation: vBool(r.equation, false), fill: vPick(r.fill, FILLS, 'light') }),
+  resolve(o, res) { const shape = shapeOf(res(o.of)); return shape && shape.pts.length === 3 ? { shape, sq: sideSquares(shape.pts) } : { shape: null, sq: null }; },
+  bounds: o => o.sq ? o.sq.flatMap(q => q.corners.map(p => ({ x: p.x, y: p.y }))) : [],
+  captions: o => o.sq && o.equation ? [{ head: 'Pythagorean theorem', text: pythagText(o.sq) }] : [],
+  draw(o, C) {
+    if (!o.sq) return null;
+    let s = '', label = '';
+    const fill = o.fill === 'light' ? 'rgba(0,0,0,.09)' : o.fill === 'hatch' ? C.hatch() : 'none';
+    o.sq.forEach(q => {
+      s += `<polygon points="${q.corners.map(p => f3(C.sx(p.x)) + ',' + f3(C.sy(p.y))).join(' ')}" fill="${fill}" ${geomStroke(C, .5)} stroke-linejoin="round"/>`;
+      if (o.areas && !C.K.hid.has('results')) label += C.labelAt(C.sx(q.centre.x), C.sy(q.centre.y) + C.K.FS * .35, fmtNum(q.area), 'middle', true);
+    });
+    const P = o.shape.pts;                                                        // the right-angle marker, if there is one
+    rightAngles(P, true).forEach(k => s += rightAngleSVG(P, k, true, C));
+    return { shape: s, label };
+  }
+};
+
+/* A little square in the corner between the two neighbours of vertex k (in screen space, so it is square on the page). */
+function rightAngleSVG(P, k, closed, C) {
+  const n = P.length, v = P[k], a = P[(k + n - 1) % n], b = P[(k + 1) % n], sc = p => [C.sx(p.x), C.sy(p.y)], V = sc(v), A = sc(a), B = sc(b);
+  const unit = (T) => { const dx = T[0] - V[0], dy = T[1] - V[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l, l]; };
+  const u = unit(A), w = unit(B), s = Math.min(2.4 * C.S, u[2] * .45, w[2] * .45);
+  const pl = [[V[0] + u[0] * s, V[1] + u[1] * s], [V[0] + (u[0] + w[0]) * s, V[1] + (u[1] + w[1]) * s], [V[0] + w[0] * s, V[1] + w[1] * s]];
+  return `<polyline points="${pl.map(q => f3(q[0]) + ',' + f3(q[1])).join(' ')}" fill="none" ${geomStroke(C, .4)}/>`;
+}
+
+/* ---------- distance and midpoint ---------- */
+const measureEnds = (o, res) => { const a = res(o.of[0]), b = res(o.of[1]); const g = q => q && q.kind === 'point' && isFin(parseNum(q.x)) && isFin(parseNum(q.y)) ? { x: parseNum(q.x), y: parseNum(q.y) } : null; return { a: g(a), b: g(b) }; };
+OBJECT_KINDS.measure = {
+  name: 'Distance and midpoint', prefix: 'ms',
+  norm: r => { const of = Array.isArray(r.of) ? r.of : []; return { id: vStr(r.id, ''), kind: 'measure', of: [vStr(of[0], ''), vStr(of[1], '')], segment: vBool(r.segment, true), legs: vPick(r.legs, ['none', 'triangle', 'labelled'], 'none'),
+    mid: vPick(r.mid, ['none', 'marked', 'labelled'], 'none'), distance: vBool(r.distance, false), midpoint: vBool(r.midpoint, false), name: vStr(r.name, 'M') }; },
+  resolve: (o, res) => measureEnds(o, res),
+  bounds: () => [],
+  captions(o) {
+    if (!o.a || !o.b) return [];
+    const out = [];
+    if (o.distance) out.push({ head: 'Distance', text: distanceText(o.a, o.b) });
+    if (o.midpoint) out.push({ head: 'Midpoint', text: '(' + fmtNum((o.a.x + o.b.x) / 2) + ', ' + fmtNum((o.a.y + o.b.y) / 2) + ')' });
+    return out;
+  },
+  draw(o, C) {
+    const { a, b } = o;
+    if (!a || !b) return null;
+    const A = [C.sx(a.x), C.sy(a.y)], B = [C.sx(b.x), C.sy(b.y)], hid = C.K.hid, S = C.S;
+    let s = '', label = '';
+    if (o.segment) s += `<line x1="${f3(A[0])}" y1="${f3(A[1])}" x2="${f3(B[0])}" y2="${f3(B[1])}" ${geomStroke(C, .5)}/>`;
+    if (o.legs !== 'none' && a.x !== b.x && a.y !== b.y) {
+      const K = [C.sx(b.x), C.sy(a.y)];
+      s += `<polyline points="${f3(A[0])},${f3(A[1])} ${f3(K[0])},${f3(K[1])} ${f3(B[0])},${f3(B[1])}" fill="none" ${geomStroke(C, .4)} stroke-dasharray="2 1.2"/>`;
+      s += rightAngleSVG([{ x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }], 1, true, C);
+      if (o.legs === 'labelled' && !hid.has('results')) {
+        label += C.labelAt((A[0] + K[0]) / 2, b.y > a.y ? A[1] + C.K.FS * 1.2 : A[1] - 1.2, 'Δx = ' + fmtNum(Math.abs(b.x - a.x)), 'middle', false);
+        label += C.labelAt(K[0] + (b.x > a.x ? 1.2 : -1.2), (K[1] + B[1]) / 2 + C.K.FS * .35, 'Δy = ' + fmtNum(Math.abs(b.y - a.y)), b.x > a.x ? 'start' : 'end', false);
+      }
+    }
+    if (o.mid !== 'none' && !hid.has('results')) {
+      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, M = [C.sx(m.x), C.sy(m.y)];
+      s += markerSVG('circle', M[0], M[1], 1.45 * S, C.col, S, true);
+      label += C.labelNear(M[0], M[1], 1.45 * S, o.mid === 'labelled' ? (o.name ? o.name : '') + '(' + fmtNum(m.x) + ', ' + fmtNum(m.y) + ')' : o.name, [B[1] - A[1], A[0] - B[0]], false);
+    }
+    return { shape: s, label };
+  }
+};
+
+/* ---------- right-angle markers and equal-length marks ---------- */
+OBJECT_KINDS.mark = {
+  name: 'Marks on a shape', prefix: 'mk',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'mark', of: ofNorm(r), what: vPick(r.what, ['rightangle', 'equal'], 'rightangle'), at: vInt(r.at, -1, MAX_VERTS, -1), count: vInt(r.count, 1, 4, 1) }),
+  resolve: resolveShape,
+  bounds: () => [],
+  draw(o, C) {
+    if (!o.shape) return null;
+    const P = o.shape.pts, closed = o.shape.closed, n = P.length, S = C.S;
+    let s = '';
+    if (o.what === 'rightangle') {
+      (o.at < 0 ? rightAngles(P, closed) : rightAngles(P, closed).filter(k => k === o.at)).forEach(k => s += rightAngleSVG(P, k, closed, C));
+    } else {
+      const list = o.at < 0 ? equalGroups(P, closed) : (o.at < (closed ? n : n - 1) ? [{ edge: o.at, count: o.count }] : []);
+      list.forEach(({ edge, count }) => {
+        const p = P[edge], q = P[(edge + 1) % n], A = [C.sx(p.x), C.sy(p.y)], B = [C.sx(q.x), C.sy(q.y)], l = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, u = [(B[0] - A[0]) / l, (B[1] - A[1]) / l], nv = [-u[1], u[0]], m = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];
+        for (let i = 0; i < count; i++) {
+          const off = (i - (count - 1) / 2) * 1.2 * S, c = [m[0] + u[0] * off, m[1] + u[1] * off];
+          s += `<line x1="${f3(c[0] - nv[0] * 1.3 * S)}" y1="${f3(c[1] - nv[1] * 1.3 * S)}" x2="${f3(c[0] + nv[0] * 1.3 * S)}" y2="${f3(c[1] + nv[1] * 1.3 * S)}" ${geomStroke(C, .5)}/>`;
+        }
+      });
+    }
+    return s ? { shape: s, label: '' } : null;
+  }
+};
+
+/* ---------- circles ---------- */
+OBJECT_KINDS.circle = {
+  name: 'Circle', prefix: 'cr',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'circle', cx: cellClean(r.cx), cy: cellClean(r.cy), r: cellClean(r.r), centre: vPick(r.centre, ['none', 'dot', 'coords'], 'dot'), radius: vBool(r.radius, false),
+    dash: vPick(r.dash, Object.keys(DASHES), 'solid'), fill: vPick(r.fill, FILLS, 'none'), equation: vBool(r.equation, false) }),
+  resolve(o) { const cx = parseNum(o.cx), cy = parseNum(o.cy), r = parseNum(o.r); return { ok: isFin(cx) && isFin(cy) && isFin(r) && r > 0, c: { x: cx, y: cy }, rad: r }; },
+  bounds: o => o.ok ? [{ x: o.c.x - o.rad, y: o.c.y - o.rad }, { x: o.c.x + o.rad, y: o.c.y + o.rad }] : [],
+  captions: o => o.ok && o.equation ? [{ head: 'Equation', text: circleEq(o.c.x, o.c.y, o.rad) }] : [],
+  draw(o, C) {
+    if (!o.ok) return null;
+    const X = C.sx(o.c.x), Y = C.sy(o.c.y), rx = o.rad * C.kx, ry = o.rad * C.ky, S = C.S;
+    const fill = o.fill === 'light' ? 'rgba(0,0,0,.09)' : o.fill === 'hatch' ? C.hatch() : 'none';
+    let s = `<ellipse cx="${f3(X)}" cy="${f3(Y)}" rx="${f3(rx)}" ry="${f3(ry)}" fill="${fill}" ${geomStroke(C, .5)}${dashAttr(o.dash)}/>`, label = '';
+    if (o.radius) {
+      const a = Math.PI / 6, E = [X + rx * Math.cos(a), Y - ry * Math.sin(a)];
+      s += `<line x1="${f3(X)}" y1="${f3(Y)}" x2="${f3(E[0])}" y2="${f3(E[1])}" ${geomStroke(C, .4)}/>`;
+      if (!C.K.hid.has('results')) label += C.labelAt((X + E[0]) / 2, (Y + E[1]) / 2 - 1.2, 'r = ' + fmtNum(o.rad), 'middle', false);
+    }
+    if (o.centre !== 'none') {
+      s += markerSVG('circle', X, Y, 1.2 * S, C.col, S, false);
+      if (o.centre === 'coords' && !C.K.hid.has('coordLabels')) label += C.labelNear(X, Y, 1.2 * S, '(' + fmtNum(o.c.x) + ', ' + fmtNum(o.c.y) + ')', [-1, 1], false);
+    }
+    return { shape: s, label };
+  }
+};
+
+for (const k of ['symmetry', 'areacount', 'mark']) OBJECT_KINDS[k].todo = o => !o.shape ? 'choose a polygon, line segments or an image to look at.' : '';
+OBJECT_KINDS.pythag.todo = o => !o.sq ? 'choose a triangle (a polygon with three corners).' : '';
+OBJECT_KINDS.measure.todo = o => !o.a || !o.b ? 'choose two points.' : '';
+OBJECT_KINDS.circle.todo = o => !o.ok ? 'enter the centre and a radius above zero.' : '';
+
 /* The page size actually drawn (a locked physical scale makes the page follow the grid). */
 function svgSize(spec) {
   const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(renderSVG(spec));
@@ -2648,10 +2939,10 @@ function pngWithDpi(u8, dpi) {
     ['pointLabels', 'Point and vertex names (A, B, C…)'], ['coordLabels', 'Coordinates beside points'],
     ['equations', 'Equation and function-name labels'], ['keyPoints', 'Intercepts, intersections and critical values'], ['slopeTriangle', 'Slope triangles'],
     ['tables', 'Tables of values'], ['aids', 'Mirror lines, centres and arrows'], ['notation', 'Notation, descriptions and mapping rules', true], ['signs', 'Signs (+ and −) on a sign chart'],
-    ['results', 'Solutions, hop results and answers'], ['objects', 'All points, shapes and graphs']
+    ['results', 'Answers: solutions, hop results, areas, midpoints, Δx and Δy, radius'], ['objects', 'All points, shapes and graphs']
   ];
   const VIS_FOR = {
-    plane: ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'aids', 'notation', 'objects'],
+    plane: ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'aids', 'notation', 'results', 'objects'],
     numberline: ['title', 'xTitle', 'units', 'xTicks', 'pointLabels', 'keyPoints', 'notation', 'signs', 'results', 'objects']
   };
   const MARKER_SYMBOLS = { circle: '●', square: '■', triangle: '▲', diamond: '◆', cross: '✕', plus: '＋' };
@@ -2784,8 +3075,57 @@ function pngWithDpi(u8, dpi) {
     </div>`).join('') + `</div><p class="hint">Hide the image in the question on the Test tab (“Individual points and shapes”); hide the mirror line and centre, or the description and rule, separately. The mapping rule is written for movements about the origin, reflections and translations only.</p>` : '';
   }
 
+  /* ---------- the Geometry tab: marks that work on shapes already drawn ---------- */
+  function buildGeometry() {
+    const of = k => spec.objects.map((o, i) => [o, i]).filter(([o]) => o.kind === k);
+    const num = (path, lab, ph) => `<div><label class="lab">${lab}</label><input type="number" step="any" data-bind="${path}"${ph ? ` placeholder="${ph}"` : ''}></div>`;
+    const del = (i, what) => `<div style="flex:none"><button class="xbtn" type="button" data-act="delObj" data-i="${i}" title="Remove ${what}">×</button></div>`;
+    const pick = (path, kinds, first, lab) => `<div><label class="lab">${lab}</label><select data-bind="${path}" data-objsel="${kinds}" data-first="${first}"></select></div>`;
+    const chk = (path, lab, title) => `<label class="check sm"${title ? ` title="${title}"` : ''}><input type="checkbox" data-bind="${path}"> ${lab}</label>`;
+    const head = (i, t) => `<div class="row"><div><h4>${t}</h4></div>${del(i, 'this')}</div>`;
+    const R = resolveObjects(spec);
+    const cards = {
+      symmetry: of('symmetry').map(([o, i]) => `<div class="card">${head(i, 'Symmetry')}${pick(`objects.${i}.of`, 'outline', 'choose a shape…', 'Look at')}
+        <div class="row" style="gap:14px;flex-wrap:wrap">${chk(`objects.${i}.lines`, 'Draw the lines of symmetry')}${chk(`objects.${i}.centre`, 'Mark the centre of rotation')}</div>
+        <div class="row" style="gap:14px;flex-wrap:wrap">${chk(`objects.${i}.count`, 'Write the number of lines beneath', 'Answer text: hide it on the Test tab under “Notation”')}${chk(`objects.${i}.order`, 'Write the order of rotational symmetry')}</div></div>`).join(''),
+      areacount: of('areacount').map(([o, i]) => `<div class="card">${head(i, 'Area and perimeter')}${pick(`objects.${i}.of`, 'outline', 'choose a shape…', 'Measure')}
+        <div class="row" style="gap:14px;flex-wrap:wrap">${chk(`objects.${i}.shade`, 'Shade the squares inside')}${chk(`objects.${i}.area`, 'Write the area beneath')}${chk(`objects.${i}.perimeter`, 'Write the perimeter beneath')}</div>
+        <div class="row"><div><label class="lab">Unit (optional)</label><input type="text" data-bind="objects.${i}.unit" placeholder="e.g. cm  (blank: square units)" maxlength="12"></div></div></div>`).join(''),
+      pythag: of('pythag').map(([o, i]) => `<div class="card">${head(i, 'Squares on the sides')}${pick(`objects.${i}.of`, 'tri', 'choose a triangle…', 'Triangle')}
+        <div class="row" style="gap:14px;flex-wrap:wrap">${chk(`objects.${i}.areas`, 'Write each square’s area')}${chk(`objects.${i}.equation`, 'Write a² + b² = c² beneath')}</div>
+        <div class="row"><div><label class="lab">Squares</label><select data-bind="objects.${i}.fill">${optList({ none: 'No fill', light: 'Light grey', hatch: 'Hatched' })}</select></div></div></div>`).join(''),
+      measure: of('measure').map(([o, i]) => `<div class="card">${head(i, 'Distance and midpoint')}
+        <div class="row">${pick(`objects.${i}.of.0`, 'pt', 'first point…', 'From')}${pick(`objects.${i}.of.1`, 'pt', 'second point…', 'To')}</div>
+        <div class="row"><div><label class="lab">Right triangle on the segment</label><select data-bind="objects.${i}.legs">${optList({ none: 'None', triangle: 'Dashed legs', labelled: 'Dashed legs with Δx and Δy' })}</select></div>
+          <div><label class="lab">Midpoint</label><select data-bind="objects.${i}.mid">${optList({ none: 'Not marked', marked: 'Marked', labelled: 'Marked, with coordinates' })}</select></div></div>
+        <div class="row" style="gap:14px;flex-wrap:wrap">${chk(`objects.${i}.segment`, 'Draw the segment')}${chk(`objects.${i}.distance`, 'Write the distance beneath')}${chk(`objects.${i}.midpoint`, 'Write the midpoint beneath')}</div></div>`).join(''),
+      mark: of('mark').map(([o, i]) => {
+        const sh = shapeOf(R.res(o.of)), n = sh ? sh.pts.length : 0, nm = k => (sh && sh.pts[k % Math.max(n, 1)].label) || String(k % Math.max(n, 1) + 1);
+        const opts = o.what === 'rightangle' ? [...Array(n).keys()].map(k => `<option value="${k}">at ${nm(k)}</option>`) : [...Array(sh && !sh.closed ? Math.max(n - 1, 0) : n).keys()].map(k => `<option value="${k}">on ${nm(k)}–${nm(k + 1)}</option>`);
+        return `<div class="card">${head(i, 'Marks on a shape')}${pick(`objects.${i}.of`, 'outline', 'choose a shape…', 'Mark')}
+        <div class="row"><div><label class="lab">Mark</label><select data-bind="objects.${i}.what"><option value="rightangle">Right angles</option><option value="equal">Equal sides</option></select></div>
+          <div><label class="lab">Where</label><select data-bind="objects.${i}.at"><option value="-1">${o.what === 'rightangle' ? 'Every right angle' : 'Every pair of equal sides'}</option>${opts.join('')}</select></div>
+          <div ${o.what === 'equal' && o.at >= 0 ? '' : 'hidden'}><label class="lab">Marks</label><select data-bind="objects.${i}.count"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div></div></div>`;
+      }).join(''),
+      circle: of('circle').map(([o, i]) => `<div class="card">${head(i, 'Circle')}
+        <div class="row">${num(`objects.${i}.cx`, 'Centre x')}${num(`objects.${i}.cy`, 'Centre y')}${num(`objects.${i}.r`, 'Radius')}</div>
+        <div class="row"><div><label class="lab">Centre</label><select data-bind="objects.${i}.centre">${optList({ none: 'Not marked', dot: 'Marked', coords: 'Marked, with coordinates' })}</select></div>
+          <div><label class="lab">Line</label><select data-bind="objects.${i}.dash">${optList(DASH_NAMES)}</select></div><div><label class="lab">Fill</label><select data-bind="objects.${i}.fill">${optList({ none: 'None', light: 'Light grey', hatch: 'Hatched' })}</select></div></div>
+        <div class="row" style="gap:14px;flex-wrap:wrap">${chk(`objects.${i}.radius`, 'Draw a radius, with its length')}${chk(`objects.${i}.equation`, 'Write the equation beneath')}</div></div>`).join('')
+    };
+    const sec = (title, k, act, btn, hint) => `<div><h3 class="section-title">${title}</h3><button class="btn small" type="button" data-act="${act}">+ ${btn}</button><p class="hint" style="margin:6px 0">${hint}</p><div style="display:grid;gap:10px">${cards[k]}</div></div>`;
+    $('#geometryPane').innerHTML =
+      `<p class="hint">These work on shapes you have drawn on the Shapes tab (or on the image of a transformation), and follow them when they change. Hide one in the question on the Test tab, under “Individual points and shapes”. The text they write beneath the graph is hidden with “Notation”, and can be replaced by an answer line.</p>` +
+      sec('Symmetry', 'symmetry', 'addSymmetry', 'Symmetry', 'Lines of symmetry and the order of rotational symmetry, worked out from the shape. A line that runs along an axis is hidden by the axis; move the shape off centre to see it.') +
+      sec('Area and perimeter', 'areacount', 'addAreacount', 'Area and perimeter', 'Shades the unit squares inside (exact for shapes drawn along gridlines). A slanted side gives an approximate perimeter.') +
+      sec('Pythagorean theorem', 'pythag', 'addPythag', 'Squares on the sides', 'Draws a square on each side of a triangle with its area, and marks a right angle.') +
+      sec('Distance and midpoint', 'measure', 'addMeasure', 'Distance and midpoint', 'Pick two points. Show the right triangle with Δx and Δy, the midpoint, and the working for the distance.') +
+      sec('Right angles and equal sides', 'mark', 'addMark', 'Marks', 'Right-angle squares and equal-length tick marks (one tick for the first pair of equal sides, two for the next, …).') +
+      sec('Circles', 'circle', 'addCircle', 'Circle', 'Centre and radius on the grid.');
+  }
+
   /* ---------- the Equations tab: equations, tables of values, related lines and marks ---------- */
-  const OBJ_KINDS = { fn: ['function', 'related'], pt: ['point'], shape: ['polygon', 'path', 'point', 'transform'] };
+  const OBJ_KINDS = { fn: ['function', 'related'], pt: ['point'], shape: ['polygon', 'path', 'point', 'transform'], outline: ['polygon', 'path', 'transform'], tri: ['polygon', 'transform'] };
   function fillObjSelects() {                                        // pickers list the current objects, by their current names
     $$('[data-objsel]').forEach(sel => {
       const kinds = OBJ_KINDS[sel.dataset.objsel];
@@ -3041,7 +3381,7 @@ function pngWithDpi(u8, dpi) {
       (bad ? `${dot}<span class="warn">${bad} cell${bad === 1 ? ' isn’t a number and is' : 's aren’t numbers and are'} left off the graph</span>` : '');
   }
   function refresh() { state.outside = outsideObjects(spec); state.issues = readability(spec); renderPreview(); syncControls(); renderStatus(); }
-  function rebuildStructure() { buildObjects(); buildTransforms(); buildFunctions(); buildLine(); buildTest(); refresh(); }
+  function rebuildStructure() { buildObjects(); buildTransforms(); buildGeometry(); buildFunctions(); buildLine(); buildTest(); refresh(); }
 
   /* ---------- actions ---------- */
   function showQuestion() { if (state.view !== 'question') { state.view = 'question'; state.pick = false; state.edit = false; const p = $('#pick'); if (p) p.checked = false; } }
@@ -3067,6 +3407,12 @@ function pngWithDpi(u8, dpi) {
     const src = after || spec.objects.filter(o => o.kind === 'polygon' || o.kind === 'path' || o.kind === 'point').pop();
     if (!src) return toast('Add a polygon, line segments or a point first.', 'err');
     addObj('transform', { of: src.id, how: 'reflect', mirror: 'yaxis', dx: 3, dy: -2, at: 0, angle: 90, dir: 'cw', center: { x: 0, y: 0 }, k: 2, words: true });
+  }
+  const lastShape = (kinds) => spec.objects.filter(o => kinds.includes(o.kind)).pop();
+  function addGeom(kind, kinds, props, why) {
+    const src = kinds ? lastShape(kinds) : null;
+    if (kinds && !src) return toast(why, 'err');
+    addObj(kind, Object.assign(kinds ? { of: src.id } : {}, props));
   }
   const fnObjs = () => spec.objects.filter(o => o.kind === 'function' || o.kind === 'related');
   function addObj(kind, props) {
@@ -3166,7 +3512,7 @@ function pngWithDpi(u8, dpi) {
       else v = t.value;
       setPath(spec, t.dataset.bind, v);
       spec = normalize(spec);
-      commit(t.dataset.bind);
+      commit(t.dataset.bind, t.tagName === 'SELECT' && /^objects\.\d+\.(of|what|at)(\.\d)?$/.test(t.dataset.bind));       // pickers that change what other controls offer rebuild the tab
     } else if (t.dataset.cell) {                                    // a cell of the points table, a shape's vertex table or a table of values
       const o = spec.objects[+t.dataset.oi], f = (t.dataset.cell === 't' ? TABLE_COLS : POINT_COLS)[+t.dataset.c], r = +t.dataset.r;
       if (t.dataset.cell === 'p') { if (f === 'label') o.label = t.value; else o[f] = cellFromText(t.value); }
@@ -3224,6 +3570,12 @@ function pngWithDpi(u8, dpi) {
     else if (a === 'addPoint') addPoint();
     else if (a === 'addShape') addShape(b.dataset.kind);
     else if (a === 'addTransform') addTransform();
+    else if (a === 'addSymmetry') addGeom('symmetry', ['polygon', 'path', 'transform'], { count: true, order: true, lines: true }, 'Add a polygon first.');
+    else if (a === 'addAreacount') addGeom('areacount', ['polygon', 'transform'], {}, 'Add a polygon first.');
+    else if (a === 'addPythag') addGeom('pythag', ['polygon', 'transform'], { equation: true }, 'Add a triangle first (a polygon with three corners).');
+    else if (a === 'addMark') addGeom('mark', ['polygon', 'path', 'transform'], { what: 'rightangle', at: -1 }, 'Add a polygon first.');
+    else if (a === 'addMeasure') { const P = spec.objects.filter(o => o.kind === 'point'); if (P.length < 2) return toast('Add two points first.', 'err'); addObj('measure', { of: [P[P.length - 2].id, P[P.length - 1].id], legs: 'labelled', mid: 'marked', distance: true }); }
+    else if (a === 'addCircle') addObj('circle', { cx: 0, cy: 0, r: 3, centre: 'dot' });
     else if (a === 'addTransformAfter') addTransform(spec.objects[+b.dataset.i]);
     else if (a === 'delObj') delObj(+b.dataset.i);
     else if (a === 'addVert') addVert(+b.dataset.i);
