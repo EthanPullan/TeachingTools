@@ -217,7 +217,7 @@ function pngInfo(buf) {
   await page.selectOption('[data-types="plane"] [data-bind="axes.arrows"]', 'none');
   check('arrows: none removes the arrowheads', (await page.$$eval('#preview polygon[fill="#000"]', p => p.length)) === 0);
   await page.selectOption('[data-types="plane"] [data-bind="axes.arrows"]', 'both');
-  await page.check('[data-bind="grid.highlight5"]');
+  await page.check('#axesPane [data-bind="grid.highlight5"]');
   check('darker every-5th gridlines appear', (await page.$$eval('#preview path[stroke="#555"]', p => p.length)) === 1);
   await page.click('[data-seg="axes.position"] [data-v="edges"]');
   check('axes along the edges draws a frame and no arrows', (await page.$$eval('#preview polygon[fill="#000"]', p => p.length)) === 0);
@@ -526,6 +526,36 @@ function pngInfo(buf) {
   await page.click('[data-seg="type"] [data-v="numberline"]');
   check('a number line has no Geometry tab', !(await page.isVisible('.tab[data-tab="geometry"]')));
   await page.click('[data-seg="type"] [data-v="plane"]');
+
+  console.log('Graph paper');
+  await page.click('#newBtn');
+  await tab('graph');
+  await page.click('[data-seg="type"] [data-v="paper"]');
+  check('Paper tab appears; shapes, axes and test tabs go', await page.isVisible('.tab[data-tab="paper"]') && !(await page.isVisible('.tab[data-tab="objects"]')) && !(await page.isVisible('.tab[data-tab="axes"]')) && !(await page.isVisible('.tab[data-tab="test"]')));
+  check('no question / key controls for a page of paper', !(await page.isVisible('#pairBtn')) && !(await page.isVisible('#viewSeg')));
+  await tab('paper');
+  await page.selectOption('#paperPreset', 'practice4');
+  check('quick setup: four practice graphs with axes (four arrowheads each)', (await page.$$eval('#preview svg polygon', p => p.length)) === 16);
+  check('the status bar gives page size, pixels and squares', /215\.9 × 279\.4/.test(await status()) && /2550 × 3300/.test(await status()) && /4 grids/.test(await status()), await status());
+  await shot('21-paper-practice');
+  await page.selectOption('#paperPreset', 'isodots');
+  check('isometric dot paper draws dots', /h0/.test(await page.$eval('#preview', e => e.innerHTML)));
+  await page.click('[data-seg="paper.lattice"] [data-v="square"]'); await page.click('[data-seg="paper.marks"] [data-v="lines"]');
+  await page.fill('#paperPane [data-bind="paper.spacing"]', '5');
+  await page.click('[data-seg="paper.orient"] [data-v="landscape"]');
+  check('landscape and 5 mm spacing change the page and the squares', /279\.4 × 215\.9/.test(await status()) && /squares each/.test(await status()), await status());
+  const dlp = downloads.length; await page.click('#pngBtn'); await waitDownloads(dlp + 1);
+  const pf = downloads[dlp].suggestedFilename(); const pinfo = pngInfo(fs.readFileSync(await saved(downloads[dlp])));
+  check('PNG of a page: 300 DPI at the real paper size, plain file name', Math.round(pinfo.dpi) === 300 && pinfo.w === 3300 && pinfo.h === 2550 && /^paper\.png$/.test(pf), [pinfo, pf]);
+  const dlq = downloads.length; await page.click('#saveBtn'); await waitDownloads(dlq + 1);
+  const pj = JSON.parse(fs.readFileSync(await saved(downloads[dlq]), 'utf8'));
+  check('the file records the paper', pj.type === 'paper' && pj.paper.orient === 'landscape' && pj.paper.spacing === 5, pj.paper);
+  const beforeP = await page.evaluate(() => document.querySelector('#preview').innerHTML);
+  await page.click('#newBtn'); await page.setInputFiles('#fileIn', await saved(downloads[dlq])); await page.waitForTimeout(150);
+  check('reopening gives an identical page', await page.evaluate(() => document.querySelector('#preview').innerHTML) === beforeP);
+  await tab('graph');
+  await page.click('[data-seg="type"] [data-v="plane"]');
+  check('back to a plane: the usual tabs and question / key controls return', await page.isVisible('.tab[data-tab="objects"]') && await page.isVisible('#pairBtn') && await page.isVisible('#viewSeg'));
 
   console.log('Print layout (Ctrl+P)');
   await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));

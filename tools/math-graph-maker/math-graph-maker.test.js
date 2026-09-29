@@ -21,7 +21,8 @@ const G = vm.runInNewContext(core + `;({ SPEC_VERSION, TOOL, SCAFFOLD, SCAFFOLD_
   resolveObjects, readability, snapPoints, pasteRows, dropRow, fillRows, tableLayout, MAX_ROWS, TABLE_COLS,
   analyseLine, applyLinePreset, dropLineRow, ineqSegments, ineqText, intervalText, setText, noteTexts, signChartData, findPoles, valText, renderNumberLine, LINE_PRESETS,
   translatePt, reflectPt, rotatePt, dilatePt, mirrorLine, parseK, transformer, transformWords, transformMapping, primes, stripPrimes,
-  polyArea, polyPerimeter, pointInPoly, cellsInside, symmetryOf, rightAngles, equalGroups, distanceText, circleEq, sideSquares, pythagText, shapeOf })`, {});
+  polyArea, polyPerimeter, pointInPoly, cellsInside, symmetryOf, rightAngles, equalGroups, distanceText, circleEq, sideSquares, pythagText, shapeOf,
+  normPaper, paperLayout, applyPaperPreset, PAPER_PRESETS, PAGES, pageMM, paperIssues })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -138,7 +139,7 @@ test('normalize is idempotent and keeps a fixed key order', () => {
   const s = G.sampleSpec();
   const a = JSON.stringify(s), b = JSON.stringify(G.normalize(JSON.parse(a)));
   assert.equal(a, b);
-  assert.deepEqual(Object.keys(s), ['specVersion', 'tool', 'type', 'title', 'name', 'size', 'quadrants', 'x', 'y', 'axes', 'grid', 'quadrantLabels', 'line', 'objects', 'hidden', 'blanks', 'scale', 'style']);
+  assert.deepEqual(Object.keys(s), ['specVersion', 'tool', 'type', 'title', 'name', 'size', 'quadrants', 'x', 'y', 'axes', 'grid', 'quadrantLabels', 'line', 'paper', 'objects', 'hidden', 'blanks', 'scale', 'style']);
   assert.equal(s.specVersion, G.SPEC_VERSION); assert.equal(s.tool, 'math-graph-maker');
 });
 test('normalize survives garbage and clamps values', () => {
@@ -1362,4 +1363,66 @@ test('geometry works on a transformation image; edits follow; spec round trip', 
   assert.equal(G.objName(n.objects[2], n.objects), 'Area and perimeter of Translation of Polygon ABCD');
   const many = G.normalize({ objects: [{ kind: 'mark', at: 999, count: 9, what: 'x' }, { kind: 'measure', of: 'oops' }, { kind: 'circle', centre: 'spiral' }] });
   assert.deepEqual(plain(many.objects.map(o => o.kind)), ['mark', 'measure', 'circle']); assert.equal(many.objects[0].count, 4); assert.equal(many.objects[0].what, 'rightangle'); assert.deepEqual(plain(many.objects[1].of), ['', '']); assert.equal(many.objects[2].centre, 'dot');
+});
+
+
+/* ================= Phase 4C: paper ================= */
+const paperSpec = (paper, extra) => Object.assign(G.normalize(Object.assign({ type: 'paper', paper }, extra || {})), {});
+const countM = (svg, re) => (svg.match(re) || []).length;
+
+test('paper settings are clamped and normalised', () => {
+  const p = G.normPaper({ lattice: 'hex', marks: 'x', page: 'legal', orient: 'sideways', spacing: 0.1, margin: -4, cols: 99, rows: 0, gap: 500, axes: 'huge', header: 'yes' });
+  assert.deepEqual(plain(p), { lattice: 'square', marks: 'lines', page: 'letter', orient: 'portrait', spacing: 2, margin: 0, cols: 4, rows: 1, gap: 30, axes: 'none', header: false, border: true });
+  assert.equal(G.normPaper(null).spacing, 10); assert.equal(G.normPaper({ spacing: '' }).spacing, 10, 'a blank spacing falls back, it does not become 0');
+  const s = paperSpec({ spacing: 7.5, cols: 2 }); assert.deepEqual(plain(G.normalize(s)), plain(s), 'idempotent'); assert.deepEqual(plain(G.parseFile(G.serialize(s))), plain(s));
+  assert.equal(G.normalize({ type: 'paper' }).paper.lattice, 'square'); assert.equal(G.blankSpec().type, 'plane', 'paper is never the default');
+});
+
+test('paper layout: whole squares centred on the page, panels inside the margins and apart', () => {
+  const L = G.paperLayout(paperSpec({ spacing: 10, margin: 12 }));
+  assert.deepEqual(plain([L.page.w, L.page.h]), [215.9, 279.4]); assert.equal(L.panels.length, 1);
+  assert.deepEqual(plain([L.panels[0].n, L.panels[0].m]), [19, 25], 'letter, 12 mm margins, 1 cm squares');
+  const q = L.panels[0]; assert.ok(Math.abs(q.x - (215.9 - q.w) / 2) < 1e-9, 'centred sideways'); assert.ok(q.x >= 12 && q.x + q.w <= 215.9 - 12 + 1e-9 && q.y >= 12 && q.y + q.h <= 279.4 - 12 + 1e-9);
+  assert.deepEqual(plain(G.paperLayout(paperSpec({ page: 'a4', orient: 'landscape' })).page), { w: 297, h: 210 });
+  for (const [cols, rows] of [[2, 2], [3, 3], [2, 3], [4, 6]]) {
+    const M = G.paperLayout(paperSpec({ spacing: 4, cols, rows, gap: 8, margin: 12 })).panels;
+    assert.equal(M.length, cols * rows);
+    for (const a of M) assert.ok(a.x >= 12 - 1e-9 && a.y >= 12 - 1e-9 && a.x + a.w <= 215.9 - 12 + 1e-9 && a.y + a.h <= 279.4 - 12 + 1e-9, 'inside the margins');
+    for (let i = 0; i < M.length; i++) for (let j = i + 1; j < M.length; j++) { const a = M[i], b = M[j]; assert.ok(a.x + a.w <= b.x + 1e-9 || b.x + b.w <= a.x + 1e-9 || a.y + a.h <= b.y + 1e-9 || b.y + b.h <= a.y + 1e-9, 'panels do not overlap'); }
+  }
+  const t = G.paperLayout(paperSpec({}, { title: 'Graph it' })), h = G.paperLayout(paperSpec({ header: true }));
+  assert.ok(t.top > 12 && h.top > 12 && G.paperLayout(paperSpec({ header: true }, { title: 'T' })).top > h.top, 'a title and a header take room from the grid');
+});
+
+test('paper drawing: line, dot and isometric counts; borders; axes; header; no NaN', () => {
+  const one = paperSpec({ spacing: 10 }), q = G.paperLayout(one).panels[0], svg = G.renderSVG(one, {});
+  noBad(svg); assert.match(svg, /viewBox="0 0 215\.9 279\.4"/); assert.match(svg, /width="215\.9mm" height="279\.4mm"/);
+  const d = re => (re.exec(svg) || [])[1] || '';
+  assert.equal(countM(d(/<path d="([^"]*)" stroke="#8c8c8c"/), /M/g), (q.n + 1) + (q.m + 1), 'one line per gridline, each way');
+  const dots = G.renderSVG(paperSpec({ spacing: 10, marks: 'dots' }), {}); assert.equal(countM(dots, /h0/g), (q.n + 1) * (q.m + 1), 'a dot at every crossing');
+  const iso = paperSpec({ lattice: 'isometric', marks: 'dots', spacing: 10 }), I = G.paperLayout(iso).panels[0], isv = G.renderSVG(iso, {}); noBad(isv);
+  assert.equal(countM(isv, /h0/g), I.n * I.m, 'isometric: n dots on each of m rows'); assert.ok(Math.abs(I.h - (I.m - 1) * 10 * Math.sqrt(3) / 2) < 1e-9);
+  const tri = G.renderSVG(paperSpec({ lattice: 'isometric', marks: 'lines', spacing: 10 }), {}); noBad(tri); assert.ok(countM(tri, /L/g) > I.n * I.m, 'the triangle grid has diagonals');
+  assert.notEqual(G.renderSVG(paperSpec({ border: false }), {}), svg, 'the outline can be switched off');
+  const ax = G.renderSVG(paperSpec({ spacing: 5, axes: 'numbered', cols: 2, rows: 2 }), {}); noBad(ax);
+  assert.ok(countM(ax, /<polygon/g) === 16 && countM(ax, />x</g) === 4 && countM(ax, />y</g) === 4, 'four arrowheads and x, y on each of four grids');
+  const nums = plainText(ax).split('|'); assert.ok(nums.includes('0') && nums.includes('−10') && nums.includes('10'), 'numbered axes: ' + nums.slice(0, 30).join(','));
+  assert.ok(!/<polygon/.test(G.renderSVG(paperSpec({ axes: 'none' }), {})), 'no arrows on a blank grid');
+  const hd = plainText(G.renderSVG(paperSpec({ header: true }, { title: 'Practice' }), {})); assert.match(hd, /Name: _+ +Date: _+/); assert.match(hd, /Practice/);
+  assert.ok(!/<polygon/.test(G.renderSVG(paperSpec({ lattice: 'isometric', axes: 'axes' }), {})), 'axes only on square grids');
+  const big = G.renderSVG(paperSpec({ spacing: 2, cols: 4, rows: 6, gap: 0 }), {}); noBad(big); assert.ok(big.length < 3e6, 'the densest page stays a reasonable size');
+  const cs = G.normalize(Object.assign(paperSpec({}), { style: Object.assign({}, one.style, { photocopySafe: true }) })); assert.match(G.renderSVG(cs, {}), /#4a4a4a/);
+});
+
+test('paper presets, warnings, and the rest of the tool leaves paper alone', () => {
+  for (const id of Object.keys(G.PAPER_PRESETS)) { const s = G.applyPaperPreset(G.blankSpec(), id); assert.equal(s.type, 'paper'); noBad(G.renderSVG(s, {})); assert.deepEqual(plain(G.paperIssues(s)), [], id + ' has no warnings'); }
+  const keep = G.blankSpec(); keep.objects.push(G.makeObject(keep, 'point', { x: 1, y: 1 }));
+  const pp = G.applyPaperPreset(keep, 'dots'); assert.equal(pp.objects.length, 1, 'plane objects are kept while paper is chosen'); assert.equal(G.resolveObjects(pp).length, 0, 'and not drawn');
+  pp.type = 'plane'; assert.equal(G.resolveObjects(pp).length, 1);
+  const a4 = G.blankSpec(); a4.paper.page = 'a4'; a4.paper.orient = 'landscape';
+  const kept = G.applyPaperPreset(a4, 'cm').paper; assert.deepEqual([kept.page, kept.orient], ['a4', 'landscape'], 'a preset keeps the chosen page');
+  let s = paperSpec({ margin: 2 }); assert.match(G.readability(s)[0].text, /margin/);
+  s = paperSpec({ spacing: 40, cols: 4, rows: 6, gap: 30 }); assert.match(G.paperIssues(s)[0].text, /too small/);
+  s = paperSpec({ lattice: 'isometric', axes: 'axes' }); assert.match(G.paperIssues(s)[0].text, /only drawn on square/);
+  s = paperSpec({}); assert.deepEqual(plain(G.outsideObjects(s)), []); assert.equal(G.snapPoints(s), 0); assert.deepEqual(plain(G.svgSize(s)), { w: 215.9, h: 279.4 });
 });

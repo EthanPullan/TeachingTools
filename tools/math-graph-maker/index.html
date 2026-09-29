@@ -177,8 +177,8 @@
     <button class="btn small" id="redoBtn" type="button" title="Redo (Ctrl+Y)">↷ Redo</button>
     <div class="spacer"></div>
     <label class="check" title="Export PNG/SVG without a white background"><input type="checkbox" id="transparent"> Transparent</label>
-    <button class="btn" id="pairBtn" type="button" title="Download the question and the answer key together, with matching file names (e.g. q4-q.png and q4-key.png)">Export question + key</button>
-    <select id="pairFmt" aria-label="Format for the question + key pair"><option value="png">PNG</option><option value="svg">SVG</option></select>
+    <button class="btn" id="pairBtn" data-types="plane,numberline" type="button" title="Download the question and the answer key together, with matching file names (e.g. q4-q.png and q4-key.png)">Export question + key</button>
+    <select id="pairFmt" data-types="plane,numberline" aria-label="Format for the question + key pair"><option value="png">PNG</option><option value="svg">SVG</option></select>
     <span class="sep"></span>
     <button class="btn" id="svgBtn" type="button">Export SVG</button>
     <button class="btn primary" id="pngBtn" type="button">Export PNG · 300 DPI</button>
@@ -188,12 +188,13 @@
     <aside class="panel">
       <nav class="tabs" id="tabs" role="tablist">
         <button class="tab active" data-tab="graph" role="tab">Graph</button>
+        <button class="tab" data-tab="paper" data-types="paper" role="tab" hidden>Paper</button>
         <button class="tab" data-tab="objects" data-types="plane" role="tab">Shapes</button>
         <button class="tab" data-tab="functions" data-types="plane" role="tab">Equations</button>
         <button class="tab" data-tab="geometry" data-types="plane" role="tab">Geometry</button>
         <button class="tab" data-tab="line" data-types="numberline" role="tab" hidden>Number line</button>
-        <button class="tab" data-tab="axes" role="tab">Axes</button>
-        <button class="tab" data-tab="test" role="tab">Test</button>
+        <button class="tab" data-tab="axes" data-types="plane,numberline" role="tab">Axes</button>
+        <button class="tab" data-tab="test" data-types="plane,numberline" role="tab">Test</button>
         <button class="tab" data-tab="style" role="tab">Style</button>
       </nav>
       <div class="tabbody">
@@ -202,7 +203,8 @@
         <section class="pane" data-pane="graph">
           <div>
             <h3 class="section-title">What are you making?</h3>
-            <div class="seg" data-seg="type"><button type="button" data-v="plane">Coordinate plane</button><button type="button" data-v="numberline">Number line</button></div>
+            <div class="seg" data-seg="type"><button type="button" data-v="plane">Coordinate plane</button><button type="button" data-v="numberline">Number line</button><button type="button" data-v="paper">Graph paper</button></div>
+            <p class="hint" style="margin-top:6px" data-types="paper" hidden>Blank grid, dot and isometric paper for a whole page, or several small grids per page. Set it up on the Paper tab.</p>
             <p class="hint" style="margin-top:6px" data-types="numberline">Set up the line on the Number line tab. Your plane objects are kept, and come back if you switch again.</p>
           </div>
           <div>
@@ -223,7 +225,7 @@
             <p class="hint" style="margin-top:8px">Grid squares are always square: a square is one step between numbered gridlines. Set a different range on the Axes tab.</p>
             <label class="check" style="margin-top:10px"><input type="checkbox" data-bind="quadrantLabels"> Label the quadrants (I, II, III, IV)</label>
           </div>
-          <div>
+          <div data-types="plane,numberline">
             <h3 class="section-title">Printed size</h3>
             <select id="sizePreset" aria-label="Size preset"></select>
             <div class="row" style="margin-top:8px">
@@ -232,12 +234,39 @@
             </div>
             <p class="hint" style="margin-top:8px">Sizes are real print sizes. The width is fixed; leave the height blank and it follows the grid so squares stay square.</p>
           </div>
-          <div>
+          <div data-types="plane,numberline">
             <h3 class="section-title">Physical scale</h3>
             <label class="check"><input type="checkbox" data-bind="scale.lock"> Lock the grid to a real size</label>
             <div class="row" style="margin-top:8px"><div><label class="lab"><span data-types="plane">One grid square</span><span data-types="numberline" hidden>One step between numbers</span> = (mm)</label><input type="number" min="1" max="50" step="any" data-bind="scale.mm"></div></div>
             <p class="hint" id="scaleHint" style="margin-top:8px">The page grows to fit the grid, so the size above is ignored. Paste the PNG into Word at 100% (it is stamped 300 DPI) and a ruler will measure true.</p>
           </div>
+        </section>
+
+        <!-- PAPER -->
+        <section class="pane" data-pane="paper" hidden id="paperPane">
+          <div><h3 class="section-title">Quick setup</h3>
+            <select id="paperPreset"><option value="">Choose a setup…</option></select>
+            <p class="hint" style="margin-top:6px">Sets everything below. Undo brings back what you had.</p></div>
+          <div><h3 class="section-title">Paper</h3>
+            <div class="seg" data-seg="paper.lattice"><button type="button" data-v="square">Square</button><button type="button" data-v="isometric">Isometric</button></div>
+            <div class="seg" data-seg="paper.marks" style="margin-top:8px"><button type="button" data-v="lines">Lines</button><button type="button" data-v="dots">Dots</button></div>
+            <div class="row" style="margin-top:8px"><div><label class="lab">Spacing (mm)</label><input type="number" min="2" max="40" step="any" data-bind="paper.spacing"></div>
+              <div data-kinds="square" data-kindpath="paper.lattice"><label class="lab">Axes</label><select data-bind="paper.axes"><option value="none">None (blank grid)</option><option value="axes">Axes</option><option value="numbered">Axes with numbers</option></select></div></div>
+            <p class="hint" style="margin-top:6px">10 mm is a 1 cm square; 6.35 mm is ¼ inch. Only whole squares are drawn, centred on the page.</p>
+            <label class="check" style="margin-top:8px"><input type="checkbox" data-bind="grid.highlight5"> Darker every 5th line</label>
+            <label class="check" style="margin-top:6px"><input type="checkbox" data-bind="paper.border"> Outline around each grid</label></div>
+          <div><h3 class="section-title">Page</h3>
+            <div class="row"><div><label class="lab">Paper size</label><select data-bind="paper.page"><option value="letter">US Letter</option><option value="a4">A4</option></select></div>
+              <div><label class="lab">Margin (mm)</label><input type="number" min="0" max="40" step="any" data-bind="paper.margin"></div></div>
+            <div class="seg" data-seg="paper.orient" style="margin-top:8px"><button type="button" data-v="portrait">Portrait</button><button type="button" data-v="landscape">Landscape</button></div>
+            <label class="check" style="margin-top:8px"><input type="checkbox" data-bind="paper.header"> “Name ____ Date ____” line at the top</label>
+            <p class="hint" style="margin-top:6px">The title (Graph tab) is written at the top of the page.</p></div>
+          <div><h3 class="section-title">Grids per page</h3>
+            <div class="row"><div><label class="lab">Across</label><input type="number" min="1" max="4" step="1" data-bind="paper.cols"></div><div><label class="lab">Down</label><input type="number" min="1" max="6" step="1" data-bind="paper.rows"></div>
+              <div><label class="lab">Gap (mm)</label><input type="number" min="0" max="30" step="any" data-bind="paper.gap"></div></div>
+            <p class="hint" style="margin-top:6px">1 across and 1 down is a full page. Use 2 × 2 or 2 × 3 with axes for practice graphs.</p></div>
+          <div><h3 class="section-title">Printing</h3>
+            <p class="hint">Use Export PNG (stamped 300 DPI, prints at exactly the paper size) and print it at 100%, or save the SVG. The page is not an answer key, so there is only one version.</p></div>
         </section>
 
         <!-- POINTS & SHAPES -->
@@ -278,11 +307,11 @@
 
     <section class="stage">
       <div class="stage-bar">
-        <div class="seg" id="viewSeg" role="group" aria-label="Preview version">
+        <div class="seg" id="viewSeg" data-types="plane,numberline" role="group" aria-label="Preview version">
           <button type="button" data-view="key" class="active">Answer key</button>
           <button type="button" data-view="question">Question</button>
         </div>
-        <span class="hint" id="viewHint"></span>
+        <span class="hint" id="viewHint" data-types="plane,numberline"></span>
         <span class="sep"></span>
         <label class="check" data-types="plane" title="Answer key view: click empty space to add a point, drag a point or corner to move it"><input type="checkbox" id="editTool"> Click to add points · drag to move</label>
         <label class="check" id="snapWrap" hidden><input type="checkbox" id="snapTool" checked> Snap to gridlines</label>
@@ -326,12 +355,12 @@
      kinds instead of growing one big function.
    Helpers marked "(from science)" are copied from tools/science-graph-maker.
    ========================================================================== */
-const SPEC_VERSION = 4;                                     // 2: equations, tables and related objects; 3: number lines; 4: transformations (an older tool would silently drop what it does not know)
+const SPEC_VERSION = 4;                                     // 2: equations, tables and related objects; 3: number lines; 4: transformations, geometry and paper (an older tool would silently drop what it does not know)
 const TOOL = 'math-graph-maker';
 
 /* ---------- constants ---------- */
-const TYPES = ['plane', 'numberline'];
-const TYPE_NAMES = { plane: 'Coordinate plane', numberline: 'Number line' };
+const TYPES = ['plane', 'numberline', 'paper'];
+const TYPE_NAMES = { plane: 'Coordinate plane', numberline: 'Number line', paper: 'Graph paper' };
 const SIZES = {                                             // real units: millimetres. Presets set the width; the height follows the grid.
   full:    { w: 165, name: 'Full width' },
   half:    { w: 82,  name: 'Half width' },
@@ -1388,6 +1417,7 @@ OBJECT_KINDS.vlt = {
 /* ---------- readability: can a student read this exactly? ---------- */
 function readability(spec) {
   if (isNL(spec)) return readabilityLine(spec);
+  if (spec.type === 'paper') return paperIssues(spec);
   const objs = resolveObjects(spec), A = analyse(spec, objs), issues = [];
   const win = { xlo: A.ax.lo, xhi: A.ax.hi, ylo: A.ay.lo, yhi: A.ay.hi };
   const onG = (v, ax) => { const k = (v - ax.lo) / gridStepFor(ax, spec); return Math.abs(k - Math.round(k)) < 1e-6; };
@@ -1447,7 +1477,7 @@ function readability(spec) {
 const plainMarkup = s => flatRuns(labelRuns(s)).map(r => r.t).join('');
 /* Move every point and corner that is off the drawn grid onto the nearest gridline. Returns how many values moved. */
 function snapPoints(spec) {
-  if (isNL(spec)) return 0;
+  if (isNL(spec) || spec.type === 'paper') return 0;
   const A = analyse(spec);
   let n = 0;
   const snap = (v, ax) => { const y = parseNum(v); if (!isFin(y)) return v; const s = snapValue(y, ax, spec); if (s !== y) n++; return s; };
@@ -1554,6 +1584,7 @@ function normalize(raw) {
     grid: { major: vBool(grid.major, true), minor: vBool(grid.minor, false), highlight5: vBool(grid.highlight5, false) },
     quadrantLabels: vBool(r.quadrantLabels, false),
     line: { orient: vPick(ln.orient, ORIENTS, 'horizontal'), connect: vBool(ln.connect, false), rows: lineRows },
+    paper: normPaper(r.paper),
     objects, hidden, blanks,
     scale: { lock: vBool(sc.lock, false), mm: clamp(vNum(sc.mm) ?? 10, 1, 50) },
     style: { colour: vBool(style.colour, false), photocopySafe: vBool(style.photocopySafe, false), largePrint: vBool(style.largePrint, false) }
@@ -1715,6 +1746,7 @@ function nextLabels(spec, n) {
 const cellsFor = mm => clamp(Math.floor((mm - 20) / 3.5), 3, 60);          // most major cells that stay at least ~3.5 mm wide
 function analyse(spec, objs) {
   if (isNL(spec)) return analyseLine(spec, objs);
+  if (spec.type === 'paper') return { size: pageMM(spec.paper), ax: null, ay: null };
   objs = objs || resolveObjects(spec);
   const size = sizeMM(spec.size), mode = spec.quadrants === 1 ? 'one' : 'four', ext = extentsOf(objs);
   return { size, mode,
@@ -1730,6 +1762,7 @@ const insidePlane = (x, y, A) => x >= A.ax.lo - 1e-9 && x <= A.ax.hi + 1e-9 && y
 /* Objects with any vertex outside the plane (they are clipped; the editor warns). */
 function outsideObjects(spec) {
   if (isNL(spec)) return outsideLine(spec);
+  if (spec.type === 'paper') return [];
   const objs = resolveObjects(spec), A = analyse(spec, objs), out = [];
   objs.forEach(o => { if (OBJECT_KINDS[o.kind].bounds(o).some(p => !insidePlane(p.x, p.y, A))) out.push({ id: o.id, name: objName(o) }); });
   return out;
@@ -1839,6 +1872,7 @@ function makeKit(spec, o) {
 function renderSVG(spec, o) {
   o = Object.assign({ version: 'key', ghost: false, hits: false, background: 'white', px: null, id: 'g', xmlHeader: false }, o);
   if (isNL(spec)) return renderNumberLine(spec, o);
+  if (spec.type === 'paper') return renderPaper(spec, o);
   const objs = resolveObjects(spec), A = analyse(spec, objs), { ax, ay, size } = A;
   const K = makeKit(spec, o);
   const { S, FS, FT, PAD, TICK, lw, hid, txt } = K;
@@ -2889,6 +2923,129 @@ OBJECT_KINDS.pythag.todo = o => !o.sq ? 'choose a triangle (a polygon with three
 OBJECT_KINDS.measure.todo = o => !o.a || !o.b ? 'choose two points.' : '';
 OBJECT_KINDS.circle.todo = o => !o.ok ? 'enter the centre and a radius above zero.' : '';
 
+/* ==========================================================================
+   Phase 4C: paper. Blank square grid, dot grid and isometric dot paper, as a full page or as several small grids per page.
+   It is a third type: no objects, just the page and its pattern, so there is no question / answer-key pair.
+   ========================================================================== */
+const PAGES = { letter: { w: 215.9, h: 279.4, name: 'US Letter' }, a4: { w: 210, h: 297, name: 'A4' } };
+const PAPER_LATTICES = ['square', 'isometric'], PAPER_MARKS = ['lines', 'dots'], PAPER_AXES = ['none', 'axes', 'numbered'];
+const ISO_H = Math.sqrt(3) / 2;
+const PAPER_PRESETS = {
+  cm:        { name: 'Graph paper, 1 cm squares', paper: { lattice: 'square', marks: 'lines', spacing: 10 } },
+  quarter:   { name: 'Graph paper, ¼ inch squares', paper: { lattice: 'square', marks: 'lines', spacing: 6.35 } },
+  mm5:       { name: 'Graph paper, 5 mm squares', paper: { lattice: 'square', marks: 'lines', spacing: 5 } },
+  dots:      { name: 'Dot paper, 1 cm', paper: { lattice: 'square', marks: 'dots', spacing: 10, border: false } },
+  isodots:   { name: 'Isometric dot paper, 1 cm', paper: { lattice: 'isometric', marks: 'dots', spacing: 10, border: false } },
+  isolines:  { name: 'Isometric (triangle) grid, 1 cm', paper: { lattice: 'isometric', marks: 'lines', spacing: 10 } },
+  practice4: { name: 'Four practice graphs per page (with axes)', paper: { lattice: 'square', marks: 'lines', spacing: 5, cols: 2, rows: 2, axes: 'numbered', gap: 10 } },
+  practice6: { name: 'Six practice graphs per page (with axes)', paper: { lattice: 'square', marks: 'lines', spacing: 5, cols: 2, rows: 3, axes: 'numbered', gap: 8, header: true } },
+  small9:    { name: 'Nine small blank grids per page', paper: { lattice: 'square', marks: 'lines', spacing: 4, cols: 3, rows: 3, gap: 8 } }
+};
+function normPaper(r) {
+  r = r && typeof r === 'object' ? r : {};
+  const num = (v, a, b, d) => { const n = vNum(v); return n === null ? d : clamp(n, a, b); };
+  return { lattice: vPick(r.lattice, PAPER_LATTICES, 'square'), marks: vPick(r.marks, PAPER_MARKS, 'lines'), page: vPick(r.page, Object.keys(PAGES), 'letter'), orient: vPick(r.orient, ['portrait', 'landscape'], 'portrait'),
+           spacing: num(r.spacing, 2, 40, 10), margin: num(r.margin, 0, 40, 12), cols: vInt(r.cols, 1, 4, 1), rows: vInt(r.rows, 1, 6, 1), gap: num(r.gap, 0, 30, 8),
+           axes: vPick(r.axes, PAPER_AXES, 'none'), header: vBool(r.header, false), border: vBool(r.border, true) };
+}
+function applyPaperPreset(spec, id) {
+  const p = PAPER_PRESETS[id], s = JSON.parse(JSON.stringify(spec));
+  s.type = 'paper'; s.paper = Object.assign({}, normPaper({}), { page: s.paper ? s.paper.page : 'letter', orient: s.paper ? s.paper.orient : 'portrait' }, p.paper);
+  return normalize(s);
+}
+const pageMM = P => { const g = PAGES[P.page]; return P.orient === 'landscape' ? { w: g.h, h: g.w } : { w: g.w, h: g.h }; };
+/* How the page is cut up: the panels, and inside each one the whole squares (or dots) that fit. Pure, so it is tested without drawing. */
+function paperLayout(spec) {
+  const P = spec.paper, pg = pageMM(P), M = P.margin, S = spec.style.largePrint ? LARGE : 1;
+  const headH = P.header ? 9 * S : 0, titleLines = spec.title ? wrapText(spec.title, pg.w - 2 * M, 4.2 * S, true, 2) : [], titleH = titleLines.length ? titleLines.length * 4.2 * S * 1.25 + 1.8 : 0;
+  const top = M + headH + titleH, availW = pg.w - 2 * M, availH = pg.h - top - M;
+  const pw = (availW - (P.cols - 1) * P.gap) / P.cols, ph = (availH - (P.rows - 1) * P.gap) / P.rows;
+  const pad = P.axes !== 'none' && P.lattice === 'square' ? 5 * S : 0;                         // room for arrowheads and the numbers
+  const panels = [];
+  const s = P.spacing, rowH = s * ISO_H;
+  for (let r = 0; r < P.rows; r++) for (let c = 0; c < P.cols; c++) {
+    const px = M + c * (pw + P.gap), py = top + r * (ph + P.gap);
+    let n, m, w, h;
+    if (P.lattice === 'square') { n = Math.max(0, Math.floor((pw - 2 * pad) / s + 1e-9)); m = Math.max(0, Math.floor((ph - 2 * pad) / s + 1e-9)); w = n * s; h = m * s; }
+    else { n = Math.max(1, Math.floor((pw - s / 2) / s + 1e-9) + 1); m = Math.max(1, Math.floor(ph / rowH + 1e-9) + 1); w = (n - 1) * s + s / 2; h = (m - 1) * rowH; }
+    panels.push({ x: px + (pw - w) / 2, y: py + (ph - h) / 2, w, h, n, m });
+  }
+  return { page: pg, panels, top, pw, ph, headH, titleLines, titleAt: M + headH };
+}
+function renderPaper(spec, o) {
+  const K = makeKit(spec, o), P = spec.paper, S = K.S, L = paperLayout(spec), { w: W, h: H } = L.page, s = P.spacing;
+  const gcol = spec.style.photocopySafe ? '#4a4a4a' : '#8c8c8c', gw = K.lw(spec.style.photocopySafe ? .32 : .22), dark = spec.style.photocopySafe ? '#000' : '#555';
+  const out = [];
+  if (o.geom) Object.assign(o.geom, { cell: s, W, H, panels: L.panels.length });
+  /* title and header */
+  if (P.header) out.push(K.txt(P.margin, P.margin + K.FS * 1.1, 'Name: ' + K.under(30) + '     Date: ' + K.under(16), { fs: K.FS, anchor: 'start', plain: true }));
+  L.titleLines.forEach((ln, k) => out.push(K.txt(W / 2, L.titleAt + K.FH * .95 + k * K.FH * 1.25, ln, { fs: K.FH, bold: true })));
+  const f = f3, dots = [], lines = [], heavy = [];
+  L.panels.forEach(pn => {
+    const { x, y, w, h, n, m } = pn;
+    if (P.lattice === 'square') {
+      if (P.marks === 'lines') {
+        for (let i = 0; i <= n; i++) (spec.grid.highlight5 && i % 5 === 0 ? heavy : lines).push(`M${f(x + i * s)},${f(y)}V${f(y + h)}`);
+        for (let j = 0; j <= m; j++) (spec.grid.highlight5 && j % 5 === 0 ? heavy : lines).push(`M${f(x)},${f(y + j * s)}H${f(x + w)}`);
+      } else {
+        for (let i = 0; i <= n; i++) for (let j = 0; j <= m; j++) dots.push(`M${f(x + i * s)},${f(y + j * s)}h0`);
+      }
+      if (P.border && w > 0 && h > 0) heavy.push(`M${f(x)},${f(y)}H${f(x + w)}V${f(y + h)}H${f(x)}Z`);
+    } else {
+      const pt = (c, r) => [x + c * s + (r % 2 ? s / 2 : 0), y + r * s * ISO_H];
+      const cols = () => n;                                              // odd rows shift right by half a step; the layout leaves room for that
+      if (P.marks === 'dots') { for (let r = 0; r < m; r++) for (let c = 0; c < cols(r); c++) { const [a, b] = pt(c, r); dots.push(`M${f(a)},${f(b)}h0`); } }
+      else {
+        for (let r = 0; r < m; r++) {
+          const k = cols(r);
+          if (k > 1) { const a = pt(0, r), b = pt(k - 1, r); lines.push(`M${f(a[0])},${f(a[1])}H${f(b[0])}`); }
+          if (r + 1 < m) for (let c = 0; c < k; c++) {
+            const a = pt(c, r), nxt = (r + 1) % 2 ? [c - 1, c] : [c, c + 1];
+            for (const c2 of nxt) if (c2 >= 0 && c2 < cols(r + 1)) { const b = pt(c2, r + 1); lines.push(`M${f(a[0])},${f(a[1])}L${f(b[0])},${f(b[1])}`); }
+          }
+        }
+      }
+    }
+  });
+  if (lines.length) out.push(`<path d="${lines.join('')}" stroke="${gcol}" stroke-width="${gw}" fill="none"/>`);
+  if (heavy.length) out.push(`<path d="${heavy.join('')}" stroke="${dark}" stroke-width="${K.lw(.4)}" fill="none"/>`);
+  if (dots.length) out.push(`<path d="${dots.join('')}" stroke="#333" stroke-width="${K.lw(.75)}" stroke-linecap="round" fill="none"/>`);
+  /* axes through the middle of each square grid */
+  if (P.axes !== 'none' && P.lattice === 'square') {
+    const AL = 2.4 * S, AW = .9 * S, num = P.axes === 'numbered', FT = K.FT, ax = [];
+    const every = s >= 8 ? 1 : s >= 5 ? 2 : 5;
+    L.panels.forEach(pn => {
+      const { x, y, w, h, n, m } = pn;
+      if (n < 2 || m < 2) return;
+      const oi = Math.round(n / 2), oj = Math.round(m / 2), X = x + oi * s, Y = y + oj * s, ext = 3.2 * S;
+      ax.push(`M${f(x - ext + AL * .8)},${f(Y)}H${f(x + w + ext - AL * .8)}M${f(X)},${f(y + h + ext - AL * .8)}V${f(y - ext + AL * .8)}`);
+      const head = (tx, ty, dx, dy) => `<polygon points="${f(tx)},${f(ty)} ${f(tx - dx * AL - dy * AW)},${f(ty - dy * AL + dx * AW)} ${f(tx - dx * AL + dy * AW)},${f(ty - dy * AL - dx * AW)}" fill="#000"/>`;
+      out.push(head(x + w + ext, Y, 1, 0), head(x - ext, Y, -1, 0), head(X, y - ext, 0, -1), head(X, y + h + ext, 0, 1));
+      out.push(K.txt(x + w + ext + .5, Y - 1.2, 'x', { fs: FT, anchor: 'start' }), K.txt(X + 1.4, y - ext - .4, 'y', { fs: FT, anchor: 'start' }));
+      if (num) {
+        const tk = [];
+        for (let i = -oi; i <= n - oi; i++) if (i && i % every === 0) { tk.push(`M${f(X + i * s)},${f(Y - .9)}V${f(Y + .9)}`); out.push(K.txt(X + i * s, Y + 1 + FT * .95, fmtNum(i), { fs: FT, halo: true })); }
+        for (let j = -oj; j <= m - oj; j++) if (j && j % every === 0) { tk.push(`M${f(X - .9)},${f(Y + j * s)}H${f(X + .9)}`); out.push(K.txt(X - 1.4, Y + j * s + FT * .35, fmtNum(-j), { fs: FT, anchor: 'end', halo: true })); }
+        out.push(K.txt(X - 1.2, Y + 1 + FT * .95, '0', { fs: FT, anchor: 'end', halo: true }));
+        ax.push(tk.join(''));
+      }
+    });
+    out.push(`<path d="${ax.join('')}" stroke="#000" stroke-width="${K.lw(.5)}" fill="none"/>`);
+  }
+  return K.shell(W, H, '', out.join(''));
+}
+
+/* What a printer will do to this page. */
+function paperIssues(spec) {
+  const P = spec.paper, L = paperLayout(spec), out = [];
+  if (P.margin < 6) out.push({ id: '', text: 'A margin under about 6 mm may be cut off by the printer.' });
+  const n = L.panels[0];
+  if (!n || (P.lattice === 'square' && (n.n < 2 || n.m < 2))) out.push({ id: '', text: 'The grid is too small to draw: use a smaller spacing, fewer panels or smaller margins.' });
+  if (P.axes !== 'none' && P.lattice === 'isometric') out.push({ id: '', text: 'Axes are only drawn on square grids.' });
+  if (P.axes !== 'none' && P.marks === 'dots') out.push({ id: '', text: 'Axes on dot paper run through the dots.' });
+  return out;
+}
+
 /* The page size actually drawn (a locked physical scale makes the page follow the grid). */
 function svgSize(spec) {
   const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(renderSVG(spec));
@@ -3262,7 +3419,7 @@ function pngWithDpi(u8, dpi) {
   }
 
   function buildTest() {
-    const rows = VIS_ROWS.filter(r => VIS_FOR[spec.type].includes(r[0])).map(([tok, name, blankable]) =>
+    const rows = VIS_ROWS.filter(r => (VIS_FOR[spec.type] || []).includes(r[0])).map(([tok, name, blankable]) =>
       `<label class="check"><input type="checkbox" data-vis="${tok}"> ${name}</label>` +
       (blankable && (tok !== 'notation' || spec.type === 'plane') ? `<label class="check sm" data-blankwrap="${tok}"><input type="checkbox" data-blank="${tok}"> Answer line</label>` : '<span></span>')).join('');
     const objs = spec.objects.filter(o => kindOn(o.kind) === spec.type).map(o => `<label class="check"><input type="checkbox" data-vis="${o.id}"> <span data-oname="${o.id}"></span></label>`).join('');
@@ -3367,12 +3524,18 @@ function pngWithDpi(u8, dpi) {
     el.setAttribute('width', Math.round(state.size.w * 7.5)); el.setAttribute('height', Math.round(state.size.h * 7.5));
     $('#preview').classList.toggle('pick', pick);
     $('#preview').classList.toggle('edit', edit);
-    $('#caption').textContent = state.view === 'key' ? 'Answer key: everything is shown.' : 'Question version: scaffold level “' + levelName() + '”.';
+    $('#caption').textContent = spec.type === 'paper' ? 'Prints at real size: ' + PAGES[spec.paper.page].name + (spec.paper.orient === 'landscape' ? ', landscape' : '') + '.' : state.view === 'key' ? 'Answer key: everything is shown.' : 'Question version: scaffold level “' + levelName() + '”.';
     $('#viewHint').textContent = state.view === 'key' ? 'Editing the answer key; switch to Question to see what students get.' : 'This is what students get.';
     $$('#viewSeg button').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
   }
   function renderStatus() {
     const { w, h } = state.size, bad = countBad(), out = state.outside.length, iss = state.issues.length, dot = '<span class="dotline"></span>';
+    if (spec.type === 'paper') {
+      const L = paperLayout(spec), pn = L.panels[0];
+      $('#status').innerHTML = `<span><b>${+w.toFixed(1)} × ${+h.toFixed(1)}</b> mm</span>${dot}<span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span>${dot}<span>${L.panels.length} grid${L.panels.length === 1 ? '' : 's'}${spec.paper.lattice === 'square' ? ', <b>' + pn.n + ' × ' + pn.m + '</b> squares each' : ''}</span>` +
+        (iss ? `${dot}<span class="warn">${iss} warning${iss === 1 ? '' : 's'}: ${esc(state.issues[0].text)}</span>` : '');
+      return;
+    }
     $('#status').innerHTML = `<span><b>${+w.toFixed(1)} × ${+h.toFixed(1)}</b> mm</span>${dot}<span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span>` +
       (spec.scale.lock ? `${dot}<span>1 ${isNL(spec) ? 'step' : 'grid square'} = <b>${+spec.scale.mm.toFixed(2)}</b> mm</span>` : `${dot}<span>1 ${isNL(spec) ? 'step' : 'grid square'} ≈ <b>${+state.geom.cell.toFixed(1)}</b> mm</span>`) +
       (spec.scale.lock && w > 180 ? `${dot}<span class="warn">wider than a letter/A4 page’s usable width (about 180 mm): use a smaller square or a shorter range</span>` : '') +
@@ -3381,6 +3544,7 @@ function pngWithDpi(u8, dpi) {
       (bad ? `${dot}<span class="warn">${bad} cell${bad === 1 ? ' isn’t a number and is' : 's aren’t numbers and are'} left off the graph</span>` : '');
   }
   function refresh() { state.outside = outsideObjects(spec); state.issues = readability(spec); renderPreview(); syncControls(); renderStatus(); }
+  function buildPaperPresets() { $('#paperPreset').innerHTML = '<option value="">Choose a setup…</option>' + Object.keys(PAPER_PRESETS).map(k => `<option value="${k}">${esc(PAPER_PRESETS[k].name)}</option>`).join(''); }
   function rebuildStructure() { buildObjects(); buildTransforms(); buildGeometry(); buildFunctions(); buildLine(); buildTest(); refresh(); }
 
   /* ---------- actions ---------- */
@@ -3460,8 +3624,8 @@ function pngWithDpi(u8, dpi) {
   function delVert(i, k) { const o = spec.objects[i]; o.vertices.splice(k, 1); o.labels.splice(k, 1); commit(null, true); }
 
   /* ---------- files ---------- */
-  const slug = () => (spec.name || spec.title || 'graph').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'graph';
-  const suffix = version => version === 'key' ? '-key' : '-q';
+  const slug = () => (spec.name || spec.title || (spec.type === 'paper' ? 'paper' : 'graph')).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'graph';
+  const suffix = version => spec.type === 'paper' ? '' : version === 'key' ? '-key' : '-q';
   function download(name, blob) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
@@ -3527,6 +3691,8 @@ function pngWithDpi(u8, dpi) {
       else if (kind === 'values') spec.objects[+i].values = items.map(cellFromText).slice(0, MAX_CRIT);
       else if (kind === 'signs') spec.objects[+i].signs = items.slice(0, MAX_CRIT + 1);
       commit('list:' + t.dataset.list);
+    } else if (t.id === 'paperPreset') {
+      if (t.value) { spec = applyPaperPreset(spec, t.value); t.value = ''; commit(null, true); toast('Paper set up. Undo brings back what you had.', 'ok'); }
     } else if (t.id === 'linePreset') {
       if (t.value) { spec = applyLinePreset(spec, t.value); t.value = ''; commit(null, true); toast('Number line set up. Undo brings back what you had.', 'ok'); }
     } else if (t.dataset.tblank) {
@@ -3718,7 +3884,7 @@ function pngWithDpi(u8, dpi) {
   });
 
   /* ---------- go ---------- */
-  buildStatic(); buildAxes(); buildStyle(); rebuildStructure();
+  buildStatic(); buildAxes(); buildStyle(); buildPaperPresets(); rebuildStructure();
 })();
 </script>
 </body>

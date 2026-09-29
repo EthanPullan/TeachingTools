@@ -96,12 +96,40 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 - Accepted on purpose: a sign chart takes `y = 2x` as well as `2x` (it is the same expression in x). Only `x = 4` is refused.
 - Smell noticed: the Number line tab's mark cards use array positions in `data-bind` like the other tabs (see below).
 
+## Phase 4 notes (transformations, geometry, paper)
+- **Transformations** (`transform` kind). The image is derived at render time from the original, so editing a vertex of the original moves the
+  image (checked in a unit and a browser test). Successive transformations chain (`of` may be another transformation): A → A′ → A″.
+  Pure point maps (`translatePt`, `reflectPt`, `rotatePt`, `dilatePt`) are exact for quarter turns and tested as properties (a reflection twice is
+  the identity, four quarter turns are the identity, dilating by k then 1/k returns the point, …).
+- **Aids vs image vs text are three separate switches.** The image hides with the object's own name (Test tab, "Individual points and shapes");
+  the mirror line, centre and arrows hide with the new `aids` token; the description and mapping rule hide with `notation`, which can leave an
+  answer line ("Mapping: ______"). So "Reflect ABC in the y-axis" (original only, mirror line shown) and "Describe this transformation" (image
+  shown, everything else hidden) are both one spec. Implementation: a kind may set `keep: true` to be drawn (aids only) when hidden by name, and
+  a kind may return `captions()`; the plane renderer reserves room for caption lines whether or not the question shows them.
+- **Mapping rule** is written for translations, reflections and rotations or dilations about the origin. About another centre no one-line rule is
+  shown (the field stays empty rather than showing a clumsy one). Words ("3 right, 2 down") work for everything.
+- **Geometry kinds:** `symmetry` (lines and order of rotational symmetry worked out from the vertices: candidate axes through the vertex mean
+  are tested by reflecting the vertex list and matching it cyclically), `areacount` (shoelace area, exact for gridline shapes, unit-square
+  shading, perimeter marked "≈" when a side is slanted), `pythag` (squares on the sides, either orientation, with areas and `3² + 4² = 5²`,
+  or `≠` when the triangle is not a right one), `measure` (distance working, midpoint, dashed legs with Δx and Δy), `mark` (right-angle squares,
+  equal-length ticks grouped by length) and `circle` (drawn as an ellipse in page space; window grows to show it).
+  They all work on a polygon, line segments **or a transformation's image**.
+- **Paper** is a third type (`paper`), with no objects and no question / key pair: page (Letter or A4, portrait or landscape), square or
+  isometric lattice, lines or dots, spacing in mm, margins, several grids per page (up to 4 × 6), optional axes with numbers for practice graphs, a
+  Name / Date line. Only whole squares are drawn, centred. `paperLayout` is pure and tested (panels inside the margins, never overlapping).
+  PNG is the real page size at 300 DPI (Letter = 2550 × 3300).
+- **specVersion is now 4.** Old files still open; the tab strip was tightened ("Points & shapes" is now "Shapes"; new "Geometry" and "Paper" tabs).
+- Bugs found by testing, fixed: the page shrank when "all objects" was hidden because caption room was only reserved for visible objects; a
+  pole exactly on a sample point was missed by the sign-chart finder (phase 3, see above); a crash from reusing the shapes card's name pill.
+- Assumptions to check with the teacher: the paper presets (cm, ¼ inch, 5 mm, 4 mm), three approximations of "standard" isometric paper (dots at
+  1 cm along the row, rows √3/2 apart), and the default look of a dilation (dashed rays through the centre).
+
 ## How Phase 1 is tested
-- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 91 tests after Phase 3): axis maths, number
+- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 108 tests after Phase 4): axis maths, number
   cleanup, label typography, `normalize` idempotence, save/load round trip, stable ids, paste parsing, and a
   render matrix (every layout × scaffold level × style) asserting no `NaN`/`undefined`, an identical page and
   plot rectangle in question and key, and that a hidden title/label never leaks into the question SVG.
-- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 109 checks after Phase 3) drive the real page
+- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 143 checks after Phase 4) drive the real page
   over `file://` in Chromium: no network requests, table entry and paste, click-to-place and drag with snapping,
   scaffold levels, pick-to-hide, export names (`q4-q.png` / `q4-key.png`), PNG stamped 300 DPI with pixel size
   matching the millimetres, the locked scale **measured by the browser** (ten 10 mm squares = 100 mm),
@@ -122,6 +150,10 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
   font that has them, is unchecked (PNG is safe). Crowding when several mark types share one short line is left to the teacher (see the
   screenshot habit: use stacked lines). Vertical lines take their length from the page height, not the range.
 
+- Phase 4: a symmetry line that runs along an axis is drawn under the axis and cannot be seen (move the shape off centre); labels of a shape and
+  its reflection can collide when a vertex sits near the mirror line (label placement is greedy, not global). Mirror lines drawn exactly over
+  the axes are not drawn at all (the axis is the line). Paper: no real printer test (margins under about 6 mm are warned about, not verified).
+
 ## Smells noticed while building (not fixed; for separate issues)
 - The toolbar is crowded (also true of the science tool); a menu for exports would tidy it.
 - The science tool's `renderSVG` and this one share a lot of tick/axis code by copy. If both tools live on,
@@ -139,7 +171,7 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 - [x] Phase 1: MVP (`tools/math-graph-maker/`, specVersion 1)
 - [x] Phase 2: function engine and linear relations (specVersion 2)
 - [x] Phase 3: number lines (specVersion 3)
-- [ ] Phase 4: transformations, geometry, paper
+- [x] Phase 4: transformations, geometry, paper (specVersion 4)
 - [ ] Phase 5: data displays
 - [ ] Phase 6: test-making toolkit
 - [ ] Phase 7: workflow and comfort
