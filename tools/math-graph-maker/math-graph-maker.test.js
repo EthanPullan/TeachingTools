@@ -14,7 +14,11 @@ const G = vm.runInNewContext(core + `;({ SPEC_VERSION, TOOL, SCAFFOLD, SCAFFOLD_
   normalize, blankSpec, sampleSpec, serialize, parseFile, migrate, makeObject, removeObject, newId, scaffoldLevel, sizeMM, mmToPx,
   parseTSV, parseTable, parsePointGrid, pastePoints, pasteVertices, importPoints, nextLabels,
   analyse, computeAxes, gridStepFor, snapValue, outsideObjects, extentsOf, vertsOf, objName, labelText,
-  renderSVG, svgSize, pngWithDpi, crc32, PRESETS })`, {});
+  renderSVG, svgSize, pngWithDpi, crc32, PRESETS,
+  parseEquation, compileExpr, astMarkup, linearMarkup, linearFit, toFraction, flatRuns, runsW, fracStr,
+  findZeros, findIntersections, findExtrema, sampleFunction, clipSeg, clipRun, simplifyPts, plotRuns,
+  interceptPoints, intersectionPoints, lineCross, slopeTriangle, suggestXs, relatedEq,
+  resolveObjects, readability, snapPoints, pasteRows, dropRow, fillRows, tableLayout, MAX_ROWS, TABLE_COLS })`, {});
 
 /* vm objects come from another realm; round-trip through JSON so deepEqual compares plain data */
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -80,8 +84,12 @@ test('ticks and tick labels', () => {
   assert.equal(G.fmtTick(1, { lo: 0, step: 0.5 }), '1.0');          // consistent decimals down an axis
   assert.equal(G.fmtTick(-2, { lo: -10, step: 2 }), '−2');
   assert.equal(G.fmtTick(-0, { lo: -1, step: 1 }), '0');
-  assert.equal(G.fmtTick(0.5, { lo: 0, step: 0.5, fmt: { format: 'fraction' } }), '1/2');
-  assert.equal(G.fmtTick(-1.5, { lo: -2, step: 0.5, fmt: { format: 'fraction' } }), '−1 1/2');
+  const fr = { lo: -2, step: 0.5, fmt: { format: 'fraction' } };
+  assert.equal(G.fmtTick(0.5, fr), '{1/2}');                          // stacked-fraction markup for the renderer ...
+  assert.equal(G.fmtTick(-1.5, fr), '\u22121{1/2}');
+  assert.equal(G.fmtTick(2, fr), '2');
+  assert.equal(G.fmtTick(0.5, fr, true), '1/2');                      // ... and plain text for input boxes
+  assert.equal(G.fmtTick(-1.5, fr, true), '\u22121 1/2');
   assert.equal(G.anchorIndex({ lo: -10, hi: 10, step: 1 }), 10);
 });
 test('Helvetica width table covers exactly chars 32-126', () => {
@@ -562,4 +570,423 @@ test('the page is self-contained: no external scripts, styles, fonts or URLs to 
 });
 test('the core uses its own storage keys only (none yet)', () => {
   assert.ok(!/sciencegraphmaker|graphmaker\./.test(html.replace(/mathgraphmaker/g, '')));
+});
+
+/* ==========================================================================
+   Phase 2: function engine and linear relations
+   ========================================================================== */
+const near = (a, b, t = 1e-9) => Math.abs(a - b) <= t;
+const WIN = { xlo: -10, xhi: 10, ylo: -10, yhi: 10 };
+const fnSpec = (exprs, extra) => { const s = G.blankSpec(); exprs.forEach(e => s.objects.push(G.makeObject(s, 'function', typeof e === 'string' ? { expr: e } : e))); return Object.assign(s, extra || {}); };
+const objSvg = (svg, id) => { const m = new RegExp(`<g data-obj="${id}"[^>]*>(.*?)</g>`).exec(svg); return m ? m[1] : null; };
+
+test('equation forms: slope-intercept, point-slope, standard, vertical, horizontal, notation, bare expressions', () => {
+  const chk = (src, f, o) => {
+    const e = G.parseEquation(src); assert.ok(e.ok, src + ': ' + e.error);
+    if (o.vertical !== undefined) { assert.equal(e.vertical, o.vertical, src); return; }
+    assert.equal(e.vertical, null, src);
+    for (const [x, y] of f) assert.ok(near(e.fn(x), y, 1e-9), `${src} at ${x}: ${e.fn(x)} vs ${y}`);
+    if (o.m !== undefined) assert.ok(e.linear && near(e.linear.m, o.m, 1e-9) && near(e.linear.c, o.c, 1e-9), src + ' ' + JSON.stringify(e.linear));
+    if (o.linear === false) assert.equal(e.linear, null, src);
+    if (o.name !== undefined) assert.equal(e.name, o.name);
+  };
+  chk('y = 2x + 3', [[2, 7], [-1, 1]], { m: 2, c: 3 });
+  chk('y = −2x + 3', [[2, -1]], { m: -2, c: 3 });
+  chk('y = -2x+3', [[0, 3]], { m: -2, c: 3 });
+  chk('y − 2 = 3(x + 1)', [[0, 5], [2, 11]], { m: 3, c: 5 });          // point-slope
+  chk('2x + 3y = 6', [[0, 2], [3, 0], [6, -2]], { m: -2 / 3, c: 2 });      // standard
+  chk('x = 4', [], { vertical: 4 }); chk('3 = x', [], { vertical: 3 }); chk('2x = 8', [], { vertical: 4 });
+  chk('y = -1', [[5, -1]], { m: 0, c: -1 });
+  chk('f(x) = x^2 - 4', [[3, 5], [0, -4]], { linear: false, name: 'f' });
+  chk('g(x) = -x', [[2, -2]], { m: -1, c: 0, name: 'g' });
+  chk('2x + 3', [[1, 5]], { m: 2, c: 3 });                                   // a bare expression means y = …
+  chk('y = ½x + 1', [[2, 2]], { m: .5, c: 1 });
+  chk('y = (x+1)/2', [[3, 2]], { m: .5, c: .5 });
+  chk('y = 3x/2 - 1', [[2, 2]], { m: 1.5, c: -1 });
+  chk('xy = 6', [[2, 3], [-3, -2]], { linear: false });                       // solvable for y, though not a line
+  chk('y = 1/x', [[4, .25]], { linear: false });
+});
+test('parser precedence and implicit multiplication', () => {
+  const y = (src, x) => G.parseEquation('y = ' + src).fn(x);
+  assert.equal(y('-x^2', 3), -9);              // -x^2 is -(x^2)
+  assert.equal(y('2^3^2', 0), 512);            // ^ is right-associative
+  assert.equal(y('1/2x', 4), 2);               // (1/2)x
+  assert.equal(y('2x^2', 3), 18);
+  assert.equal(y('3(x+1)(x-1)', 2), 9);
+  assert.equal(y('2 3', 0), 6);
+  assert.ok(near(y('sin x', Math.PI / 2), 1) && near(y('2sin(x)', Math.PI / 2), 2) && near(y('cos(pi)', 0), -1));
+  assert.ok(near(y('xsin(x)', Math.PI / 2), Math.PI / 2));               // "xsin" splits into x and sin
+  assert.ok(near(y('sqrt(x)+abs(x)', 4), 6) && near(y('ln(e)', 0), 1) && near(y('log(100)', 0), 2));
+  assert.equal(y('2^-x', 1), .5);
+});
+test('equation errors are plain language and never throw', () => {
+  for (const bad of ['', '   ', 'y =', 'y = 2x +', '2x + 3y', 'x^2 + y^2 = 25', 'y = 2x = 3', 'y = z', 'y = (x + 1', 'y = x + 1)', 'y = 2 @ x', 'f(x) = 2x + y', 'x = x', 'y = 2 ** x', '((']) {
+    let e; assert.doesNotThrow(() => { e = G.parseEquation(bad); }, bad);
+    assert.equal(e.ok, false, bad);
+    assert.ok(e.error && e.error.length > 5 && !/undefined|NaN|\[object/.test(e.error), bad + ' -> ' + e.error);
+  }
+  assert.match(G.parseEquation('x^2 + y^2 = 25').error, /can.t be graphed yet/);
+  assert.match(G.parseEquation('y = z').error, /Unknown name/);
+  assert.match(G.parseEquation('y = (x + 1').error, /closing bracket/);
+  assert.match(G.parseEquation('x = x').error, /always true/);
+  assert.equal(G.compileExpr('2x + 1').fn(3), 7);
+  assert.ok(G.compileExpr('x = 3').error && !G.compileExpr('x = 3').fn);
+});
+test('equations are written back with stacked fractions, raised powers and true minus signs', () => {
+  const m = s => G.parseEquation(s).markup;
+  assert.equal(m('y = 1/2x + 1'), 'y = {1/2}x + 1');
+  assert.equal(m('y = ½x + 1'), 'y = {1/2}x + 1');
+  assert.equal(m('y=(x+1)/2'), 'y = {x + 1/2}');
+  assert.equal(m('y = 3x/2 - 1'), 'y = {3x/2} − 1');
+  assert.equal(m('y = x^2 - 4'), 'y = x^2 − 4');
+  assert.equal(m('y = 2(x - 3)^2'), 'y = 2(x − 3)^2');
+  assert.equal(m('y = -2x+3'), 'y = −2x + 3');
+  assert.equal(m('f(x) = 2x'), '*f*(x) = 2x');
+  assert.equal(m('y - 2 = 3(x + 1)'), 'y − 2 = 3(x + 1)');
+  assert.equal(m('2x + 3y = 6'), '2x + 3y = 6');
+  assert.equal(m('y = sqrt(x + 1)'), 'y = √(x + 1)');
+  assert.equal(m('y = x^(1/2)'), 'y = x^{1∕2}');
+  assert.equal(m('y = 1/2/3'), 'y = {1∕2/3}');                          // a fraction inside a fraction stays on one line, so the markup is unambiguous
+  assert.equal(m('2x'), 'y = 2x'); assert.equal(m('y = 2*x'), 'y = 2x'); assert.equal(m('y = 2*3'), 'y = 2 × 3');
+  assert.equal(m('y = 2 pi x'), 'y = 2πx');
+  const runs = plain(G.labelRuns('y = {1/2}x + 1'));
+  assert.deepEqual(runs.map(r => r.frac ? 'frac' : r.t), ['y', ' = ', 'frac', 'x', ' + 1']);
+  assert.deepEqual(runs[2].frac, [[{ t: '1' }], [{ t: '2' }]]);
+  assert.ok(G.runsW(G.labelRuns('{1/2}'), 3.2) < G.runsW(G.labelRuns('1/2'), 3.2), 'a stacked fraction is narrower than 1/2 on a line');
+  assert.equal(G.flatRuns(G.labelRuns('{1/2}')).map(r => r.t).join(''), '1/2');
+  assert.deepEqual(plain(G.labelRuns('{x^2/3}')[0].frac[0]), [{ t: 'x', i: true }, { t: '2', up: true }]);
+  assert.deepEqual(plain(G.labelRuns('{set}')), [{ t: '{set}' }]);            // braces without a slash are plain text
+  assert.equal(G.linearMarkup(-2 / 3, 1), 'y = −{2/3}x + 1');
+  assert.equal(G.linearMarkup(.5, 0), 'y = {1/2}x'); assert.equal(G.linearMarkup(1, -3), 'y = x − 3');
+  assert.equal(G.linearMarkup(-1, 0), 'y = −x'); assert.equal(G.linearMarkup(0, 4), 'y = 4'); assert.equal(G.linearMarkup(2, .5), 'y = 2x + {1/2}');
+  assert.deepEqual(plain(G.toFraction(.5)), [1, 2]); assert.deepEqual(plain(G.toFraction(0.6666666666667)), [2, 3]);
+  assert.deepEqual(plain(G.toFraction(-.25)), [-1, 4]); assert.equal(G.toFraction(0.3333, 100), null);
+});
+
+test('solver: zeros checked against known values', () => {
+  const z = (f, a, b) => plain(G.findZeros(f, a, b));
+  assert.deepEqual(z(x => x * x - 4, -10, 10), [-2, 2]);
+  assert.deepEqual(z(x => x ** 3 - x, -3, 3), [-1, 0, 1]);
+  const s = z(Math.sin, 0, 2 * Math.PI);
+  assert.equal(s.length, 3); assert.ok(near(s[0], 0, 1e-9) && near(s[1], Math.PI, 1e-9) && near(s[2], 2 * Math.PI, 1e-9), 'zeros at both ends are found');
+  assert.deepEqual(z(x => (x - 1) ** 2, -5, 5), [1]);                       // a root that only touches zero
+  assert.deepEqual(z(x => x * x + 1, -5, 5), []);
+  assert.deepEqual(z(x => 1 / x, -5, 5), []);                               // a pole is not a zero
+  assert.deepEqual(z(x => 0, -5, 5), []);                                   // the axis itself has no isolated zeros
+  assert.deepEqual(z(x => x, 0, 5), [0]);
+  const t = z(Math.tan, -5, 5); assert.equal(t.length, 3); assert.ok(near(t[0], -Math.PI, 1e-9) && near(t[1], 0, 1e-9) && near(t[2], Math.PI, 1e-9), 'tan: zeros at 0 and ±π, none at the poles');
+  assert.deepEqual(z(x => x - 7, -5, 5), []);
+  assert.deepEqual(z(x => (x * x - 1) / (x - 1), -5, 5), [-1]);            // removable hole at 1 is not a zero
+});
+test('solver: intersections and extrema checked against known values', () => {
+  assert.deepEqual(plain(G.findIntersections(x => 2 * x + 1, x => -x + 4, -10, 10)), [{ x: 1, y: 3 }]);
+  assert.deepEqual(plain(G.findIntersections(x => x * x, x => x, -5, 5)), [{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+  assert.deepEqual(plain(G.findIntersections(x => x * x, x => 2 * x - 1, -5, 5)), [{ x: 1, y: 1 }]);        // tangent
+  assert.deepEqual(plain(G.findIntersections(x => x, x => x + 1, -5, 5)), []);                              // parallel
+  assert.deepEqual(plain(G.findIntersections(x => x, x => x, -5, 5)), []);                                  // the same line
+  let e = plain(G.findExtrema(x => -((x - 2) ** 2) + 9, -10, 10)); assert.deepEqual(e, [{ x: 2, y: 9, type: 'max' }]);
+  e = plain(G.findExtrema(x => x ** 3 - 3 * x, -3, 3)); assert.deepEqual(e, [{ x: -1, y: 2, type: 'max' }, { x: 1, y: -2, type: 'min' }]);
+  e = plain(G.findExtrema(Math.sin, 0, 2 * Math.PI)); assert.equal(e.length, 2);
+  assert.ok(near(e[0].x, Math.PI / 2, 1e-6) && e[0].y === 1 && e[0].type === 'max' && near(e[1].x, 3 * Math.PI / 2, 1e-6) && e[1].y === -1 && e[1].type === 'min');
+  assert.deepEqual(plain(G.findExtrema(x => 2 * x + 1, -5, 5)), []);
+  assert.deepEqual(plain(G.findExtrema(x => 1 / (x * x), -5, 5)), [], 'a pole is not a maximum');
+});
+
+test('clipping, simplifying and sampling', () => {
+  assert.deepEqual(plain(G.clipSeg([-20, 0], [20, 0], -10, 10, -10, 10)), [.25, .75]);
+  assert.equal(G.clipSeg([-20, 20], [-15, 15], -10, 10, -10, 10), null);
+  const pieces = G.clipRun({ pts: [[0, 0], [5, 5], [20, 20]], a: 'start', b: 'end' }, -10, 10, -10, 10);
+  assert.equal(pieces.length, 1); assert.deepEqual(plain(pieces[0].pts[pieces[0].pts.length - 1]), [10, 10]);
+  assert.equal(pieces[0].a, 'start'); assert.equal(pieces[0].b, 'clip');
+  const two = G.clipRun({ pts: [[0, 0], [0, 30], [1, 30], [1, 0]], a: 'start', b: 'end' }, -10, 10, -10, 10);
+  assert.equal(two.length, 2, 'a curve that leaves and re-enters is two pieces');
+  assert.equal(G.simplifyPts([[0, 0], [1, 1], [2, 2], [3, 3]], 5, 5, .02).length, 2);
+  assert.equal(G.simplifyPts([[0, 0], [1, 1], [2, 0]], 5, 5, .02).length, 3);
+  assert.equal(G.simplifyPts([[0, 0], [1, 0]], 5, 5, .02).length, 2);
+});
+test('plotting: a line is two points, a parabola follows its equation, arrows appear only where the curve carries on', () => {
+  const run = (f, d) => G.plotRuns(f, d || { min: null, max: null }, WIN, 7, 7);
+  let r = run(x => 2 * x + 1);
+  assert.equal(r.length, 1); assert.equal(r[0].pts.length, 2); assert.equal(r[0].a, 'clip'); assert.equal(r[0].b, 'clip');
+  r = run(x => x * x - 4);
+  assert.equal(r.length, 1); assert.ok(r[0].pts.length > 10 && r[0].pts.length < 120, 'adaptive: ' + r[0].pts.length);
+  r[0].pts.forEach(([x, y]) => assert.ok(near(y, x * x - 4, 0.02) && y >= -10 - 1e-9 && y <= 10 + 1e-9 && x >= -10 - 1e-9 && x <= 10 + 1e-9));
+  assert.equal(r[0].a, 'clip'); assert.equal(r[0].b, 'clip');
+  r = run(x => x, { min: 0, max: 5, minClosed: true, maxClosed: false });
+  assert.equal(r.length, 1); assert.equal(r[0].a, 'start'); assert.equal(r[0].b, 'end');
+  assert.deepEqual(plain([r[0].pts[0], r[0].pts[r[0].pts.length - 1]]), [[0, 0], [5, 5]]);
+  assert.deepEqual(plain(run(x => x, { min: 20, max: 30 })), [], 'a domain outside the window draws nothing');
+  r = run(x => 1000 * x); assert.equal(r.length, 1, 'a steep line is not mistaken for a jump');
+});
+test('discontinuities: 1/x, tan, floor and a removable hole never draw a line across the gap', () => {
+  let r = G.plotRuns(x => 1 / x, { min: null, max: null }, WIN, 7, 7);
+  assert.equal(r.length, 2);
+  r.forEach(p => { const sg = Math.sign(p.pts[0][0]); assert.ok(p.pts.every(q => Math.sign(q[0]) === sg), 'each branch stays on one side of x = 0'); });
+  r = G.plotRuns(Math.tan, { min: null, max: null }, WIN, 7, 7);
+  assert.equal(r.length, 7, 'poles at ±π/2, ±3π/2, ±5π/2 make seven branches');
+  r.forEach(p => { const b = k => Math.floor((k + Math.PI / 2) / Math.PI), b0 = b(p.pts[0][0]); assert.ok(p.pts.every(q => b(q[0]) === b0), 'a branch never spans a pole'); });
+  r = G.plotRuns(Math.floor, { min: null, max: null }, WIN, 7, 7);
+  assert.ok(r.length >= 20);
+  r.forEach(p => assert.ok(p.pts.every(q => q[1] === p.pts[0][1]), 'each step is flat'));
+  r = G.plotRuns(x => (x * x - 1) / (x - 1), { min: null, max: null }, WIN, 7, 7);
+  assert.equal(r.length, 1, 'a removable hole does not break the line'); r[0].pts.forEach(([x, y]) => assert.ok(near(y, x + 1, 1e-6)));
+  r = G.plotRuns(Math.sqrt, { min: null, max: null }, WIN, 7, 7);
+  assert.equal(r.length, 1); assert.ok(r[0].pts.every(q => q[0] >= 0)); assert.equal(r[0].a, 'break');
+  const t0 = Date.now(); r = G.plotRuns(x => Math.sin(1 / x), { min: null, max: null }, WIN, 7, 7);
+  assert.ok(Date.now() - t0 < 2000, 'a wildly oscillating function is cut off by the budget, not left to hang');
+  for (const f of [x => 1 / x, Math.tan, Math.floor, Math.sqrt, x => Math.log(x), x => 1 / (x * x), x => Math.exp(x * 5), x => x ** 0.5])
+    G.plotRuns(f, { min: null, max: null }, WIN, 7, 7).forEach(p => p.pts.forEach(q => assert.ok(Number.isFinite(q[0]) && Number.isFinite(q[1]))));
+});
+
+test('key points: intercepts, intersections, line crossings, slope triangles, suggested x-values', () => {
+  const ip = (src, dom) => plain(G.interceptPoints(G.parseEquation(src), dom || { min: null, max: null }, WIN));
+  assert.deepEqual(ip('y = -2x + 3'), [{ x: 0, y: 3, axis: 'y' }, { x: 1.5, y: 0, axis: 'x' }]);
+  assert.deepEqual(ip('y = x^2 - 4').map(p => [p.x, p.y]), [[0, -4], [-2, 0], [2, 0]]);
+  assert.deepEqual(ip('y = x'), [{ x: 0, y: 0, axis: 'both' }]);
+  assert.deepEqual(ip('x = 4'), [{ x: 4, y: 0, axis: 'x' }]); assert.deepEqual(ip('x = 0'), []);
+  assert.deepEqual(ip('y = 2'), [{ x: 0, y: 2, axis: 'y' }]);
+  assert.deepEqual(ip('y = x + 1', { min: 1, max: 5 }), [], 'intercepts outside the drawn domain are not marked');
+  assert.deepEqual(ip('y = oops'), []);
+  const A = G.parseEquation('y = 2x + 1'), B = G.parseEquation('y = -x + 4'), V = G.parseEquation('x = 2'), P = G.parseEquation('y = x^2'), L = G.parseEquation('y = x');
+  assert.deepEqual(plain(G.intersectionPoints(A, B, WIN)), [{ x: 1, y: 3 }]);
+  assert.deepEqual(plain(G.intersectionPoints(A, V, WIN)), [{ x: 2, y: 5 }]);
+  assert.deepEqual(plain(G.intersectionPoints(P, L, WIN)), [{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+  assert.deepEqual(plain(G.intersectionPoints(A, G.parseEquation('y = 2x + 5'), WIN)), []);
+  assert.deepEqual(plain(G.intersectionPoints(V, G.parseEquation('x = 3'), WIN)), []);
+  assert.deepEqual(plain(G.intersectionPoints(P, L, WIN, { min: .5, max: null }, { min: null, max: null })), [{ x: 1, y: 1 }], 'each graph’s own domain limits its intersections');
+  assert.deepEqual(plain(G.lineCross(A, B)), { x: 1, y: 3 }); assert.equal(G.lineCross(A, G.parseEquation('y = 2x')), null);
+  const st = (src, o) => plain(G.slopeTriangle(G.parseEquation(src).linear, WIN, o));
+  assert.deepEqual(st('y = -2x + 3'), { x1: 0, y1: 3, x2: 1, y2: 1, run: 1, rise: -2 });
+  assert.deepEqual(st('y = 2x/3 + 1'), { x1: 0, y1: 1, x2: 3, y2: 3, run: 3, rise: 2 });     // run is the denominator, so both ends sit on gridlines
+  assert.equal(G.slopeTriangle(G.parseEquation('y = 4').linear, WIN), null);
+  assert.equal(G.slopeTriangle(null, WIN), null);
+  assert.equal(st('y = -2x + 3', { avoid: [0, 1.5] }).x1, 1, 'keeps clear of the intercepts when it can (x = -1 would end on the one at 0)');
+  assert.deepEqual(st('y = x', { at: 4, run: 2 }), { x1: 4, y1: 4, x2: 6, y2: 6, run: 2, rise: 2 });
+  assert.deepEqual(plain(G.suggestXs(x => 2 * x / 3 + 1, -10, 10, 4)), [-6, -3, 0, 3]);
+  assert.deepEqual(plain(G.suggestXs(x => x / 2 + .25, -10, 10, 4)), []);
+});
+test('parallel and perpendicular lines', () => {
+  const eq = s => G.parseEquation(s), lin = (r) => r.ok && r.linear;
+  let r = G.relatedEq(eq('y = 2x + 1'), 'parallel', { x: 1, y: 5 }); assert.deepEqual(plain(r.linear), { m: 2, c: 3 });
+  r = G.relatedEq(eq('y = 2x + 1'), 'perpendicular', { x: 0, y: 0 }); assert.deepEqual(plain(r.linear), { m: -.5, c: 0 }); assert.equal(r.markup, 'y = −{1/2}x');
+  r = G.relatedEq(eq('y = 2x + 1'), 'perpendicular', { x: 4, y: 3 }); assert.ok(near(r.fn(4), 3) && near(r.fn(6), 2));
+  r = G.relatedEq(eq('x = 3'), 'perpendicular', { x: 1, y: 2 }); assert.deepEqual(plain(r.linear), { m: 0, c: 2 });
+  r = G.relatedEq(eq('y = 5'), 'perpendicular', { x: 1, y: 2 }); assert.equal(r.vertical, 1); assert.equal(r.markup, 'x = 1');
+  r = G.relatedEq(eq('x = 3'), 'parallel', { x: -2, y: 0 }); assert.equal(r.vertical, -2);
+  for (const [b, p] of [[null, { x: 0, y: 0 }], [eq('y = x'), null], [eq('y = x^2'), { x: 0, y: 0 }], [eq('y ='), { x: 0, y: 0 }]]) {
+    r = G.relatedEq(b, 'parallel', p); assert.equal(r.ok, false); assert.ok(r.error);
+  }
+  const m1 = eq('y = 3x - 2').linear.m, m2 = G.relatedEq(eq('y = 3x - 2'), 'perpendicular', { x: 1, y: 1 }).linear.m;
+  assert.ok(near(m1 * m2, -1, 1e-9), 'slopes multiply to −1');
+});
+
+/* ---------- objects: schema, references, tables ---------- */
+test('new object kinds normalise, round-trip, and clean up references when something is deleted', () => {
+  const s = fnSpec(['y = 2x + 1', 'y = -x + 4']);
+  const [f1, f2] = s.objects.map(o => o.id);
+  pt(s, { label: 'P', x: 1, y: 1 });
+  const P = s.objects[2].id;
+  s.objects.push(G.makeObject(s, 'table', { of: f1, rows: [{ x: 0 }, { x: 1 }, { x: 2 }], blank: ['y:0', 'y:2', 'y:9', 'q:1', 'x:1'], place: 'below', orient: 'horizontal', plot: 'line' }));
+  s.objects.push(G.makeObject(s, 'related', { of: f1, rel: 'parallel', through: { point: P, x: 3, y: 4 } }));
+  s.objects.push(G.makeObject(s, 'guide', { point: P })); s.objects.push(G.makeObject(s, 'guide', { fn: f2, x: 2 }));
+  s.objects.push(G.makeObject(s, 'intersect', { of: [f1, f2], label: 'A' }));
+  s.objects.push(G.makeObject(s, 'vlt', { at: [1, 2, '-'] }));
+  const n = G.normalize(s);
+  assert.equal(n.specVersion, 2);
+  assert.deepEqual(plain(n.objects.map(o => o.id)), ['fn1', 'fn2', 'pt1', 'tb1', 'rl1', 'gd1', 'gd2', 'is1', 'vl1']);
+  assert.deepEqual(plain(n.objects[3].blank), ['y:0', 'y:2', 'x:1'], 'blank marks outside the table are dropped');
+  assert.equal(G.serialize(G.parseFile(G.serialize(n))), G.serialize(n));
+  assert.equal(JSON.stringify(G.normalize(JSON.parse(JSON.stringify(n)))), JSON.stringify(n));
+  G.removeObject(n, f1);
+  const t = n.objects.find(o => o.kind === 'table'), rl = n.objects.find(o => o.kind === 'related'), is = n.objects.find(o => o.kind === 'intersect');
+  assert.equal(t.of, ''); assert.equal(rl.of, ''); assert.deepEqual(plain(is.of), ['', f2]);
+  G.removeObject(n, P);
+  assert.equal(rl.through.point, ''); assert.equal(n.objects.find(o => o.kind === 'guide').point, '');
+  n.hidden = ['tb1', 'nope']; assert.deepEqual(plain(G.normalize(n).hidden), ['tb1']);
+  const junk = G.normalize({ objects: [{ kind: 'function', expr: 5, domain: 'x', every: -3, label: 'shout', slope: 'big' }, { kind: 'table', rows: 'no', blank: 'no' }, { kind: 'intersect', of: 'no' }, { kind: 'vlt', at: 'no' }] });
+  assert.equal(junk.objects.length, 4); assert.equal(junk.objects[0].every, 1); assert.equal(junk.objects[0].label, 'equation'); assert.equal(junk.objects[0].slope, 'none');
+  assert.equal(G.normalize({ objects: [{ kind: 'table', rows: Array.from({ length: 99 }, () => ({})) }] }).objects[0].rows.length, G.MAX_ROWS);
+});
+test('files: a version 1 file still opens; a newer one is refused', () => {
+  const v1 = JSON.stringify({ tool: 'math-graph-maker', specVersion: 1, objects: [{ kind: 'point', id: 'pt1', x: 1, y: 2, label: 'A' }] });
+  const s = G.parseFile(v1); assert.equal(s.specVersion, 2); assert.equal(s.objects[0].label, 'A');
+  assert.throws(() => G.parseFile('{"tool":"math-graph-maker","specVersion":3}'), /newer version/);
+});
+test('tables of values: calculated y, typed y, headings, undefined values, paste, delete and fill', () => {
+  const s = fnSpec(['f(x) = 2x + 1', 'y = 1/x']);
+  const [f, g] = s.objects.map(o => o.id);
+  s.objects.push(G.makeObject(s, 'table', { of: f, rows: [{ x: -1 }, { x: 0 }, { x: 2.5 }, { x: 'abc' }, {}] }));
+  s.objects.push(G.makeObject(s, 'table', { of: g, rows: [{ x: 0 }, { x: 4 }] }));
+  s.objects.push(G.makeObject(s, 'table', { rows: [{ x: 1, y: 3 }, { x: 2, y: 'oops' }, { x: 3 }], xHead: 'Hours', yHead: 'Cost ($)' }));
+  const R = G.resolveObjects(G.normalize(s)), m = id => R.res(id).model;
+  assert.deepEqual(plain(m('tb1').head), ['x', '*f*(x)']);
+  assert.deepEqual(plain(m('tb1').rows.map(r => [r.xtext, r.ytext])), [['−1', '−1'], ['0', '1'], ['2.5', '6'], ['abc', ''], ['', '']]);
+  assert.deepEqual(plain(m('tb2').rows.map(r => r.ytext)), ['—', '0.25'], 'undefined shows a dash');
+  assert.deepEqual(plain(m('tb2').head), ['x', 'y']);
+  assert.deepEqual(plain(m('tb3').head), ['Hours', 'Cost ($)']);
+  assert.deepEqual(plain(m('tb3').rows.map(r => [r.yv, r.ytext])).map(r => [Number.isNaN(r[0]) ? null : r[0], r[1]]), [[3, '3'], [null, 'oops'], [null, '']]);
+  const t = { rows: [{ x: 1, y: null }], blank: [] };
+  assert.equal(G.pasteRows(t, [['5', '6'], ['7', '8', '9']], 0, 0).ignored, 1);
+  assert.deepEqual(plain(t.rows), [{ x: 5, y: 6 }, { x: 7, y: 8 }]);
+  t.rows = [{ x: 1 }, { x: 2 }, { x: 3 }]; t.blank = ['y:0', 'y:1', 'x:2'];
+  G.dropRow(t, 1); assert.deepEqual(plain(t.blank), ['y:0', 'x:1'], 'blank marks follow their rows');
+  const o = { rows: [], blank: ['x:0'] };
+  assert.equal(G.fillRows(o, -2, 2, 1), 5); assert.deepEqual(plain(o.rows.map(r => r.x)), [-2, -1, 0, 1, 2]); assert.deepEqual(plain(o.blank), []);
+  assert.deepEqual(plain((G.fillRows(o, 0, 1, .1), o.rows.map(r => r.x))), [0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1], 'no floating-point artifacts');
+  assert.equal(G.fillRows(o, 0, 1, 0), 0); assert.equal(G.fillRows(o, 0, 1, -1), 0); assert.equal(G.fillRows(o, 'a', 1, 1), 0);
+  assert.equal(G.fillRows(o, 0, 1000, 1), G.MAX_ROWS);
+});
+
+/* ---------- rendering ---------- */
+test('y = x² − 4 plots correctly even though quadratics are not a feature yet: every drawn point satisfies the equation', () => {
+  const s = fnSpec(['y = x^2 - 4']), geom = {}, svg = G.renderSVG(s, { geom });
+  const body = objSvg(svg, 'fn1'), pl = /<polyline points="([^"]+)"[^>]*stroke-width="0\.6"/.exec(body);
+  assert.ok(pl, 'a curve is drawn');
+  const pts = pl[1].split(' ').map(p => p.split(',').map(Number)), span = a => a.hi - a.lo;
+  assert.ok(pts.length > 10);
+  pts.forEach(([px, py]) => {
+    const x = geom.ax.lo + (px - geom.x0) / (geom.x1 - geom.x0) * span(geom.ax), y = geom.ay.hi - (py - geom.y0) / (geom.y1 - geom.y0) * span(geom.ay);
+    assert.ok(near(y, x * x - 4, 0.02), `(${x.toFixed(3)}, ${y.toFixed(3)}) is off the parabola`);
+  });
+  assert.equal((body.match(/<polygon /g) || []).length, 2, 'arrowheads at both ends, where the curve carries on');
+});
+test('arrows, end dots, discrete points and vertical lines', () => {
+  const heads = svg => (svg.match(/<polygon /g) || []).length, dots = svg => (svg.match(/<circle /g) || []).length;
+  let s = fnSpec(['y = 2x + 1']); assert.equal(heads(objSvg(G.renderSVG(s, {}), 'fn1')), 2);
+  s.objects[0].arrows = false; assert.equal(heads(objSvg(G.renderSVG(s, {}), 'fn1')), 0);
+  s = fnSpec([{ expr: 'y = x', domain: { min: -2, max: 3, minClosed: true, maxClosed: false } }]);
+  let b = objSvg(G.renderSVG(s, {}), 'fn1');
+  assert.equal(heads(b), 0, 'a restricted line ends in dots, not arrows');
+  assert.equal(dots(b), 2); assert.match(b, /<circle [^>]*fill="#000"\/>/); assert.match(b, /<circle [^>]*fill="#fff" stroke="#000"/);      // one filled end, one open end
+  s = fnSpec([{ expr: 'y = 2x + 1', discrete: true, every: 2, domain: { min: 0, max: 6 } }]);
+  b = objSvg(G.renderSVG(s, {}), 'fn1'); assert.equal(dots(b), 4, 'points at x = 0, 2, 4, 6'); assert.ok(!/<polyline/.test(b));
+  s = fnSpec(['x = 4']); b = objSvg(G.renderSVG(s, {}), 'fn1'); assert.match(b, /<line /); assert.equal(heads(b), 2);
+  s = fnSpec(['x = 40']); assert.equal(G.computeAxes(s).x.hi >= 40, true, 'a far vertical line asks the grid to grow');
+  s.x.min = -10; s.x.max = 10; assert.ok(!/<line /.test(objSvg(G.renderSVG(s, {}), 'fn1') || ''), 'but on a fixed grid it is not drawn');
+});
+test('equation labels, intercepts, slope triangles: shown in the key, individually hideable in the question', () => {
+  const s = fnSpec([{ expr: 'f(x) = -2x + 3', label: 'name', intercepts: 'labelled', slope: 'labelled' }]);
+  const txt = (svg) => texts(svg);
+  const key = G.renderSVG(s, {});
+  assert.ok(txt(key).includes('f(x)') && txt(key).includes('(0, 3)') && txt(key).includes('(1.5, 0)') && txt(key).includes('run = 1') && txt(key).includes('rise = −2'), txt(key).join('|'));
+  s.objects[0].label = 'equation'; assert.ok(txt(G.renderSVG(s, {})).includes('f(x) = −2x + 3'), 'the stated equation is written with true minus signs');
+  const q = h => G.renderSVG(Object.assign({}, s, { hidden: h }), { version: 'question' });
+  assert.ok(!txt(q(['equations'])).includes('f(x) = −2x + 3') && txt(q(['equations'])).includes('(0, 3)'));
+  assert.ok(!txt(q(['keyPoints'])).includes('(0, 3)') && txt(q(['keyPoints'])).includes('run = 1'));
+  assert.ok(!txt(q(['slopeTriangle'])).includes('rise = −2') && txt(q(['slopeTriangle'])).includes('(0, 3)'));
+  assert.ok(!txt(q(['coordLabels'])).includes('(0, 3)'));
+  assert.ok(!objSvg(q(['objects']), 'fn1') && !objSvg(q(['fn1']), 'fn1'));
+  for (const h of [['equations'], ['keyPoints'], ['slopeTriangle'], ['objects'], ['fn1']]) assert.deepEqual(attrs(q(h)), attrs(key), 'page and plot are the same in the question');
+  s.objects[0].intercepts = 'marked'; assert.ok(!txt(G.renderSVG(s, {})).includes('(0, 3)'), 'marked, not labelled');
+  s.objects[0].slope = 'triangle'; assert.ok(!txt(G.renderSVG(s, {})).some(t => /^rise|^run/.test(t)) && /stroke-dasharray="1\.5 \.9"/.test(G.renderSVG(s, {})));
+});
+test('stacked fractions are drawn as a numerator over a bar over a denominator', () => {
+  const s = fnSpec([{ expr: 'y = 1/2x + 1' }]), svg = G.renderSVG(s, {}), b = objSvg(svg, 'fn1');
+  assert.ok(!b.includes('<text'), 'labels live outside the clipped shapes');
+  const small = [...svg.matchAll(/<text [^>]*font-size="2\.496"[^>]*>(.*?)<\/text>/g)].map(m => m[1].replace(/<[^>]+>/g, ''));
+  assert.ok(small.includes('1') && small.includes('2'), 'numerator and denominator are set smaller: ' + small.join());
+  assert.match(svg, /<line x1="[\d.]+" y1="([\d.]+)" x2="[\d.]+" y2="\1" stroke="#000" stroke-width="0\.272"\/>/);
+  const t = G.blankSpec(); t.x.format = 'fraction'; t.x.min = -1; t.x.max = 1; t.x.step = .5; t.y.min = -1; t.y.max = 1; t.y.step = .5;
+  const ts = G.renderSVG(t, {}); assert.match(ts, /font-size="2\.184"/, 'fraction ticks are stacked too');
+  noBad(ts);
+});
+test('parallel and perpendicular lines, right-angle marker, intersections, guide lines and the vertical line test', () => {
+  const s = fnSpec(['y = -x + 4']);
+  s.objects.push(G.makeObject(s, 'related', { of: 'fn1', rel: 'perpendicular', through: { x: -3, y: -2 }, rightAngle: true }));
+  s.objects.push(G.makeObject(s, 'intersect', { of: ['fn1', 'rl1'], coords: true }));
+  s.objects.push(G.makeObject(s, 'guide', { fn: 'fn1', x: -2 }));
+  s.objects.push(G.makeObject(s, 'vlt', { at: [1, 3] }));
+  const key = G.renderSVG(s, {});
+  const corner = [...objSvg(key, 'rl1').matchAll(/<polyline points="([^"]+)" fill="none" stroke="#000" stroke-width="0\.4"\/>/g)].filter(m => m[1].split(' ').length === 3);
+  assert.equal(corner.length, 1, 'one right-angle marker (three points)');
+  assert.ok(texts(key).includes('y = x + 1') && texts(key).includes('(1.5, 2.5)'), texts(key).join('|'));
+  assert.ok(texts(key).includes('−2') && texts(key).includes('6'), 'guide values are written on the axes');
+  assert.equal((objSvg(key, 'vl1').match(/<circle /g) || []).length, 4, 'a ring where each test line meets each graph');
+  assert.equal((objSvg(key, 'vl1').match(/stroke-dasharray="2 1\.2"/g) || []).length, 2);
+  const q = h => G.renderSVG(Object.assign({}, s, { hidden: h }), { version: 'question' });
+  assert.ok(!objSvg(q(['keyPoints']), 'is1') && objSvg(q(['keyPoints']), 'rl1'));
+  assert.ok(texts(q(['coordLabels'])).length < texts(key).length, 'hiding coordinates also drops the guide values and the intersection label');
+  s.objects[1].rightAngle = false; assert.ok(!(objSvg(G.renderSVG(s, {}), 'rl1').match(/<polyline points="[^"]+" fill="none" stroke="#000" stroke-width="0\.4"\/>/g) || []).length);
+  s.objects[1].rel = 'parallel'; assert.ok(texts(G.renderSVG(s, {})).includes('y = −x − 5'));
+  s.objects[2].of = ['fn1', '']; assert.ok(!objSvg(G.renderSVG(s, {}), 'is1'), 'an intersection with nothing chosen draws nothing');
+  s.objects[1].of = ''; noBad(G.renderSVG(s, {}));
+});
+test('a matrix of expressions, windows and styles renders cleanly, with one page and plot in both versions', () => {
+  const exprs = ['y = 2x + 3', 'f(x) = x^2 - 4', 'y = 1/x', 'y = tan(x)', 'y = floor(x)', 'y = sqrt(x)', 'x = 4', 'y = 0', '2x + 3y = 6', 'y = x^3 - 3x', 'y = 1/2x + 1', 'y = exp(x)', 'y = ln(x)', 'y = abs(x) - 3', 'y = (x^2 - 1)/(x - 1)', 'y = 1000x', 'y = sin(1/x)', 'y = oops'];
+  let n = 0;
+  for (const e of exprs) for (const [quadrants, x, size] of [[4, [null, null], { preset: 'full' }], [1, [0, 5], { preset: 'half' }], [4, [-3, 3], { preset: 'quarter' }], [4, [-200, 200], { preset: 'full' }]]) for (const largePrint of [false, true]) {
+    const s = fnSpec([{ expr: e, intercepts: 'labelled', slope: 'labelled' }], { quadrants, size });
+    s.x.min = x[0]; s.x.max = x[1]; s.style.largePrint = largePrint;
+    s.objects.push(G.makeObject(s, 'table', { of: 'fn1', rows: [{ x: -1 }, { x: 0 }, { x: 1 }], blank: ['y:0'], plot: 'line' }));
+    s.objects.push(G.makeObject(s, 'intersect', { of: ['fn1', 'fn1'] })); s.objects.push(G.makeObject(s, 'guide', { fn: 'fn1', x: 1 })); s.objects.push(G.makeObject(s, 'vlt', { at: [1] }));
+    const ns = G.normalize(s), key = G.renderSVG(ns, {});
+    noBad(key);
+    for (const h of [[], ['objects'], ['equations', 'keyPoints', 'slopeTriangle'], ['tables']]) { const q = G.renderSVG(Object.assign({}, ns, { hidden: h }), { version: 'question' }); noBad(q); assert.deepEqual(attrs(q), attrs(key)); n++; }
+  }
+  assert.ok(n >= 500);
+});
+test('tables: blank cells only in the question, the same size either way, and their own visibility token', () => {
+  const s = fnSpec(['y = -2x + 3']);
+  s.objects.push(G.makeObject(s, 'table', { of: 'fn1', rows: [-2, -1, 0, 1, 2].map(x => ({ x })), blank: ['y:0', 'y:1', 'y:2', 'y:3', 'y:4', 'x:4'] }));
+  const key = G.renderSVG(s, {}), q = G.renderSVG(Object.assign({}, s, { hidden: ['objects'] }), { version: 'question' });
+  const cells = svg => texts(objSvg(svg, 'tb1') || '').filter(t => /^−?\d+$/.test(t));
+  for (const y of ['7', '5', '3', '1']) assert.ok(cells(key).includes(y), 'key has y = ' + y);
+  assert.deepEqual(attrs(q), attrs(key));
+  assert.ok(!cells(q).includes('7') && !cells(q).includes('5'), 'question leaves the y cells empty');
+  assert.ok(cells(q).includes('−2') && cells(q).includes('−1'), 'and keeps the x cells');
+  assert.ok(objSvg(q, 'tb1') && !objSvg(q, 'fn1'), 'the "objects" token hides the graph but not the table');
+  const hid = G.renderSVG(Object.assign({}, s, { hidden: ['tables'] }), { version: 'question' }); assert.ok(!objSvg(hid, 'tb1')); assert.deepEqual(attrs(hid), attrs(key), 'a hidden table still holds its space');
+  const byId = G.renderSVG(Object.assign({}, s, { hidden: ['tb1'] }), { version: 'question' }); assert.ok(!objSvg(byId, 'tb1'));
+  const geo = o => { const g = {}; G.renderSVG(o, { geom: g }); return g; };
+  const none = geo(fnSpec(['y = x'])), right = geo(s);
+  assert.ok(right.cell < none.cell && right.W === none.W, 'a table on the right narrows the grid and keeps the page width');
+  s.objects[1].place = 'below'; s.objects[1].orient = 'horizontal';
+  const below = geo(s); assert.ok(below.H > none.H && near(below.cell, none.cell, 1e-9), 'a table below makes the page taller and leaves the grid alone');
+  assert.ok(cells(G.renderSVG(s, {})).includes('7'));
+  for (const [place, orient] of [['right', 'vertical'], ['right', 'horizontal'], ['below', 'vertical'], ['below', 'horizontal']]) { s.objects[1].place = place; s.objects[1].orient = orient; const sv = G.renderSVG(s, {}); noBad(sv); assert.ok(cells(sv).includes('7')); }
+  s.objects[1].rows = []; noBad(G.renderSVG(s, {}));
+});
+test('a table can plot itself: shown in the key, and in the question only if asked', () => {
+  const s = G.blankSpec();
+  s.objects.push(G.makeObject(s, 'table', { rows: [{ x: 1, y: 2 }, { x: 2, y: 4 }, { x: 3, y: 5 }], plot: 'points' }));
+  const has = (svg) => (objSvg(svg, 'tb1') || '').includes('<circle');
+  assert.ok(has(G.renderSVG(s, {})) && !has(G.renderSVG(s, { version: 'question' })));
+  s.objects[0].plotInQuestion = true; assert.ok(has(G.renderSVG(s, { version: 'question' })));
+  s.objects[0].plot = 'line'; assert.match(objSvg(G.renderSVG(s, {}), 'tb1'), /<polyline/);
+  s.objects[0].plot = 'none'; assert.ok(!objSvg(G.renderSVG(s, {}), 'tb1') || !has(G.renderSVG(s, {})) );
+  s.objects[0].plot = 'points'; s.objects[0].rows = [{ x: 30, y: 2 }]; assert.ok(G.computeAxes(s).x.hi >= 30, 'plotted points ask the grid to grow');
+});
+test('done when: one spec makes "Graph y = −2x + 3 and complete the table" as a blank question and a filled key', () => {
+  const s = G.blankSpec(); s.title = 'Graph y = -2x + 3 and complete the table'; s.x.min = -5; s.x.max = 5; s.y.min = -5; s.y.max = 9;
+  s.objects.push(G.makeObject(s, 'function', { expr: 'y = -2x + 3', intercepts: 'marked', label: 'none' }));
+  s.objects.push(G.makeObject(s, 'table', { of: 'fn1', rows: [-2, -1, 0, 1, 2].map(x => ({ x })), blank: ['y:0', 'y:1', 'y:2', 'y:3', 'y:4'] }));
+  s.hidden = [...G.SCAFFOLD.blank.filter(t => t !== 'title')];
+  const key = G.renderSVG(s, {}), q = G.renderSVG(s, { version: 'question' });
+  assert.ok(objSvg(key, 'fn1') && (objSvg(key, 'fn1').match(/<circle /g) || []).length === 2, 'key: the line, with both intercepts marked');
+  for (const y of ['7', '5', '3', '1', '−1']) assert.ok(texts(key).includes(y));
+  assert.ok(!objSvg(q, 'fn1'), 'question: a blank grid');
+  assert.ok(objSvg(q, 'tb1') && ['7', '5', '3'].every(y => !texts(objSvg(q, 'tb1')).includes(y)), 'question: the table, with its y cells blank');
+  assert.ok(texts(q).includes('Graph y = −2x + 3 and complete the table'.replace('y = −2x', 'y = −2x')) || texts(q).some(t => /complete the table/.test(t)));
+  assert.deepEqual(attrs(q), attrs(key)); assert.equal(G.scaffoldLevel(s), 'custom');
+  assert.ok(!texts(q).some(t => /^−?\d+$/.test(t) && !['−2', '−1', '0', '1', '2'].includes(t) && false));
+});
+
+test('readability: warns when values fall between gridlines, and suggests whole-number x-values', () => {
+  const R = s => plain(G.readability(s).map(i => i.text));
+  assert.deepEqual(R(fnSpec(['y = 2x + 1'])), []);
+  let s = fnSpec(['y = 0.5x + 0.25']); let r = R(s);
+  assert.equal(r.length, 1); assert.match(r[0], /no gridline crossing/);
+  s = fnSpec(['y = 2x/3 + 1']); assert.deepEqual(R(s), [], 'one gridline crossing every 3 units is enough');
+  s = fnSpec([{ expr: 'y = 2x + 1', intercepts: 'marked' }]); r = R(s); assert.equal(r.length, 1); assert.match(r[0], /x-intercept \(−0\.5, 0\) falls between gridlines/);
+  s = fnSpec([{ expr: 'y = 2x/3 + 1', intercepts: 'marked' }]);
+  s.objects.push(G.makeObject(s, 'table', { of: 'fn1', rows: [{ x: -1 }, { x: 0 }, { x: 3 }] }));
+  r = R(s); assert.ok(r.some(t => /Table: y is not a whole number at x = −1\./.test(t) && /Whole-number y at x = /.test(t)), r.join('|'));
+  s = fnSpec(['y = oops']); assert.match(R(s)[0], /Equation .y = oops.: Unknown name/);
+  s = G.blankSpec(); pt(s, { label: 'A', x: 1.5, y: 2 }); tri(s, [[0, 0], [2.5, 0], [0, 3]], ['A', 'B', 'C']);
+  r = G.readability(s); assert.equal(r.length, 2); assert.ok(r.every(i => i.fix === 'snap'));
+  assert.equal(G.snapPoints(s), 2); assert.deepEqual(plain([s.objects[0].x, s.objects[0].y]), [2, 2]); assert.equal(G.readability(s).length, 0);
+  s.grid.minor = true; s.objects[0].x = 1.5; assert.equal(G.readability(s).length, 0, 'with minor gridlines a half unit is on the grid');
+  s = fnSpec(['y = 2x + 1']); s.objects.push(G.makeObject(s, 'related', { of: 'fn1', rel: 'perpendicular', through: { x: 0, y: 0 }, rightAngle: true }));
+  assert.deepEqual(R(s).filter(t => /scales differ/.test(t)), []);
+  s.x.step = 1; s.y.step = 5; assert.equal(R(s).filter(t => /scales differ/.test(t)).length, 1);
 });

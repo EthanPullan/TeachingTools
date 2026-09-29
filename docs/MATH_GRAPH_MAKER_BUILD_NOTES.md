@@ -52,12 +52,35 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 | localStorage prefix | `mathgraphmaker.*` | Never share keys with the science tool |
 | High-school streams | Not decided | Needed before Phases 8+; see open questions |
 
+## Phase 2 notes (function engine and linear relations)
+- **One engine for every function.** `parseEquation` accepts `y = …`, `f(x) = …`, a bare expression, and anything solvable for y
+  (`y − 2 = 3(x + 1)`, `2x + 3y = 6`, `xy = 6`); `x = 4` is a vertical line. It classifies by solving numerically for y, so no
+  form needs its own code. Circles (`x² + y² = 25`) get a plain "can't be graphed yet" message until Phase 9.
+- **Numeric only.** Zeros (poles rejected, double roots found), intersections and extrema are numeric; exact where both graphs are
+  straight lines. Nothing symbolic, and no `eval`.
+- **Sampling** is adaptive (judged in millimetres on the page), clipped to the window with exact edge points, and simplified (a line is
+  two points). A run ends 'clip' (curve carries on: arrowhead), 'start'/'end' (domain edge: filled or open dot) or 'break' (gap or jump).
+  Removable holes are bridged; poles, `tan` and `floor` never join across the gap.
+- **New object kinds:** `function`, `related` (parallel/perpendicular, right-angle marker), `table`, `guide`, `intersect`, `vlt`.
+  Each is one registry entry. Derived parts (curve, intercepts, table y-values, intersections) are computed at render time.
+- **Tables answer to their own token** (`tables`), not "all points, shapes and graphs", so the standard question
+  (blank grid + table with blank cells) is one spec. Their space is reserved even when hidden, like everything else.
+  A table can also plot itself (`plot`), shown in the key and only in the question if asked.
+- **New tokens:** `equations`, `keyPoints`, `slopeTriangle`, `tables`. Scaffold presets are unchanged, so nothing migrates.
+- **specVersion is now 2.** New kinds would be silently dropped by a version-1 reader, so the number was bumped; version-1 files still open.
+- **Stacked fractions** are part of the label formatter: `{1/2}`. Equations are re-typeset from the parsed expression, so `y = 1/2x + 1`
+  is drawn with a real fraction. Caveat for Phase 3's set notation: `{a/b}` with a slash is a fraction, so sets must avoid that form.
+- **Readability check** (Test tab) warns about values between gridlines, lines with fewer than two gridline crossings, off-grid
+  intercepts, tables whose y is not a whole number (with suggested x-values), unreadable equations, and perpendicular lines
+  drawn with different x and y steps. "Snap points and corners" fixes the points.
+- Assumption: the equation label defaults to "the equation" for a new line; intercept marks, slope triangles and every table are opt-in.
+
 ## How Phase 1 is tested
-- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 55 tests): axis maths, number
+- **Unit tests** (`node --test tools/math-graph-maker/math-graph-maker.test.js`, 79 tests after Phase 2): axis maths, number
   cleanup, label typography, `normalize` idempotence, save/load round trip, stable ids, paste parsing, and a
   render matrix (every layout × scaffold level × style) asserting no `NaN`/`undefined`, an identical page and
   plot rectangle in question and key, and that a hidden title/label never leaks into the question SVG.
-- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 55 checks) drive the real page
+- **Browser checks** (`node tools/math-graph-maker/e2e.js [screenshot-folder]`, 86 checks after Phase 2) drive the real page
   over `file://` in Chromium: no network requests, table entry and paste, click-to-place and drag with snapping,
   scaffold levels, pick-to-hide, export names (`q4-q.png` / `q4-key.png`), PNG stamped 300 DPI with pixel size
   matching the millimetres, the locked scale **measured by the browser** (ten 10 mm squares = 100 mm),
@@ -69,6 +92,8 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 - Pasting into Word and how Word renders the SVG. PNG is the safe path.
 - A real photocopier and a real print dialog (print layout was checked with print-media emulation only).
 - Firefox and Safari. Everything was tested in Chromium.
+- Phase 2: how the equation-label placer copes with many crowded graphs on a small page was checked by eye only; expect overlaps when
+  six or more labelled graphs share a half-width grid. Different x and y steps make perpendicular lines look wrong (warned, not prevented).
 - Very small pages: at quarter width (40 mm) labels next to points inevitably crowd; use half width or larger
   for graphs with labelled points.
 
@@ -87,7 +112,7 @@ series/rows data table. (Data displays return in Phase 5, rebuilt for math.)
 
 ## Progress
 - [x] Phase 1: MVP (`tools/math-graph-maker/`, specVersion 1)
-- [ ] Phase 2: function engine and linear relations
+- [x] Phase 2: function engine and linear relations (specVersion 2)
 - [ ] Phase 3: number lines
 - [ ] Phase 4: transformations, geometry, paper
 - [ ] Phase 5: data displays

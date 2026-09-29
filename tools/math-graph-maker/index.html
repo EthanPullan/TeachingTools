@@ -189,6 +189,7 @@
       <nav class="tabs" id="tabs" role="tablist">
         <button class="tab active" data-tab="graph" role="tab">Graph</button>
         <button class="tab" data-tab="objects" role="tab">Points &amp; shapes</button>
+        <button class="tab" data-tab="functions" role="tab">Equations</button>
         <button class="tab" data-tab="axes" role="tab">Axes</button>
         <button class="tab" data-tab="test" role="tab">Test</button>
         <button class="tab" data-tab="style" role="tab">Style</button>
@@ -244,6 +245,9 @@
           <div id="shapesWrap"></div>
           <p class="hint">You can also click on the graph: turn on “Click to add points” above the preview. Drag a point or a corner to move it. In the table, paste a block copied from Excel or Google Sheets into any cell (label, x, y or just x, y). Enter moves down. Red cells aren’t numbers and are left off the graph.</p>
         </section>
+
+        <!-- EQUATIONS -->
+        <section class="pane" data-pane="functions" hidden id="functionsPane"></section>
 
         <!-- AXES -->
         <section class="pane" data-pane="axes" hidden id="axesPane"></section>
@@ -307,7 +311,7 @@
      kinds instead of growing one big function.
    Helpers marked "(from science)" are copied from tools/science-graph-maker.
    ========================================================================== */
-const SPEC_VERSION = 1;
+const SPEC_VERSION = 2;                                     // 2: equations, tables of values and related objects (an older tool would silently drop them)
 const TOOL = 'math-graph-maker';
 
 /* ---------- constants ---------- */
@@ -325,7 +329,7 @@ const DASH_NAMES = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', dashdot
 const PALETTE = ['#0072b2', '#d55e00', '#009e73', '#cc79a7', '#e69f00', '#56b4e9', '#7a5195', '#666666'];   // colour-blind-safe (Okabe–Ito)
 const FONT = "Arial, Helvetica, 'Liberation Sans', sans-serif";   // system fonts only
 const LARGE = 1.35;                                              // large-print scale: text, lines and markers together
-const MAX_OBJECTS = 300, MAX_VERTS = 40;
+const MAX_OBJECTS = 300, MAX_VERTS = 40, MAX_ROWS = 40;
 const FILLS = ['none', 'light', 'hatch'];
 const ARROWS = ['both', 'end', 'none'];
 const ORIGIN_LABELS = ['0', 'O', 'none'];
@@ -335,7 +339,7 @@ const FORMAT_NAMES = { decimal: 'Decimal', fraction: 'Fractions' };
 
 /* Show/hide tokens. `hidden` in the spec lists what the QUESTION version hides: these element tokens and/or object ids.
    The answer key always shows everything. */
-const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'objects'];
+const ELEMENT_TOKENS = ['title', 'xTitle', 'yTitle', 'units', 'xTicks', 'yTicks', 'axisLetters', 'quadrantLabels', 'pointLabels', 'coordLabels', 'equations', 'keyPoints', 'slopeTriangle', 'tables', 'objects'];
 const BLANK_TOKENS = ['title', 'xTitle', 'yTitle', 'units'];
 const SCAFFOLD_LEVELS = ['complete', 'labels', 'axes', 'blank'];
 const SCAFFOLD = {   // visibility presets over the same spec — not separate code paths
@@ -422,7 +426,8 @@ function fixMinus(s, o) {
   if (o && o.math) s = s.replace(/([0-9a-zA-Z)²³])-(?=[0-9a-zA-Z(.])/g, '$1' + MINUS);
   return s;
 }
-/* Text -> runs [{ t, i (italic), up, dn }]. */
+/* Text -> runs [{ t, i (italic), up, dn }] and fraction runs [{ frac: [numeratorRuns, denominatorRuns] }].
+   A stacked fraction is written {1/2}; the numerator and denominator may carry ^, _{ } and *italics*. */
 function labelRuns(s, o) {
   o = o || {};
   const src = fixMinus(s, o), runs = [];
@@ -432,22 +437,27 @@ function labelRuns(s, o) {
     while ((m = re.exec(t))) { if (m.index > last) runs.push({ t: t.slice(last, m.index) }); runs.push({ t: m[0], i: true }); last = m.index + 1; }
     if (last < t.length) runs.push({ t: t.slice(last) });
   };
-  const re = /\*([^*]+)\*|\^\{([^}]*)\}|\^([−-]?\d+)|_\{([^}]*)\}|([^*^_]+|[*^_])/g;
+  const PART = String.raw`(?:[^{}]|\^\{[^{}]*\}|_\{[^{}]*\})`;
+  const re = new RegExp(String.raw`\*([^*]+)\*|\{((?:[^{}/]|\^\{[^{}]*\}|_\{[^{}]*\})*)\/(${PART}*)\}|\^\{([^}]*)\}|\^([−-]?\d+)|_\{([^}]*)\}|([^*^_{]+|[*^_{])`, 'g');
   let m;
   while ((m = re.exec(src))) {
     if (m[1] !== undefined) runs.push({ t: m[1], i: true });
-    else if (m[2] !== undefined) runs.push({ t: m[2], up: true });
-    else if (m[3] !== undefined) runs.push({ t: m[3].replace('-', MINUS), up: true });
-    else if (m[4] !== undefined) runs.push({ t: m[4], dn: true });
-    else plain(m[5]);
+    else if (m[2] !== undefined) runs.push({ frac: [labelRuns(m[2], o), labelRuns(m[3], o)] });
+    else if (m[4] !== undefined) runs.push({ t: m[4], up: true });
+    else if (m[5] !== undefined) runs.push({ t: m[5].replace('-', MINUS), up: true });
+    else if (m[6] !== undefined) runs.push({ t: m[6], dn: true });
+    else plain(m[7]);
   }
   const merged = [];                                             // neighbours with the same styling become one run
-  runs.forEach(r => { const p = merged[merged.length - 1]; if (p && !!p.i === !!r.i && !!p.up === !!r.up && !!p.dn === !!r.dn) p.t += r.t; else merged.push(Object.assign({}, r)); });
+  runs.forEach(r => { const p = merged[merged.length - 1]; if (p && !r.frac && !p.frac && !!p.i === !!r.i && !!p.up === !!r.up && !!p.dn === !!r.dn) p.t += r.t; else merged.push(Object.assign({}, r)); });
   return merged;
 }
-const runsW = (runs, fs, bold) => runs.reduce((a, r) => a + textW(r.t, (r.up || r.dn) ? fs * .7 : fs, bold), 0);
+const FRAC_SCALE = .78;                                          // numerators and denominators are set a little smaller
+const fracW = (r, fs, bold) => Math.max(runsW(r.frac[0], fs * FRAC_SCALE, bold), runsW(r.frac[1], fs * FRAC_SCALE, bold)) + fs * .3;
+const runsW = (runs, fs, bold) => runs.reduce((a, r) => a + (r.frac ? fracW(r, fs, bold) : textW(r.t, (r.up || r.dn) ? fs * .7 : fs, bold)), 0);
 const labelW = (s, fs, bold, o) => runsW(labelRuns(s, o), fs, bold);
-/* Runs -> SVG <tspan>s. Raised/lowered runs shift the baseline and the next run shifts it back. */
+const flatRuns = runs => runs.flatMap(r => r.frac ? [...r.frac[0], { t: '/' }, ...r.frac[1]] : [r]);   // fractions written on one line (for rotated text)
+/* Runs without fractions -> SVG <tspan>s. Raised/lowered runs shift the baseline and the next run shifts it back. */
 function tspans(runs, fs) {
   let shift = 0;
   return runs.map(r => {
@@ -515,24 +525,414 @@ function anchorIndex(ax) {
   const i = Math.round((0 - ax.lo) / ax.step);
   return i >= 0 && Math.abs(ax.lo + i * ax.step) < ax.step * 1e-6 && ax.lo + i * ax.step <= ax.hi ? i : 0;
 }
-function fracStr(v) {                                        // 1/2, 1 3/4, -2/3 — null when no small denominator fits
+function fracStr(v, markup) {                                /* 1/2, 1 3/4, -2/3 — null when no small denominator fits; markup: 1{3/4} for stacked fractions */
   for (const d of [1, 2, 3, 4, 5, 6, 8, 10, 12, 16]) {
     const n = Math.round(v * d);
     if (Math.abs(v * d - n) > 1e-9) continue;
     const a = Math.abs(n), whole = Math.floor(a / d), rem = a % d;
-    const body = rem === 0 ? String(whole) : (whole ? whole + ' ' : '') + rem + '/' + d;
+    const body = rem === 0 ? String(whole) : markup ? (whole ? String(whole) : '') + '{' + rem + '/' + d + '}' : (whole ? whole + ' ' : '') + rem + '/' + d;
     return (n < 0 ? '-' : '') + body;
   }
   return null;
 }
-function fmtTick(v, ax) {
+/* Tick text. Fractions come back as {1/2} markup for the renderer; pass plain = true for text boxes and placeholders. */
+function fmtTick(v, ax, plain) {
   const f = ax.fmt || {};
-  let s = f.format === 'fraction' ? fracStr(v) : null;
+  let s = f.format === 'fraction' ? fracStr(v, !plain) : null;
   if (s === null) s = v.toFixed(f.decimals !== null && f.decimals !== undefined ? f.decimals : Math.max(decimals(ax.lo), decimals(ax.step)));
   if (/^-0(\.0+)?$/.test(s)) s = s.slice(1);
   return s.replace(/-/g, MINUS);
 }
 const axSpan = ax => ax.hi - ax.lo;
+
+/* ==========================================================================
+   Function engine (Phase 2). Built general on purpose: any y = f(x) plots, solves and marks key points,
+   so later phases add features (vertex markers, asymptote labels) rather than new plotting code.
+   Numeric only: it can draw a derivative later but never writes one, and never uses eval.
+   ========================================================================== */
+const isFin = Number.isFinite;
+
+/* ---------- parser: a small hand-written tokenizer + recursive descent (from science, generalised to x, y, = and notation) ---------- */
+const FN1 = { sqrt: Math.sqrt, abs: Math.abs, sin: Math.sin, cos: Math.cos, tan: Math.tan, asin: Math.asin, acos: Math.acos,
+              atan: Math.atan, ln: Math.log, log: Math.log10, exp: Math.exp, floor: Math.floor, ceil: Math.ceil };
+const EXPR_NAMES = [...Object.keys(FN1), 'pi', 'x', 'y', 'e'].sort((a, b) => b.length - a.length);
+const VULGAR = { '½': '(1/2)', '⅓': '(1/3)', '⅔': '(2/3)', '¼': '(1/4)', '¾': '(3/4)', '⅕': '(1/5)', '⅛': '(1/8)' };
+function exprTokens(src) {
+  src = String(src).toLowerCase().replace(/[−–]/g, '-').replace(/[×·]/g, '*').replace(/÷/g, '/')
+    .replace(/²/g, '^2').replace(/³/g, '^3').replace(/π/g, 'pi').replace(/[½⅓⅔¼¾⅕⅛]/g, c => VULGAR[c]);
+  const toks = []; let i = 0, m;
+  while (i < src.length) {
+    const c = src[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if ((m = /^(\d+\.?\d*|\.\d+)(e[-+]?\d+)?/.exec(src.slice(i)))) { toks.push({ t: 'num', v: Number(m[0]) }); i += m[0].length; continue; }
+    if (/[a-z]/.test(c)) {                                          // a run of letters may be several names: "xsin" -> x, sin
+      let j = i; while (j < src.length && /[a-z]/.test(src[j])) j++;
+      const word = src.slice(i, j); let k = 0;
+      while (k < word.length) {
+        const nm = EXPR_NAMES.find(n => word.startsWith(n, k));
+        if (!nm) throw new Error('Unknown name “' + word + '” (use x and y for the variables)');
+        toks.push({ t: 'id', v: nm }); k += nm.length;
+      }
+      i = j; continue;
+    }
+    if ('+-*/^()='.includes(c)) { toks.push({ t: 'op', v: c }); i++; continue; }
+    throw new Error('Unexpected “' + c + '”');
+  }
+  return toks;
+}
+/* Nodes: num {v, sym?}, var {n}, neg {a}, bin {op, a, b, imp?}, call {f, a}. `paren` marks a group the teacher wrote in brackets. */
+function parseExpr(toks) {
+  let pos = 0;
+  const peek = () => toks[pos], isOp = v => peek() && peek().t === 'op' && peek().v === v;
+  const startsAtom = () => { const t = peek(); return t && (t.t === 'num' || t.t === 'id' || (t.t === 'op' && t.v === '(')); };
+  const group = () => { const n = expr(); if (!isOp(')')) throw new Error('Missing a closing bracket'); pos++; return n; };
+  function expr() {
+    let n = term();
+    while (isOp('+') || isOp('-')) { const op = toks[pos++].v; n = { k: 'bin', op, a: n, b: term() }; }
+    return n;
+  }
+  function term() {
+    let n = unary();
+    for (;;) {
+      if (isOp('*') || isOp('/')) { const op = toks[pos++].v; n = { k: 'bin', op, a: n, b: unary() }; }
+      else if (startsAtom()) n = { k: 'bin', op: '*', a: n, b: unary(), imp: true };     // implicit multiplication: 2x, 3(x+1), (x+1)(x-1)
+      else return n;
+    }
+  }
+  function unary() {
+    if (isOp('-')) { pos++; return { k: 'neg', a: unary() }; }
+    if (isOp('+')) { pos++; return unary(); }
+    return power();
+  }
+  function power() {                                                                // right-associative, and -x^2 means -(x^2)
+    const b = atom();
+    if (isOp('^')) { pos++; return { k: 'bin', op: '^', a: b, b: unary() }; }
+    return b;
+  }
+  function atom() {
+    const t = toks[pos++];
+    if (!t) throw new Error('The equation ends too soon');
+    if (t.t === 'num') return { k: 'num', v: t.v };
+    if (t.t === 'op' && t.v === '(') { const n = group(); n.paren = true; return n; }
+    if (t.t === 'id') {
+      if (t.v === 'x' || t.v === 'y') return { k: 'var', n: t.v };
+      if (t.v === 'pi') return { k: 'num', v: Math.PI, sym: 'pi' };
+      if (t.v === 'e') return { k: 'num', v: Math.E, sym: 'e' };
+      return { k: 'call', f: t.v, a: isOp('(') ? (pos++, group()) : power() };
+    }
+    throw new Error('Unexpected “' + t.v + '”');
+  }
+  const tree = expr();
+  if (pos < toks.length) throw new Error(toks[pos].v === ')' ? 'There is a closing bracket without an opening one' : 'Unexpected “' + toks[pos].v + '”');
+  return tree;
+}
+function compileAst(n) {                                            // AST -> (x, y) => number
+  switch (n.k) {
+    case 'num': { const v = n.v; return () => v; }
+    case 'var': return n.n === 'x' ? x => x : (x, y) => y;
+    case 'neg': { const a = compileAst(n.a); return (x, y) => -a(x, y); }
+    case 'call': { const a = compileAst(n.a), f = FN1[n.f]; return (x, y) => f(a(x, y)); }
+    default: {
+      const a = compileAst(n.a), b = compileAst(n.b);
+      switch (n.op) {
+        case '+': return (x, y) => a(x, y) + b(x, y);
+        case '-': return (x, y) => a(x, y) - b(x, y);
+        case '*': return (x, y) => a(x, y) * b(x, y);
+        case '/': return (x, y) => a(x, y) / b(x, y);
+        default: return (x, y) => Math.pow(a(x, y), b(x, y));
+      }
+    }
+  }
+}
+const hasVar = (n, name) => n.k === 'var' ? n.n === name : n.k === 'num' ? false : n.k === 'neg' || n.k === 'call' ? hasVar(n.a, name) : hasVar(n.a, name) || hasVar(n.b, name);
+
+/* An expression back to label markup: stacked fractions, raised powers, true minus signs. Brackets the teacher typed are kept. */
+function astMarkup(n, noFrac) {
+  const P = c => astMarkup(c, noFrac);
+  const inner = c => astMarkup(Object.assign({}, c, { paren: false }), true);
+  let s;
+  if (n.k === 'num') s = n.sym === 'pi' ? 'π' : n.sym === 'e' ? 'e' : String(clean(n.v));
+  else if (n.k === 'var') s = n.n;
+  else if (n.k === 'neg') s = '−' + P(n.a);
+  else if (n.k === 'call') s = (n.f === 'sqrt' ? '√' : n.f) + '(' + astMarkup(Object.assign({}, n.a, { paren: false }), noFrac) + ')';
+  else if (n.op === '/') s = noFrac ? P(n.a) + '∕' + P(n.b) : '{' + inner(n.a) + '/' + inner(n.b) + '}';
+  else if (n.op === '^') { const e = astMarkup(Object.assign({}, n.b, { paren: false }), true); s = P(n.a) + (/^\d+$/.test(e) ? '^' + e : '^{' + e + '}'); }
+  else if (n.op === '*') { const a = P(n.a), b = P(n.b); s = !/^[0-9.]/.test(b) && (n.imp || n.a.k === 'num') ? a + b : a + ' × ' + b; }
+  else s = P(n.a) + ' ' + (n.op === '-' ? '−' : '+') + ' ' + P(n.b);
+  return n.paren && !(n.k === 'bin' && n.op === '/' && !noFrac) ? '(' + s + ')' : s;
+}
+
+function toFraction(v, maxDen) {                                    // [n, d] in lowest terms, or null
+  for (let d = 1; d <= (maxDen || 100); d++) { const n = Math.round(v * d); if (Math.abs(v * d - n) < 1e-9 * d + 1e-11) return [n, d]; }
+  return null;
+}
+const numMarkup = v => { const f = toFraction(Math.abs(v), 100); return f && f[1] > 1 ? '{' + f[0] + '/' + f[1] + '}' : fmtNum(Math.abs(v)); };
+/* y = mx + c written the way a textbook would, with stacked fractions. */
+function linearMarkup(m, c) {
+  const fm = toFraction(Math.abs(m), 100);
+  const slope = m === 0 ? '' : (m < 0 ? '−' : '') + (fm && fm[1] === 1 ? (fm[0] === 1 ? '' : String(fm[0])) : numMarkup(m)) + 'x';
+  if (!slope) return 'y = ' + (c < 0 ? '−' : '') + numMarkup(c);
+  return 'y = ' + slope + (c === 0 ? '' : (c < 0 ? ' − ' : ' + ') + numMarkup(c));
+}
+/* A straight function has exactly one slope and intercept: { m, c } (both cleaned), else null. */
+function linearFit(fn) {
+  const xs = [-3.7, 0, 1.3, 5.1], ys = xs.map(x => fn(x));
+  if (!ys.every(isFin)) return null;
+  const m = (ys[3] - ys[0]) / (xs[3] - xs[0]), c = ys[1];
+  return xs.every((x, i) => Math.abs(m * x + c - ys[i]) <= 1e-9 * (1 + Math.abs(ys[i]))) ? { m: clean(m), c: clean(c) } : null;
+}
+
+/* parseEquation(text) -> { ok, error } or { ok:true, name, fn, vertical, linear, markup }.
+   Accepts y = …, f(x) = …, a bare expression, and anything that can be solved for y: y − 2 = 3(x + 1), 2x + 3y = 6, xy = 6.
+   x = 4 is a vertical line (fn is NaN everywhere; vertical holds 4). */
+const eqErr = error => ({ ok: false, error });
+function parseEquation(src) {
+  src = String(src);
+  if (!src.trim()) return eqErr('Type an equation, e.g. y = 2x + 3');
+  let name = '', body = src;
+  const nm = /^\s*([a-df-wzA-DF-WZ])\s*\(\s*[xX]\s*\)\s*=/.exec(src);
+  if (nm) { name = nm[1]; body = src.slice(nm[0].length); }
+  let L = null, R;
+  try {
+    const toks = exprTokens(body), eqs = toks.map((t, i) => t.t === 'op' && t.v === '=' ? i : -1).filter(i => i >= 0);
+    if (eqs.length > 1) return eqErr('Use just one = sign');
+    if (eqs.length) { L = parseExpr(toks.slice(0, eqs[0])); R = parseExpr(toks.slice(eqs[0] + 1)); } else R = parseExpr(toks);
+  } catch (e) { return eqErr(e.message); }
+  const yIn = n => hasVar(n, 'y');
+  if (L === null) {
+    if (yIn(R)) return eqErr('Add an = sign, e.g. 2x + 3y = 6');
+    return finishEq(name, compileAst(R), null, name ? '*' + name + '*(x) = ' + astMarkup(R) : 'y = ' + astMarkup(R));
+  }
+  if (name) return eqErr('Write f(x) = … with just x on the right');
+  const markup = astMarkup(L) + ' = ' + astMarkup(R);
+  if (L.k === 'var' && L.n === 'y' && !yIn(R)) return finishEq('', compileAst(R), null, markup);
+  if (R.k === 'var' && R.n === 'y' && !yIn(L)) return finishEq('', compileAst(L), null, markup);
+  const F = compileAst({ k: 'bin', op: '-', a: L, b: R }), xs = [-3.7, -1.1, 0.4, 2.9, 6.3];
+  const linY = xs.every(x => { const f0 = F(x, 0), f1 = F(x, 1), f2 = F(x, 2); return isFin(f0 + f1 + f2) && Math.abs(f2 - 2 * f1 + f0) <= 1e-9 * (1 + Math.abs(f0) + Math.abs(f1) + Math.abs(f2)); });
+  if (!linY) return eqErr('This kind of equation can’t be graphed yet. Use y = …, f(x) = …, 2x + 3y = 6 or x = 4.');
+  if (xs.every(x => Math.abs(F(x, 1) - F(x, 0)) < 1e-12)) {         // y drops out: a vertical line
+    const g0 = F(0, 0), g1 = F(1, 0), g2 = F(2, 0);
+    if (!isFin(g0 + g1 + g2) || Math.abs(g2 - 2 * g1 + g0) > 1e-9 * (1 + Math.abs(g0) + Math.abs(g1))) return eqErr('This kind of equation can’t be graphed yet. Use y = …, f(x) = …, 2x + 3y = 6 or x = 4.');
+    if (Math.abs(g1 - g0) < 1e-12) return eqErr('That equation is always true or never true.');
+    return { ok: true, name: '', fn: () => NaN, vertical: clean(-g0 / (g1 - g0)), linear: null, markup };
+  }
+  return finishEq('', x => { const f0 = F(x, 0), b = F(x, 1) - f0; return Math.abs(b) < 1e-12 ? NaN : -f0 / b; }, null, markup);
+}
+function finishEq(name, fn, vertical, markup) { return { ok: true, name, fn, vertical, linear: linearFit(fn), markup }; }
+/* Expression only: { fn, error } (fn is x -> y). */
+function compileExpr(src) {
+  const e = parseEquation(src);
+  if (!e.ok) return { fn: null, error: e.error };
+  if (e.vertical !== null) return { fn: null, error: 'That is a vertical line, not a function of x.' };
+  return { fn: e.fn, error: null };
+}
+
+/* ---------- numeric solver: zeros, intersections, extrema ---------- */
+function bisect(fn, a, b, fa) {                                     // fa and fn(b) have opposite signs
+  for (let i = 0; i < 200; i++) {
+    const m = (a + b) / 2, fm = fn(m);
+    if (!isFin(fm)) return NaN;
+    if (fm === 0 || (b - a) / 2 < 1e-15 * Math.max(1, Math.abs(m))) return m;
+    if ((fa < 0) === (fm < 0)) { a = m; fa = fm; } else b = m;
+  }
+  return (a + b) / 2;
+}
+function golden(fn, a, b, sign) {                                   // x that minimises sign * fn on [a, b]
+  const g = (Math.sqrt(5) - 1) / 2;
+  let c = b - g * (b - a), d = a + g * (b - a), fc = sign * fn(c), fd = sign * fn(d);
+  for (let i = 0; i < 120 && (b - a) > 1e-14 * Math.max(1, Math.abs(a) + Math.abs(b)); i++) {
+    if (fc < fd) { b = d; d = c; fd = fc; c = b - g * (b - a); fc = sign * fn(c); }
+    else { a = c; c = d; fc = fd; d = a + g * (b - a); fd = sign * fn(d); }
+  }
+  return (a + b) / 2;
+}
+/* Every x in [lo, hi] where fn crosses or touches zero. Poles (1/x) are not zeros; double roots (x-1)^2 are found. */
+function findZeros(fn, lo, hi, N) {
+  N = N || 800;
+  const xs = [], ys = [], out = [], span = hi - lo;
+  if (!(span > 0)) return isFin(fn(lo)) && Math.abs(fn(lo)) < 1e-12 ? [clean(lo)] : [];
+  for (let i = 0; i <= N; i++) { const x = i === N ? hi : lo + span * i / N; xs.push(x); ys.push(fn(x)); }
+  const fin = ys.filter(isFin), scale = Math.max(1, ...fin.map(Math.abs)), zt = 1e-12 * scale;   // sin(2π) is -2e-16, and that is a zero
+  if (fin.length && fin.every(v => Math.abs(v) < 1e-12)) return [];   // identically zero: no isolated zeros
+  const add = r => { if (!out.some(o => Math.abs(o - r) < span * 1e-7)) out.push(r); };
+  for (let i = 0; i < N; i++) {
+    const a = ys[i], b = ys[i + 1];
+    if (!isFin(a) || !isFin(b)) continue;
+    if (Math.abs(a) <= zt) { add(xs[i]); continue; }
+    if (a * b < 0) {
+      const r = bisect(fn, xs[i], xs[i + 1], a), fr = isFin(r) ? fn(r) : NaN;
+      if (isFin(fr) && Math.abs(fr) <= Math.min(Math.abs(a), Math.abs(b)) * 1e-3 + 1e-9) add(r);
+    }
+  }
+  if (isFin(ys[N]) && Math.abs(ys[N]) <= zt) add(xs[N]);
+  for (let i = 1; i < N; i++) {                                     // roots that touch zero without crossing
+    const a = ys[i - 1], b = ys[i], c = ys[i + 1];
+    if (![a, b, c].every(isFin) || a * c < 0 || b === 0) continue;
+    if (Math.abs(b) <= Math.abs(a) && Math.abs(b) <= Math.abs(c) && Math.abs(b) < 0.05 * scale) {
+      const m = golden(x => Math.abs(fn(x)), xs[i - 1], xs[i + 1], 1);
+      if (Math.abs(fn(m)) <= 1e-10 * scale) add(m);
+    }
+  }
+  return out.sort((p, q) => p - q).map(clean);
+}
+/* Where two functions meet: zeros of f - g. Coincident functions have no isolated intersections. */
+function findIntersections(f, g, lo, hi) {
+  return findZeros(x => f(x) - g(x), lo, hi).map(x => ({ x, y: clean(f(x)) })).filter(p => isFin(p.y));
+}
+/* Local maxima and minima strictly inside [lo, hi]. */
+function findExtrema(fn, lo, hi, N) {
+  N = N || 800;
+  const xs = [], ys = [], out = [], span = hi - lo;
+  if (!(span > 0)) return out;
+  for (let i = 0; i <= N; i++) { xs.push(i === N ? hi : lo + span * i / N); ys.push(fn(xs[i])); }
+  const d = i => ys[i + 1] - ys[i];
+  for (let i = 1; i < N; i++) {
+    if (![ys[i - 1], ys[i], ys[i + 1]].every(isFin)) continue;
+    const before = d(i - 1), after = d(i);
+    if (before === 0 || after === 0 || (before > 0) === (after > 0)) continue;
+    const max = before > 0, x = +golden(fn, xs[i - 1], xs[i + 1], max ? -1 : 1).toFixed(7), y = fn(x);   // a flat top can only be located to about 1e-8
+    if (!isFin(y) || Math.abs(y) > 1e7 || out.some(o => Math.abs(o.x - x) < span * 1e-6)) continue;
+    out.push({ x: clean(x), y: clean(y), type: max ? 'max' : 'min' });
+  }
+  return out;
+}
+
+/* ---------- sampling: adaptive, clipped to the window, never joins across a discontinuity ---------- */
+/* Runs of [x, y] points. v: { kx, ky } are millimetres per unit, so "flat enough" is judged on the page, not in data units.
+   A run's a / b say how it starts and ends: 'start' / 'end' at the edge of the sampled range, 'break' at a gap or jump. */
+function sampleFunction(fn, lo, hi, v) {
+  v = v || {};
+  const kx = v.kx || 5, ky = v.ky || 5, tol = v.tol || 0.04, MAXD = 11, BUDGET = 40000;
+  const runs = []; let cur = null, evals = 0;
+  const f = x => { evals++; const y = fn(x); return isFin(y) ? y : NaN; };
+  if (!(hi > lo)) { const y = f(lo); return isFin(y) ? [{ pts: [[lo, y]], a: 'start', b: 'end' }] : []; }
+  const add = (x, y) => { if (!cur) cur = { pts: [], a: runs.length === 0 && x <= lo + 1e-12 ? 'start' : 'break', b: 'break' }; cur.pts.push([x, y]); };
+  const brk = () => { if (cur) { runs.push(cur); cur = null; } };
+  const seg = (xa, ya, xb, yb, d) => {                              // adds the points after xa, up to and including xb
+    const fa = isFin(ya), fb = isFin(yb), xm = (xa + xb) / 2;
+    if (!fa && !fb) {
+      if (d < 3 && evals < BUDGET) { const ym = f(xm); if (isFin(ym)) { seg(xa, ya, xm, ym, d + 1); seg(xm, ym, xb, yb, d + 1); } }
+      return;
+    }
+    if (d >= MAXD || evals >= BUDGET) {
+      if (fa && fb) { if (Math.abs(yb - ya) * ky / Math.max(1e-300, (xb - xa) * kx) > 4000) brk(); add(xb, yb); }   // a near-vertical jump is not joined
+      else if (fa) brk(); else { brk(); add(xb, yb); }
+      return;
+    }
+    const ym = f(xm);
+    if (fa && fb && isFin(ym) && Math.abs(ym - (ya + yb) / 2) * ky <= tol) { add(xb, yb); return; }
+    seg(xa, ya, xm, ym, d + 1); seg(xm, ym, xb, yb, d + 1);
+  };
+  const N0 = clamp(Math.round((hi - lo) * kx / 0.6), 40, 700);
+  let xp = lo, yp = f(lo);
+  if (isFin(yp)) add(lo, yp);
+  for (let i = 1; i <= N0; i++) { const x = i === N0 ? hi : lo + (hi - lo) * i / N0, y = f(x); seg(xp, yp, x, y, 0); xp = x; yp = y; }
+  if (cur) { cur.b = isFin(yp) ? 'end' : 'break'; runs.push(cur); }
+  return runs;
+}
+/* Liang–Barsky: the part of segment p-q inside the box, as parameters [t0, t1], or null. */
+function clipSeg(p, q, xl, xh, yl, yh) {
+  let t0 = 0, t1 = 1; const dx = q[0] - p[0], dy = q[1] - p[1];
+  const test = (a, b) => { if (a === 0) return b >= 0; const r = b / a; if (a < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; } return true; };
+  return test(-dx, p[0] - xl) && test(dx, xh - p[0]) && test(-dy, p[1] - yl) && test(dy, yh - p[1]) ? [t0, t1] : null;
+}
+/* Cut a run to the window. Pieces that were cut get a / b = 'clip' (the curve carries on past the edge). */
+function clipRun(run, xl, xh, yl, yh) {
+  const pts = run.pts, pieces = [];
+  const inside = p => p[0] >= xl && p[0] <= xh && p[1] >= yl && p[1] <= yh;
+  if (pts.length === 1) return inside(pts[0]) ? [{ pts: [pts[0]], a: run.a, b: run.b }] : [];
+  let cur = null;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p = pts[i], q = pts[i + 1], c = clipSeg(p, q, xl, xh, yl, yh);
+    if (!c) continue;
+    const lerp = t => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+    if (!cur) cur = { pts: [lerp(c[0])], a: i === 0 && c[0] === 0 ? run.a : 'clip', b: run.b };
+    cur.pts.push(lerp(c[1]));
+    if (c[1] < 1) { cur.b = 'clip'; pieces.push(cur); cur = null; }
+  }
+  if (cur) pieces.push(cur);
+  return pieces;
+}
+/* Douglas–Peucker in millimetres: a straight line becomes two points. */
+function simplifyPts(pts, kx, ky, tol) {
+  if (pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    const ax = pts[a][0] * kx, ay = pts[a][1] * ky, bx = pts[b][0] * kx, by = pts[b][1] * ky, L = Math.hypot(bx - ax, by - ay) || 1e-12;
+    let dmax = 0, idx = -1;
+    for (let i = a + 1; i < b; i++) { const d = Math.abs((by - ay) * (pts[i][0] * kx - ax) - (bx - ax) * (pts[i][1] * ky - ay)) / L; if (d > dmax) { dmax = d; idx = i; } }
+    if (dmax > tol) { keep[idx] = 1; stack.push([a, idx], [idx, b]); }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+/* The drawable pieces of y = f(x) over `domain` ({min, max}, null = unrestricted) inside the window {xlo, xhi, ylo, yhi}. */
+function plotRuns(fn, domain, win, kx, ky) {
+  const m = (win.xhi - win.xlo) * 0.03;
+  const lo = Math.max(domain.min === null ? -Infinity : domain.min, win.xlo - m), hi = Math.min(domain.max === null ? Infinity : domain.max, win.xhi + m);
+  if (hi < lo) return [];
+  const pieces = sampleFunction(fn, lo, hi, { kx, ky }).flatMap(r => clipRun(r, win.xlo, win.xhi, win.ylo, win.yhi));
+  pieces.forEach(p => { p.pts = simplifyPts(p.pts, kx, ky, 0.02); });
+  return pieces;
+}
+
+/* ---------- key points ---------- */
+const inDomain = (d, x) => (d.min === null || x >= d.min - 1e-9) && (d.max === null || x <= d.max + 1e-9);
+/* x- and y-intercepts inside the window: [{ x, y, axis: 'x' | 'y' | 'both' }]. */
+function interceptPoints(eq, domain, win) {
+  if (!eq || !eq.ok) return [];
+  if (eq.vertical !== null) return eq.vertical >= win.xlo - 1e-9 && eq.vertical <= win.xhi + 1e-9 && Math.abs(eq.vertical) > 1e-12 ? [{ x: eq.vertical, y: 0, axis: 'x' }] : [];
+  const out = [], y0 = eq.fn(0);
+  if (isFin(y0) && win.xlo <= 0 && win.xhi >= 0 && inDomain(domain, 0)) out.push({ x: 0, y: clean(y0), axis: Math.abs(y0) < 1e-12 ? 'both' : 'y' });
+  const lo = Math.max(win.xlo, domain.min === null ? -Infinity : domain.min), hi = Math.min(win.xhi, domain.max === null ? Infinity : domain.max);
+  if (hi >= lo) findZeros(eq.fn, lo, hi).forEach(x => { if (!out.some(o => Math.abs(o.x - x) < 1e-9 && o.axis === 'both')) out.push({ x, y: 0, axis: 'x' }); });
+  return out;
+}
+/* Where two curves meet (exact for straight lines, numeric otherwise): [{ x, y }]. */
+function intersectionPoints(a, b, win, da, db) {
+  if (!a || !b || !a.ok || !b.ok) return [];
+  da = da || { min: null, max: null }; db = db || { min: null, max: null };
+  let pts;
+  if (a.vertical !== null && b.vertical !== null) pts = [];
+  else if (a.vertical !== null || b.vertical !== null) { const [v, f] = a.vertical !== null ? [a, b] : [b, a]; pts = [{ x: v.vertical, y: f.fn(v.vertical) }]; }
+  else if (a.linear && b.linear) pts = Math.abs(a.linear.m - b.linear.m) < 1e-12 ? [] : (x => [{ x, y: a.linear.m * x + a.linear.c }])((b.linear.c - a.linear.c) / (a.linear.m - b.linear.m));
+  else pts = findIntersections(a.fn, b.fn, win.xlo, win.xhi);
+  return pts.filter(p => isFin(p.x) && isFin(p.y) && inDomain(da, p.x) && inDomain(db, p.x)).map(p => ({ x: clean(p.x), y: clean(p.y) }));
+}
+/* The intersection of two straight lines (either may be vertical), or null. */
+function lineCross(a, b) {
+  if (a.vertical !== null && b.vertical !== null) return null;
+  if (a.vertical !== null) return { x: a.vertical, y: b.fn(a.vertical) };
+  if (b.vertical !== null) return { x: b.vertical, y: a.fn(b.vertical) };
+  if (!a.linear || !b.linear || Math.abs(a.linear.m - b.linear.m) < 1e-12) return null;
+  const x = (b.linear.c - a.linear.c) / (a.linear.m - b.linear.m);
+  return { x, y: a.linear.m * x + a.linear.c };
+}
+/* A run-and-rise triangle on a straight line, with corners on gridlines where it can:
+   { x1, y1, x2, y2, run, rise }. opt: { at: start x or null, run: or null }. */
+function slopeTriangle(lin, win, opt) {
+  if (!lin || lin.m === 0) return null;
+  opt = opt || {};
+  const fr = toFraction(Math.abs(lin.m), 12), run = opt.run > 0 ? opt.run : fr ? fr[1] : 1, rise = clean(lin.m * run);
+  const at = x => ({ x1: x, y1: clean(lin.m * x + lin.c), x2: clean(x + run), y2: clean(lin.m * (x + run) + lin.c), run, rise });
+  const ok = t => t.x1 >= win.xlo && t.x2 <= win.xhi && Math.min(t.y1, t.y2) >= win.ylo && Math.max(t.y1, t.y2) <= win.yhi;
+  if (opt.at !== null && opt.at !== undefined) return at(opt.at);
+  let cands = [];
+  for (let x = Math.ceil(win.xlo); x + run <= win.xhi + 1e-9; x++) cands.push(x);
+  cands.sort((p, q) => Math.abs(p) - Math.abs(q) || p - q);
+  const clear = cands.filter(x => !(opt.avoid || []).some(a => Math.abs(a - x) < 1e-9 || Math.abs(a - x - run) < 1e-9));   // keep clear of labelled intercepts
+  if (clear.length) cands = clear;
+  const lattice = t => Math.abs(t.y1 - Math.round(t.y1)) < 1e-9;
+  return cands.map(at).find(t => ok(t) && lattice(t)) || cands.map(at).find(ok) || null;
+}
+/* x-values in [lo, hi] (whole numbers, nearest zero first) where fn gives a whole-number y. */
+function suggestXs(fn, lo, hi, n) {
+  const c = [];
+  for (let x = Math.ceil(lo); x <= Math.floor(hi); x++) { const y = fn(x); if (isFin(y) && Math.abs(y - Math.round(y)) < 1e-9) c.push(x); }
+  c.sort((a, b) => Math.abs(a) - Math.abs(b) || a - b);
+  return c.slice(0, n).sort((a, b) => a - b);
+}
 
 /* ==========================================================================
    Objects: one registry, so a new kind of object is one entry (norm / bounds / draw).
@@ -557,9 +957,16 @@ function makeObject(spec, kind, props) {
 function removeObject(spec, id) {
   spec.objects = spec.objects.filter(o => o.id !== id);
   spec.hidden = spec.hidden.filter(t => t !== id);
+  spec.objects.forEach(o => {                                        // whatever pointed at it now points at nothing
+    for (const k of ['of', 'point', 'fn']) { if (o[k] === id) o[k] = ''; if (Array.isArray(o[k])) o[k] = o[k].map(v => v === id ? '' : v); }
+    if (o.through && o.through.point === id) o.through.point = '';
+  });
 }
 const vertsOf = o => o.vertices.map((v, k) => ({ x: parseNum(v[0]), y: parseNum(v[1]), label: o.labels[k] || '', k })).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
 const objName = o => o.kind === 'point' ? 'Point' + (o.label ? ' ' + o.label : '')
+  : o.kind === 'function' ? 'Equation ' + (o.expr.trim() || '(empty)')
+  : o.kind === 'related' ? (o.rel === 'parallel' ? 'Parallel line' : 'Perpendicular line')
+  : o.kind === 'table' ? 'Table of values' : o.kind === 'guide' ? 'Guide lines' : o.kind === 'intersect' ? 'Intersection' : o.kind === 'vlt' ? 'Vertical line test'
   : (o.kind === 'polygon' ? 'Polygon' : 'Line segments') + (o.labels.some(Boolean) ? ' ' + o.labels.filter(Boolean).join('') : '');
 
 /* A label's text: the name, the coordinates, or "A(3, −2)" for both. */
@@ -621,9 +1028,421 @@ function drawShape(o, C) {
 OBJECT_KINDS.polygon = { name: 'Polygon', prefix: 'pg', norm: normShape('polygon'), bounds: o => vertsOf(o), draw: drawShape };
 OBJECT_KINDS.path = { name: 'Line segments', prefix: 'sg', norm: normShape('path'), bounds: o => vertsOf(o), draw: drawShape };
 
-/* Derived objects (transformation images, intersections, tables of values, ...) are computed here at render time and
-   never stored, so editing an original updates everything built from it. Later phases add their kinds. */
-function resolveObjects(spec) { return spec.objects; }
+/* ==========================================================================
+   Phase 2 object kinds: equations, related lines, tables of values, guide lines, intersections, vertical line test.
+   ========================================================================== */
+const LABEL_MODES = ['none', 'equation', 'name'];
+const INTERCEPT_MODES = ['none', 'marked', 'labelled'];
+const SLOPE_MODES = ['none', 'triangle', 'labelled'];
+const PLOT_MODES = ['none', 'points', 'line'];
+const RELATIONS = ['parallel', 'perpendicular'];
+const NO_DOMAIN = { min: null, max: null, minClosed: true, maxClosed: true };
+const normDomain = d => { d = d && typeof d === 'object' ? d : {}; return { min: vNum(d.min), max: vNum(d.max), minClosed: vBool(d.minClosed, true), maxClosed: vBool(d.maxClosed, true) }; };
+const isFn = o => o && (o.kind === 'function' || o.kind === 'related');
+
+/* Move the end of a screen polyline back by `len` mm (so a thick line never pokes past an arrowhead's tip). */
+function pullBack(P, len, atStart) {
+  P = P.slice(); if (atStart) P.reverse();
+  let rem = len;
+  while (P.length > 1 && rem > 0) {
+    const [x1, y1] = P[P.length - 1], [x0, y0] = P[P.length - 2], L = Math.hypot(x1 - x0, y1 - y0);
+    if (L > rem) { const t = rem / L; P[P.length - 1] = [x1 - (x1 - x0) * t, y1 - (y1 - y0) * t]; rem = 0; } else { P.pop(); rem -= L; }
+  }
+  if (atStart) P.reverse();
+  return P;
+}
+/* Unit direction (screen) the curve is travelling as it leaves through its end (or start), from a point at least 1 mm back. */
+function endDirection(P, atStart) {
+  const n = P.length, tip = atStart ? P[0] : P[n - 1];
+  for (let k = 1; k < n; k++) {
+    const q = atStart ? P[k] : P[n - 1 - k], d = Math.hypot(tip[0] - q[0], tip[1] - q[1]);
+    if (d >= 1 || k === n - 1) return d ? [(tip[0] - q[0]) / d, (tip[1] - q[1]) / d] : [1, 0];
+  }
+  return [1, 0];
+}
+
+/* Draw one straight or curved graph: the line, its arrows or end dots, its label, intercepts and slope triangle. */
+function drawCurve(o, C) {
+  const eq = o.eq;
+  if (!eq || !eq.ok) return null;
+  const { K, S, lw, sx, sy, col, win } = C, dom = o.domain || NO_DOMAIN, hid = K.hid, arrows = o.arrows !== false;
+  const dash = DASHES[o.dash] ? ` stroke-dasharray="${DASHES[o.dash]}"` : '';
+  const stroke = `stroke="${col}" stroke-width="${lw(.6)}" stroke-linejoin="round" stroke-linecap="round"${dash}`;
+  const AL = 2.6 * S * .9;
+  const poly = (P, attrs) => `<polyline points="${P.map(q => f3(q[0]) + ',' + f3(q[1])).join(' ')}" fill="none" ${attrs}/>`;
+  const cap = (x, y, closed) => markerSVG('circle', sx(x), sy(y), 1.35 * S, col, S, !closed);
+  let shape = '', label = '', spots = [], vertical = null;
+  if (eq.vertical !== null) {
+    if (eq.vertical >= win.xlo - 1e-9 && eq.vertical <= win.xhi + 1e-9) {
+      const X = sx(eq.vertical), Yt = sy(win.yhi), Yb = sy(win.ylo);
+      shape += `<line x1="${f3(X)}" y1="${f3(Yb - (arrows ? AL * .8 : 0))}" x2="${f3(X)}" y2="${f3(Yt + (arrows ? AL * .8 : 0))}" ${stroke}/>`;
+      if (arrows) shape += C.head(X, Yt, 0, -1, col, .9) + C.head(X, Yb, 0, 1, col, .9);
+      if (C.o.hits) shape += `<line x1="${f3(X)}" y1="${f3(Yb)}" x2="${f3(X)}" y2="${f3(Yt)}" stroke="transparent" stroke-width="3.2"/>`;
+      vertical = [X, Yt];
+    }
+  } else if (o.discrete) {
+    const step = o.every > 0 ? o.every : 1, lo = Math.max(win.xlo, dom.min === null ? -Infinity : dom.min), hi = Math.min(win.xhi, dom.max === null ? Infinity : dom.max);
+    for (let k = Math.ceil(lo / step - 1e-9); k * step <= hi + 1e-9 && k < 2000; k++) {
+      const x = clean(k * step), y = eq.fn(x);
+      if (!isFin(y) || !C.inside(x, y)) continue;
+      shape += markerSVG('circle', sx(x), sy(y), 1.55 * S, col, S, false); spots.push([sx(x), sy(y)]);
+    }
+  } else {
+    plotRuns(eq.fn, dom, win, C.kx, C.ky).forEach(r => {
+      let P = r.pts.map(p => [sx(p[0]), sy(p[1])]);
+      if (!P.length) return;
+      for (let k = 0; k < P.length - 1; k++) {                       // a straight line has only two vertices: offer spots along every segment
+        const L = Math.hypot(P[k + 1][0] - P[k][0], P[k + 1][1] - P[k][1]), n = Math.max(1, Math.ceil(L / 1.2));
+        for (let j = 0; j < n; j++) spots.push([P[k][0] + (P[k + 1][0] - P[k][0]) * j / n, P[k][1] + (P[k + 1][1] - P[k][1]) * j / n]);
+      }
+      spots.push(P[P.length - 1]);
+      const first = r.pts[0], last = r.pts[r.pts.length - 1];
+      let extra = '';
+      if (P.length > 1 && arrows) {
+        if (r.a === 'clip') { const d = endDirection(P, true); extra += C.head(P[0][0], P[0][1], -d[0] * -1, -d[1] * -1, col, .9); P = pullBack(P, AL * .8, true); }
+        if (r.b === 'clip') { const d = endDirection(P, false); extra += C.head(P[P.length - 1][0], P[P.length - 1][1], d[0], d[1], col, .9); P = pullBack(P, AL * .8, false); }
+      }
+      if (P.length > 1) shape += poly(P, stroke);
+      else if (P.length === 1 && r.pts.length === 1) shape += cap(first[0], first[1], true);
+      shape += extra;
+      if (r.a === 'start') shape += cap(first[0], first[1], dom.minClosed);
+      if (r.b === 'end') shape += cap(last[0], last[1], dom.maxClosed);
+      if (C.o.hits && P.length > 1) shape += poly(P, 'stroke="transparent" stroke-width="3.2"');
+    });
+  }
+  /* the equation (or function name) beside the line */
+  if ((o.label || 'none') !== 'none' && !hid.has('equations')) {
+    const text = o.label === 'name' && eq.name ? '*' + eq.name + '*(x)' : eq.markup, w = K.w(text, K.FS, false);
+    if (vertical) label += C.labelAt(vertical[0] + 1.2, vertical[1] + 5 * S, text, 'start', false);
+    else if (spots.length) {
+      const order = spots.slice().sort((p, q) => q[0] - p[0]), ht = K.FS * .85;     // right-most spot first
+      for (const p of order) {
+        const i = spots.indexOf(p), q = spots[Math.max(0, i - 3)], q2 = spots[Math.min(spots.length - 1, i + 3)];
+        const right = (q2[1] - q[1]) * (q2[0] - q[0]) > 0;                          // the curve falls to the right on the page: the label goes on its upper right, else its upper left
+        const lx = right ? p[0] + .8 : p[0] - .8 - w, ly1 = p[1] - 2.4 * S + .5, ly0 = p[1] - 2.4 * S - ht;
+        if (lx < C.x0 + 1 || lx + w > C.x1 - .5 || ly0 < C.y0 + 1 || ly1 > C.y1 - 1) continue;
+        if (!C.xAtBottom && ly1 > C.yAx - .5 && ly0 < C.yAx + 6.2 * S) continue;                       // not on the x-axis numbers
+        if (!C.yAtLeft && lx + w > C.xAx - (C.yLabW + 2.6 * S) - .5 && lx < C.xAx + 1) continue;      // not on the y-axis numbers
+        label += C.labelAt(right ? p[0] + .8 : p[0] - .8, p[1] - 2.4 * S, text, right ? 'start' : 'end', false);
+        break;
+      }
+    }
+  }
+  const marks = [];
+  /* intercepts, marked and optionally labelled */
+  const ic = o.intercepts || 'none';
+  if (ic !== 'none' && !hid.has('keyPoints')) {
+    interceptPoints(eq, dom, win).forEach(p => {
+      if (!C.inside(p.x, p.y)) return;
+      shape += markerSVG('circle', sx(p.x), sy(p.y), 1.5 * S, col, S, false);
+      if (ic === 'labelled' && !hid.has('coordLabels')) marks.push(C.labelNear(sx(p.x), sy(p.y), 1.5 * S, labelText('', p.x, p.y, false, true), null, false));
+    });
+  }
+  /* slope triangle: run along, rise up */
+  const sm = o.slope || 'none';
+  if (sm !== 'none' && !hid.has('slopeTriangle') && eq.linear) {
+    const t = slopeTriangle(eq.linear, win, { at: o.slopeAt, run: o.slopeRun, avoid: ic !== 'none' ? interceptPoints(eq, dom, win).map(p => p.x) : [] });
+    if (t) {
+      const A = [sx(t.x1), sy(t.y1)], B = [sx(t.x2), sy(t.y1)], D = [sx(t.x2), sy(t.y2)];
+      shape += poly([A, B, D], `stroke="${col}" stroke-width="${lw(.45)}" stroke-dasharray="1.5 .9"`) +
+        [A, D].map(q => `<circle cx="${f3(q[0])}" cy="${f3(q[1])}" r="${f3(1.1 * S)}" fill="${col}"/>`).join('');
+      if (sm === 'labelled') {
+        marks.push(C.labelAt((A[0] + B[0]) / 2, t.rise > 0 ? A[1] + K.FS * 1.1 + .4 : A[1] - 1.4, 'run = ' + fmtNum(t.run), 'middle', false));
+        marks.push(C.labelAt(B[0] + 1.3, (B[1] + D[1]) / 2 + K.FS * .35, 'rise = ' + fmtNum(t.rise), 'start', false));
+      }
+    }
+  }
+  return { shape, label: label + marks.join('') };
+}
+
+/* ---------- equation ---------- */
+OBJECT_KINDS.function = {
+  name: 'Equation', prefix: 'fn',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'function', expr: vStr(r.expr, ''), domain: normDomain(r.domain), discrete: vBool(r.discrete, false),
+                every: vNum(r.every) > 0 ? clamp(vNum(r.every), .01, 1000) : 1, dash: vPick(r.dash, Object.keys(DASHES), 'solid'), arrows: vBool(r.arrows, true),
+                label: vPick(r.label, LABEL_MODES, 'equation'), intercepts: vPick(r.intercepts, INTERCEPT_MODES, 'none'),
+                slope: vPick(r.slope, SLOPE_MODES, 'none'), slopeAt: vNum(r.slopeAt), slopeRun: vNum(r.slopeRun) > 0 ? vNum(r.slopeRun) : null }),
+  resolve: o => ({ eq: parseEquation(o.expr) }),
+  bounds(o) {                                                       // only a restricted domain or a vertical line asks the window to grow
+    if (!o.eq.ok) return [];
+    if (o.eq.vertical !== null) return [{ x: o.eq.vertical, y: 0 }];
+    return [o.domain.min, o.domain.max].filter(d => d !== null).map(x => ({ x, y: o.eq.fn(x) })).filter(p => isFin(p.y));
+  },
+  draw: drawCurve
+};
+
+/* ---------- a line parallel or perpendicular to another, through a point ---------- */
+const normThrough = t => { t = t && typeof t === 'object' ? t : {}; return { point: vStr(t.point, ''), x: cellClean(t.x), y: cellClean(t.y) }; };
+function relatedEq(base, rel, p) {
+  if (!base || !base.ok) return eqErr('Pick an equation to build on.');
+  if (!p) return eqErr('Choose the point the line goes through.');
+  const vert = base.vertical !== null, lin = vert ? null : base.linear;
+  if (!vert && !lin) return eqErr('Parallel and perpendicular lines need a straight line to start from.');
+  let m = null, v = null;
+  if (rel === 'parallel') { if (vert) v = p.x; else m = lin.m; }
+  else if (vert) m = 0; else if (lin.m === 0) v = p.x; else m = -1 / lin.m;
+  if (v !== null) return { ok: true, name: '', fn: () => NaN, vertical: clean(v), linear: null, markup: 'x = ' + fmtNum(v) };
+  m = clean(m); const c = clean(p.y - m * p.x);
+  return { ok: true, name: '', fn: x => m * x + c, vertical: null, linear: { m, c }, markup: linearMarkup(m, c) };
+}
+OBJECT_KINDS.related = {
+  name: 'Parallel / perpendicular line', prefix: 'rl',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'related', of: vStr(r.of, ''), rel: vPick(r.rel, RELATIONS, 'perpendicular'), through: normThrough(r.through),
+                dash: vPick(r.dash, Object.keys(DASHES), 'solid'), arrows: vBool(r.arrows, true), label: vPick(r.label, LABEL_MODES, 'equation'), rightAngle: vBool(r.rightAngle, true) }),
+  resolve(o, res) {
+    const base = res(o.of);
+    let p = null;
+    if (o.through.point) { const q = res(o.through.point); if (q && q.kind === 'point') { const x = parseNum(q.x), y = parseNum(q.y); if (isFin(x) && isFin(y)) p = { x, y }; } }
+    else { const x = parseNum(o.through.x), y = parseNum(o.through.y); if (isFin(x) && isFin(y)) p = { x, y }; }
+    return { eq: relatedEq(base && base.eq, o.rel, p), base: base && base.eq, through: p };
+  },
+  bounds: o => o.through ? [o.through] : [],
+  draw(o, C) {
+    const res = drawCurve(o, C);
+    if (!res || o.rel !== 'perpendicular' || !o.rightAngle || !o.base || !o.base.ok) return res;
+    const I = lineCross(o.base, o.eq);
+    if (!I || !C.inside(I.x, I.y)) return res;
+    const dirOf = e => e.vertical !== null ? [0, 1] : [1, e.linear ? e.linear.m : 0];      // data direction -> screen
+    const scr = e => { const d = dirOf(e), a = [d[0] * C.kx, -d[1] * C.ky], L = Math.hypot(a[0], a[1]) || 1; return [a[0] / L, a[1] / L]; };
+    let u1 = scr(o.base), u2 = scr(o.eq);
+    if (u1[0] < -1e-9 || (Math.abs(u1[0]) < 1e-9 && u1[1] > 0)) u1 = [-u1[0], -u1[1]];    // one arm points right (or up)
+    if (u2[1] > 1e-9 || (Math.abs(u2[1]) < 1e-9 && u2[0] < 0)) u2 = [-u2[0], -u2[1]];     // the other points up (or right)
+    const s = 2.4 * C.S, X = C.sx(I.x), Y = C.sy(I.y);
+    const P = [[X + u1[0] * s, Y + u1[1] * s], [X + (u1[0] + u2[0]) * s, Y + (u1[1] + u2[1]) * s], [X + u2[0] * s, Y + u2[1] * s]];
+    res.shape += `<polyline points="${P.map(q => f3(q[0]) + ',' + f3(q[1])).join(' ')}" fill="none" stroke="${C.col}" stroke-width="${C.lw(.4)}"/>`;
+    return res;
+  }
+};
+
+/* ---------- table of values ---------- */
+/* The cells of a table: x values typed in, y calculated from an equation (of) or typed in. */
+function tableModel(o, res) {
+  const src = o.of ? res(o.of) : null, eq = src && isFn(src) && src.eq && src.eq.ok && src.eq.vertical === null ? src.eq : null;
+  const rows = o.rows.map(r => {
+    const xv = parseNum(r.x);
+    let yv = NaN, ytext = '';
+    if (o.of) { yv = eq && isFin(xv) ? eq.fn(xv) : NaN; ytext = isFin(yv) ? fmtNum(yv) : isFin(xv) ? '—' : ''; }
+    else { yv = parseNum(r.y); ytext = isFin(yv) ? fmtNum(yv) : isBlank(r.y) ? '' : String(r.y); }
+    return { xv, yv, xtext: isFin(xv) ? fmtNum(xv) : isBlank(r.x) ? '' : String(r.x), ytext };
+  });
+  return { head: [o.xHead || 'x', o.yHead || (eq && eq.name ? '*' + eq.name + '*(x)' : 'y')], rows, eq };
+}
+function tableLayout(o, K) {
+  const m = o.model, S = K.S, FS = K.FS, pad = 2.2 * S, rowH = 6.4 * S, tw = (s, b) => K.w(s, FS, b);
+  if (o.orient === 'horizontal') {
+    const first = Math.max(9 * S, tw(m.head[0], true) + 2 * pad, tw(m.head[1], true) + 2 * pad);
+    const cw = m.rows.map(r => Math.max(8 * S, tw(r.xtext) + 2 * pad, tw(r.ytext) + 2 * pad));
+    return { vertical: false, colW: [first, ...cw], rowH: [rowH, rowH], w: first + cw.reduce((a, b) => a + b, 0), ht: 2 * rowH };
+  }
+  const cw = [0, 1].map(c => Math.max(9 * S, tw(m.head[c], true) + 2 * pad, ...m.rows.map(r => tw(c ? r.ytext : r.xtext) + 2 * pad)));
+  return { vertical: true, colW: cw, rowH: Array(m.rows.length + 1).fill(rowH), w: cw[0] + cw[1], ht: (m.rows.length + 1) * rowH };
+}
+/* Blank cells show only in the question; the box is the same size either way. */
+function paintTable(o, K, x, y) {
+  const L = tableLayout(o, K), m = o.model, out = [], FS = K.FS, S = K.S;
+  const blank = (c, i) => K.isQ && o.blank.includes(c + ':' + i);
+  const line = (x1, y1, x2, y2, w) => `<line x1="${f3(x1)}" y1="${f3(y1)}" x2="${f3(x2)}" y2="${f3(y2)}" stroke="#000" stroke-width="${K.lw(w)}"/>`;
+  const rh = L.rowH[0];
+  out.push(`<rect x="${f3(x)}" y="${f3(y)}" width="${f3(L.w)}" height="${f3(L.ht)}" fill="#fff" stroke="#000" stroke-width="${K.lw(.4)}"/>`);
+  if (L.vertical) {                                                   // vertical: header row, then one row per x
+    m.rows.forEach((_, i) => out.push(line(x, y + (i + 1) * rh, x + L.w, y + (i + 1) * rh, i === 0 ? .55 : .25)));
+    out.push(line(x + L.colW[0], y, x + L.colW[0], y + L.ht, .3));
+    [0, 1].forEach(c => out.push(K.txt(x + (c ? L.colW[0] : 0) + L.colW[c] / 2, y + rh / 2 + FS * .35, m.head[c], { bold: true })));
+    m.rows.forEach((r, i) => [['x', r.xtext, 0], ['y', r.ytext, 1]].forEach(([k, t, c]) => {
+      if (t && !blank(k, i)) out.push(K.txt(x + (c ? L.colW[0] : 0) + L.colW[c] / 2, y + (i + 1) * rh + rh / 2 + FS * .35, t));
+    }));
+  } else {                                                            // horizontal: a header column, then one column per x
+    out.push(line(x, y + rh, x + L.w, y + rh, .3));
+    let cx = x + L.colW[0];
+    out.push(line(cx, y, cx, y + L.ht, .55));
+    [0, 1].forEach(r => out.push(K.txt(x + L.colW[0] / 2, y + r * rh + rh / 2 + FS * .35, m.head[r], { bold: true })));
+    m.rows.forEach((r, i) => {
+      const w = L.colW[i + 1];
+      if (i < m.rows.length - 1) out.push(line(cx + w, y, cx + w, y + L.ht, .25));
+      [['x', r.xtext], ['y', r.ytext]].forEach(([k, t], rr) => { if (t && !blank(k, i)) out.push(K.txt(cx + w / 2, y + rr * rh + rh / 2 + FS * .35, t)); });
+      cx += w;
+    });
+  }
+  return out.join('');
+}
+OBJECT_KINDS.table = {
+  name: 'Table of values', prefix: 'tb', token: 'tables',
+  norm: r => {
+    const rows = (Array.isArray(r.rows) ? r.rows : []).slice(0, MAX_ROWS).map(w => { w = w && typeof w === 'object' ? w : {}; return { x: cellClean(w.x), y: cellClean(w.y) }; });
+    const blank = [...new Set(Array.isArray(r.blank) ? r.blank : [])].filter(t => { const m = /^([xy]):(\d+)$/.exec(t); return m && +m[2] < rows.length; });
+    return { id: vStr(r.id, ''), kind: 'table', of: vStr(r.of, ''), rows, blank, xHead: vStr(r.xHead, ''), yHead: vStr(r.yHead, ''),
+             place: vPick(r.place, ['right', 'below'], 'right'), orient: vPick(r.orient, ['vertical', 'horizontal'], 'vertical'),
+             plot: vPick(r.plot, PLOT_MODES, 'none'), plotInQuestion: vBool(r.plotInQuestion, false) };
+  },
+  resolve: (o, res) => ({ model: tableModel(o, res) }),
+  bounds: o => o.plot === 'none' ? [] : o.model.rows.filter(r => isFin(r.xv) && isFin(r.yv)).map(r => ({ x: r.xv, y: r.yv })),
+  draw(o, C) {                                                       // the plotted points; the table itself is painted in the margin
+    if (o.plot === 'none' || (C.K.isQ && !o.plotInQuestion)) return null;
+    const P = o.model.rows.filter(r => isFin(r.xv) && isFin(r.yv));
+    if (!P.length) return null;
+    let s = '';
+    if (o.plot === 'line' && P.length > 1) s += `<polyline points="${P.map(r => f3(C.sx(r.xv)) + ',' + f3(C.sy(r.yv))).join(' ')}" fill="none" stroke="${C.col}" stroke-width="${C.lw(.5)}" stroke-linejoin="round"/>`;
+    P.forEach(r => { s += markerSVG('circle', C.sx(r.xv), C.sy(r.yv), 1.55 * C.S, C.col, C.S, false); });
+    return { shape: s, label: '' };
+  }
+};
+
+/* ---------- dashed guide lines from a point to both axes, for reading values ---------- */
+function guideTarget(o, res) {
+  if (o.point) {
+    const p = res(o.point);
+    if (p && p.kind === 'point') { const x = parseNum(p.x), y = parseNum(p.y); if (isFin(x) && isFin(y)) return { x, y }; }
+    return null;
+  }
+  const f = o.fn ? res(o.fn) : null, x = parseNum(o.x);
+  if (isFn(f) && f.eq && f.eq.ok && f.eq.vertical === null && isFin(x)) { const y = f.eq.fn(x); if (isFin(y)) return { x, y }; }
+  return null;
+}
+OBJECT_KINDS.guide = {
+  name: 'Guide lines', prefix: 'gd',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'guide', point: vStr(r.point, ''), fn: vStr(r.fn, ''), x: cellClean(r.x),
+                vertical: vBool(r.vertical, true), horizontal: vBool(r.horizontal, true), labels: vBool(r.labels, true) }),
+  resolve: (o, res) => ({ target: guideTarget(o, res) }),
+  bounds: o => o.target ? [o.target] : [],
+  draw(o, C) {
+    const t = o.target;
+    if (!t || !C.inside(t.x, t.y)) return null;
+    const X = C.sx(t.x), Y = C.sy(t.y), st = `stroke="${C.col}" stroke-width="${C.lw(.4)}" stroke-dasharray="1.6 1"`, K = C.K;
+    let s = '', label = '';
+    if (o.vertical) s += `<line x1="${f3(X)}" y1="${f3(Y)}" x2="${f3(X)}" y2="${f3(C.yAx)}" ${st}/>`;
+    if (o.horizontal) s += `<line x1="${f3(X)}" y1="${f3(Y)}" x2="${f3(C.xAx)}" y2="${f3(Y)}" ${st}/>`;
+    if (!o.point) s += markerSVG('circle', X, Y, 1.35 * C.S, C.col, C.S, false);
+    if (o.labels && !K.hid.has('coordLabels')) {
+      if (o.vertical) label += K.txt(X, C.yAx + K.TICK + 1.1 + K.FT * .8, fmtNum(t.x), { fs: K.FT, bold: true, halo: true });
+      if (o.horizontal) label += K.txt(C.xAx - K.TICK - 1.1, Y + K.FT * .35, fmtNum(t.y), { fs: K.FT, bold: true, halo: true, anchor: 'end' });
+    }
+    return { shape: s, label };
+  }
+};
+
+/* ---------- where two graphs meet (solve a system) ---------- */
+OBJECT_KINDS.intersect = {
+  name: 'Intersection', prefix: 'is',
+  norm: r => { const of = Array.isArray(r.of) ? r.of : []; return { id: vStr(r.id, ''), kind: 'intersect', of: [vStr(of[0], ''), vStr(of[1], '')], label: vStr(r.label, ''), coords: vBool(r.coords, true) }; },
+  resolve: (o, res) => ({ a: res(o.of[0]), b: res(o.of[1]) }),
+  bounds: () => [],
+  draw(o, C) {
+    if (C.K.hid.has('keyPoints') || !isFn(o.a) || !isFn(o.b)) return null;
+    const pts = intersectionPoints(o.a.eq, o.b.eq, C.win, o.a.domain, o.b.domain).filter(p => C.inside(p.x, p.y));
+    if (!pts.length) return null;
+    let s = '', label = '';
+    pts.forEach(p => {
+      s += markerSVG('circle', C.sx(p.x), C.sy(p.y), 1.6 * C.S, C.col, C.S, false);
+      const text = labelText(o.label, p.x, p.y, !C.K.hid.has('pointLabels'), o.coords && !C.K.hid.has('coordLabels'));
+      if (text) label += C.labelNear(C.sx(p.x), C.sy(p.y), 1.6 * C.S, text, null, !(o.coords && !C.K.hid.has('coordLabels')));
+    });
+    return { shape: s, label };
+  }
+};
+
+/* ---------- vertical line test ---------- */
+OBJECT_KINDS.vlt = {
+  name: 'Vertical line test', prefix: 'vl',
+  norm: r => ({ id: vStr(r.id, ''), kind: 'vlt', at: (Array.isArray(r.at) ? r.at : []).slice(0, 12).map(cellClean), dots: vBool(r.dots, true) }),
+  bounds: () => [],
+  draw(o, C) {
+    let s = '';
+    const fns = [];
+    for (const id of C.ids) { const r = C.res(id); if (isFn(r) && r.eq && r.eq.ok && r.eq.vertical === null && r.id !== o.id) fns.push(r); }
+    const pts = [];
+    for (const id of C.ids) { const r = C.res(id); if (r && r.kind === 'point') { const x = parseNum(r.x), y = parseNum(r.y); if (isFin(x) && isFin(y)) pts.push({ x, y }); } }
+    o.at.map(parseNum).filter(x => isFin(x) && x >= C.win.xlo - 1e-9 && x <= C.win.xhi + 1e-9).forEach(x => {
+      const X = C.sx(x);
+      s += `<line x1="${f3(X)}" y1="${f3(C.y1)}" x2="${f3(X)}" y2="${f3(C.y0)}" stroke="${C.col}" stroke-width="${C.lw(.4)}" stroke-dasharray="2 1.2"/>`;
+      if (!o.dots) return;
+      fns.forEach(r => { const y = r.eq.fn(x); if (isFin(y) && C.inside(x, y) && inDomain(r.domain || NO_DOMAIN, x)) s += `<circle cx="${f3(X)}" cy="${f3(C.sy(y))}" r="${f3(1.9 * C.S)}" fill="none" stroke="${C.col}" stroke-width="${C.lw(.5)}"/>`; });
+      pts.filter(p => Math.abs(p.x - x) < 1e-9 && C.inside(p.x, p.y)).forEach(p => { s += `<circle cx="${f3(X)}" cy="${f3(C.sy(p.y))}" r="${f3(2.3 * C.S)}" fill="none" stroke="${C.col}" stroke-width="${C.lw(.4)}"/>`; });
+    });
+    return s ? { shape: s, label: '' } : null;
+  }
+};
+
+/* ---------- readability: can a student read this exactly? ---------- */
+function readability(spec) {
+  const objs = resolveObjects(spec), A = analyse(spec, objs), issues = [];
+  const win = { xlo: A.ax.lo, xhi: A.ax.hi, ylo: A.ay.lo, yhi: A.ay.hi };
+  const onG = (v, ax) => { const k = (v - ax.lo) / gridStepFor(ax, spec); return Math.abs(k - Math.round(k)) < 1e-6; };
+  const at = (x, y) => '(' + fmtNum(x) + ', ' + fmtNum(y) + ')';
+  const perp = objs.some(o => o.kind === 'related' && o.rel === 'perpendicular' && o.rightAngle);
+  const stepsDiffer = Math.abs(A.ax.step - A.ay.step) > 1e-9;
+  objs.forEach(o => {
+    if (o.kind === 'point') {
+      const x = parseNum(o.x), y = parseNum(o.y);
+      if (isFin(x) && isFin(y) && insidePlane(x, y, A) && !(onG(x, A.ax) && onG(y, A.ay))) issues.push({ id: o.id, fix: 'snap', text: objName(o) + ' ' + at(x, y) + ' falls between gridlines.' });
+    } else if (o.kind === 'polygon' || o.kind === 'path') {
+      const off = vertsOf(o).filter(p => insidePlane(p.x, p.y, A) && !(onG(p.x, A.ax) && onG(p.y, A.ay)));
+      if (off.length) issues.push({ id: o.id, fix: 'snap', text: objName(o) + ': ' + off.length + ' corner' + (off.length === 1 ? '' : 's') + ' (' + off.slice(0, 3).map(p => at(p.x, p.y)).join(', ') + (off.length > 3 ? ', …' : '') + ') fall between gridlines.' });
+    } else if (isFn(o)) {
+      if (!o.eq.ok) { if (o.kind === 'function' && o.expr.trim()) issues.push({ id: o.id, text: 'Equation “' + o.expr + '”: ' + o.eq.error }); return; }
+      const eq = o.eq, dom = o.domain || NO_DOMAIN;
+      if (eq.linear && eq.vertical === null) {                       // a straight line should pass through a few gridline crossings
+        const gx = gridStepFor(A.ax, spec), n = Math.round(axSpan(A.ax) / gx + 1e-9);
+        let hits = 0;
+        for (let i = 0; i <= n && hits < 2; i++) { const x = clean(A.ax.lo + i * gx), y = eq.fn(x); if (isFin(y) && y >= win.ylo - 1e-9 && y <= win.yhi + 1e-9 && onG(y, A.ay) && inDomain(dom, x)) hits++; }
+        if (hits < 2) {
+          const sug = suggestXs(eq.fn, win.xlo, win.xhi, 3);
+          issues.push({ id: o.id, text: 'The line ' + plainMarkup(eq.markup) + ' passes through ' + (hits ? 'only one' : 'no') + ' gridline crossing, so it is hard to read exactly.' + (sug.length ? ' Whole-number y at x = ' + sug.map(fmtNum).join(', ') + '.' : ' Try a slope or intercept that hits the grid.') });
+        }
+      }
+      if ((o.intercepts || 'none') !== 'none') {
+        interceptPoints(eq, dom, win).filter(p => insidePlane(p.x, p.y, A) && !(onG(p.x, A.ax) && onG(p.y, A.ay)))
+          .forEach(p => issues.push({ id: o.id, text: plainMarkup(eq.markup) + ': the ' + (p.axis === 'y' ? 'y' : 'x') + '-intercept ' + at(p.x, p.y) + ' falls between gridlines.' }));
+      }
+    } else if (o.kind === 'table') {
+      const m = o.model;
+      if (o.of && m.eq) {
+        const bad = m.rows.filter(r => isFin(r.xv) && isFin(r.yv) && Math.abs(r.yv - Math.round(r.yv)) > 1e-9);
+        if (bad.length) {
+          const sug = suggestXs(m.eq.fn, win.xlo, win.xhi, o.rows.length || 5);
+          issues.push({ id: o.id, text: 'Table: y is not a whole number at x = ' + bad.slice(0, 4).map(r => fmtNum(r.xv)).join(', ') + (bad.length > 4 ? ', …' : '') + '.' + (sug.length ? ' Whole-number y at x = ' + sug.map(fmtNum).join(', ') + '.' : '') });
+        }
+      }
+      if (o.plot !== 'none') {
+        const off = m.rows.filter(r => isFin(r.xv) && isFin(r.yv) && insidePlane(r.xv, r.yv, A) && !(onG(r.xv, A.ax) && onG(r.yv, A.ay)));
+        if (off.length) issues.push({ id: o.id, text: 'Table: ' + off.length + ' plotted point' + (off.length === 1 ? '' : 's') + ' fall between gridlines.' });
+      }
+    }
+  });
+  if (perp && stepsDiffer) issues.push({ id: '', text: 'The x and y scales differ (steps ' + fmtNum(A.ax.step) + ' and ' + fmtNum(A.ay.step) + '), so perpendicular lines will not look perpendicular.' });
+  return issues;
+}
+const plainMarkup = s => flatRuns(labelRuns(s)).map(r => r.t).join('');
+/* Move every point and corner that is off the drawn grid onto the nearest gridline. Returns how many values moved. */
+function snapPoints(spec) {
+  const A = analyse(spec);
+  let n = 0;
+  const snap = (v, ax) => { const y = parseNum(v); if (!isFin(y)) return v; const s = snapValue(y, ax, spec); if (s !== y) n++; return s; };
+  spec.objects.forEach(o => {
+    if (o.kind === 'point') { o.x = snap(o.x, A.ax); o.y = snap(o.y, A.ay); }
+    else if (o.kind === 'polygon' || o.kind === 'path') o.vertices = o.vertices.map(v => [snap(v[0], A.ax), snap(v[1], A.ay)]);
+  });
+  return n;
+}
+
+
+/* Derived objects (an equation's curve and intercepts, a table's y-values, intersections, parallel lines, ...) are computed here and
+   at draw time, never stored, so editing an original updates everything built from it. resolveObjects returns the objects with
+   their computed parts attached, and .res(id) to look any object up (cycles resolve to null). */
+function resolveObjects(spec) {
+  const src = new Map(spec.objects.map(o => [o.id, o])), memo = new Map(), busy = new Set();
+  function res(id) {
+    if (memo.has(id)) return memo.get(id);
+    const o = src.get(id);
+    if (!o || busy.has(id)) return null;
+    busy.add(id);
+    const k = OBJECT_KINDS[o.kind], r = k.resolve ? Object.assign({}, o, k.resolve(o, res)) : o;
+    busy.delete(id); memo.set(id, r);
+    return r;
+  }
+  const out = spec.objects.map(o => res(o.id) || o);
+  out.res = res;
+  return out;
+}
 function extentsOf(objs) {
   const xs = [], ys = [];
   objs.forEach(o => (OBJECT_KINDS[o.kind].bounds(o) || []).forEach(p => { xs.push(p.x); ys.push(p.y); }));
@@ -802,6 +1621,29 @@ function pasteVertices(o, grid, r0, c0) {
   });
   return { ignored };
 }
+/* Table-of-values rows: columns are [x, y]. */
+const TABLE_COLS = ['x', 'y'];
+function pasteRows(o, grid, r0, c0) {
+  let ignored = 0;
+  grid.forEach((line, i) => {
+    const k = r0 + i;
+    while (o.rows.length <= k) { if (o.rows.length >= MAX_ROWS) { ignored += line.length; return; } o.rows.push({ x: null, y: null }); }
+    line.forEach((txt, j) => { const col = TABLE_COLS[c0 + j]; if (!col) ignored++; else o.rows[k][col] = cellFromText(txt); });
+  });
+  return { ignored };
+}
+function dropRow(o, k) {                                             // blank-cell marks follow their rows
+  o.rows.splice(k, 1);
+  o.blank = o.blank.flatMap(t => { const m = /^([xy]):(\d+)$/.exec(t), i = +m[2]; return i === k ? [] : [m[1] + ':' + (i > k ? i - 1 : i)]; });
+}
+/* Replace the x-values with from, from + step, … up to `to` (at most MAX_ROWS). Returns how many rows. */
+function fillRows(o, from, to, step) {
+  if (!(step > 0) || !isFin(from) || !isFin(to)) return 0;
+  const xs = [];
+  for (let k = 0; xs.length < MAX_ROWS && from + k * step <= to + 1e-9; k++) xs.push(clean(from + k * step));
+  o.rows = xs.map(x => ({ x, y: null })); o.blank = [];
+  return xs.length;
+}
 /* Add (or replace) points from a pasted block. Returns how many were added, or -1 when the block has no usable columns. */
 function importPoints(spec, grid, replace) {
   const rows = parsePointGrid(grid);
@@ -818,7 +1660,7 @@ function importPoints(spec, grid, replace) {
 /* The next n capital letters not yet used as a point or vertex name (blank once A–Z run out). */
 function nextLabels(spec, n) {
   const used = new Set();
-  spec.objects.forEach(o => { if (o.kind === 'point') used.add(o.label); else o.labels.forEach(l => used.add(l)); });
+  spec.objects.forEach(o => { if (o.kind === 'point') used.add(o.label); else if (o.labels) o.labels.forEach(l => used.add(l)); });
   const out = [];
   for (let i = 0; i < 26 && out.length < n; i++) { const c = String.fromCharCode(65 + i); if (!used.has(c)) out.push(c); }
   while (out.length < n) out.push('');
@@ -887,14 +1729,34 @@ function makeKit(spec, o) {
   K.hid = new Set(K.isQ ? spec.hidden : []);
   K.blk = new Set(K.isQ ? spec.blanks : []);
   /* opt: anchor, bold, rot, fs, italic (whole text), math (subtraction without spaces), plain (no markup), halo (white outline for text over gridlines) */
-  K.txt = (x, y, s, opt) => {
-    opt = opt || {};
-    const fs = opt.fs || K.FS;
-    const body = tspans(opt.plain ? [{ t: String(s) }] : labelRuns(s, { math: opt.math, italic: opt.italic }), fs);
+  K.runsSVG = (x, y, runs, fs, opt) => {                            // one <text> for runs that contain no fractions
+    const body = tspans(runs, fs);
     const rot = opt.rot ? ` transform="rotate(${opt.rot} ${f3(x)} ${f3(y)})"` : '';
     const at = `x="${f3(x)}" y="${f3(y)}" font-size="${f3(fs)}" text-anchor="${opt.anchor || 'middle'}"${opt.bold ? ' font-weight="bold"' : ''}${rot}`;
     const halo = opt.halo ? `<text ${at} fill="#fff" stroke="#fff" stroke-width="${f3(fs * .34)}" stroke-linejoin="round">${body}</text>` : '';
     return halo + `<text ${at}>${body}</text>`;
+  };
+  K.txt = (x, y, s, opt) => {
+    opt = opt || {};
+    const fs = opt.fs || K.FS, runs = opt.plain ? [{ t: String(s) }] : labelRuns(s, { math: opt.math, italic: opt.italic });
+    if (!runs.some(r => r.frac)) return K.runsSVG(x, y, runs, fs, opt);
+    if (opt.rot) return K.runsSVG(x, y, flatRuns(runs), fs, opt);                  // rotated text keeps fractions on one line
+    const total = runsW(runs, fs, opt.bold), anchor = opt.anchor || 'middle';      // stacked fractions: lay the pieces out left to right
+    let cx = anchor === 'start' ? x : anchor === 'end' ? x - total : x - total / 2;
+    const out = []; let group = [];
+    const flush = () => { if (group.length) { out.push(K.runsSVG(cx, y, group, fs, Object.assign({}, opt, { anchor: 'start' }))); cx += runsW(group, fs, opt.bold); group = []; } };
+    runs.forEach(r => {
+      if (!r.frac) { group.push(r); return; }
+      flush();
+      const w = fracW(r, fs, opt.bold), fsf = fs * FRAC_SCALE, bar = y - fs * .3, mid = cx + w / 2, mid2 = Object.assign({}, opt, { anchor: 'middle' });
+      const ln = (col, sw) => `<line x1="${f3(cx + fs * .05)}" y1="${f3(bar)}" x2="${f3(cx + w - fs * .05)}" y2="${f3(bar)}" stroke="${col}" stroke-width="${f3(sw)}"/>`;
+      out.push(K.runsSVG(mid, bar - fs * .13, r.frac[0], fsf, mid2), K.runsSVG(mid, bar + fsf * .98, r.frac[1], fsf, mid2));
+      if (opt.halo) out.push(ln('#fff', fs * .3));
+      out.push(ln('#000', fs * .085));
+      cx += w;
+    });
+    flush();
+    return out.join('');
   };
   K.w = (s, fs, bold, opt) => labelW(s, fs || K.FS, bold, opt);
   K.under = n => '_'.repeat(Math.max(3, n));
@@ -941,8 +1803,8 @@ function renderSVG(spec, o) {
   /* ----- tick labels and axis placement ----- */
   const xT = ticks(ax), yT = ticks(ay);
   const xL = xT.map(v => fmtTick(v, ax)), yL = yT.map(v => fmtTick(v, ay));
-  const yLabW = Math.max(0, ...yL.map(s => textW(s, FT)));
-  const halfFirst = textW(xL[0] || '', FT) / 2, halfLast = textW(xL[xL.length - 1] || '', FT) / 2;
+  const yLabW = Math.max(0, ...yL.map(s => K.w(s, FT)));
+  const halfFirst = K.w(xL[0] || '', FT) / 2, halfLast = K.w(xL[xL.length - 1] || '', FT) / 2;
   const origin = spec.axes.position === 'origin';
   const xAxisV = origin ? clamp(0, ay.lo, ay.hi) : ay.lo;            // y-value where the x-axis sits
   const yAxisV = origin ? clamp(0, ax.lo, ax.hi) : ax.lo;            // x-value where the y-axis sits
@@ -964,20 +1826,25 @@ function renderSVG(spec, o) {
   const yTickSp = yAtLeft ? yLabW + TICK + 1.4 : halfFirst + .8;       // interior axis: the numbers sit inside the plot
   const xTickSp = xAtBottom ? TICK + 1.3 + FT * 1.15 : FT * .5 + .8;
   const L = PAD + yTitleSp + Math.max(yTickSp, extLoX);
-  const R = PAD + Math.max(halfLast, extHiX + xLetterW);
+  const tabs = objs.filter(ob => ob.kind === 'table').map(ob => ({ ob, lay: tableLayout(ob, K) }));   // a table's space is reserved even when the question hides it
+  const tgap = 3 * S, rightTabs = tabs.filter(t => t.ob.place === 'right'), belowTabs = tabs.filter(t => t.ob.place === 'below');
+  const rightW = rightTabs.length ? Math.max(...rightTabs.map(t => t.lay.w)) + tgap : 0;
+  const rightH = rightTabs.length ? rightTabs.reduce((a, t) => a + t.lay.ht + tgap, 0) - tgap : 0;
+  const belowH = belowTabs.reduce((a, t) => a + t.lay.ht + tgap, 0);
+  const R = PAD + Math.max(halfLast, extHiX + xLetterW) + rightW;
   const T = PAD + titleSp + FT * .6 + extHiY + (letters ? FS + 1 : 0);
-  const B = PAD + Math.max(xTickSp, extLoY) + xTitleSp;
+  const B = PAD + Math.max(xTickSp, extLoY) + xTitleSp + belowH;
   let cell, W, H;
   if (spec.scale.lock) {                                             // physical scale lock: one major grid square prints at exactly scale.mm; the page grows to fit
-    cell = spec.scale.mm; W = L + nx * cell + R; H = T + ny * cell + B;
+    cell = spec.scale.mm; W = L + nx * cell + R; H = Math.max(T + ny * cell + B, T + rightH + PAD);
   } else {                                                           // square cells: the width fixes the size, the height follows the grid
     cell = (W0 - L - R) / nx;
     if (size.h) cell = Math.min(cell, (size.h - T - B) / ny);
     cell = Math.max(cell, .5);
-    W = W0; H = size.h || T + ny * cell + B;
+    W = W0; H = size.h || Math.max(T + ny * cell + B, T + rightH + PAD);
   }
   const pw = nx * cell, ph = ny * cell;
-  const x0 = L + (W - L - R - pw) / 2, y0 = T + (H - T - B - ph) / 2, x1 = x0 + pw, y1 = y0 + ph;
+  const x0 = L + (W - L - R - pw) / 2, y0 = T + (size.h && !spec.scale.lock ? (H - T - B - ph) / 2 : 0), x1 = x0 + pw, y1 = y0 + ph;
   const sx = v => x0 + (v - ax.lo) / axSpan(ax) * pw, sy = v => y1 - (v - ay.lo) / axSpan(ay) * ph;
   const xAx = sx(yAxisV), yAx = sy(xAxisV);
   if (o.geom) Object.assign(o.geom, { x0, x1, y0, y1, ax, ay, cell, W, H });      // lets the editor turn a mouse position back into graph values
@@ -1002,6 +1869,7 @@ function renderSVG(spec, o) {
   /* ----- axis lines, arrows, frame ----- */
   if (!origin) out.push(`<rect x="${f3(x0)}" y="${f3(y0)}" width="${f3(pw)}" height="${f3(ph)}" fill="none" stroke="#555" stroke-width="${lw(.3)}"/>`);
   const head = (tx, ty, dx, dy) => `<polygon points="${f3(tx)},${f3(ty)} ${f3(tx - dx * AL - dy * AW)},${f3(ty - dy * AL + dx * AW)} ${f3(tx - dx * AL + dy * AW)},${f3(ty - dy * AL - dx * AW)}" fill="#000"/>`;
+  const arrowHead = (tx, ty, dx, dy, fill, k) => { const l = AL * (k || 1), w = AW * (k || 1); return `<polygon points="${f3(tx)},${f3(ty)} ${f3(tx - dx * l - dy * w)},${f3(ty - dy * l + dx * w)} ${f3(tx - dx * l + dy * w)},${f3(ty - dy * l - dx * w)}" fill="${fill}"/>`; };
   const xa = x0 - extLoX, xb = x1 + extHiX, ya = y1 + extLoY, yb = y0 - extHiY;
   out.push(`<path d="M${f3(xa + (extLoX ? AL * .8 : 0))},${f3(yAx)}H${f3(xb - (extHiX ? AL * .8 : 0))}M${f3(xAx)},${f3(ya - (extLoY ? AL * .8 : 0))}V${f3(yb + (extHiY ? AL * .8 : 0))}" stroke="#000" stroke-width="${lw(.5)}" fill="none"/>`);
   if (extHiX) out.push(head(xb, yAx, 1, 0));
@@ -1044,21 +1912,35 @@ function renderSVG(spec, o) {
     if (left < PAD) x += PAD - left; else if (left + w > W - PAD) x -= left + w - (W - PAD);
     return txt(x, clamp(y, PAD + FS, H - PAD), text, { anchor, bold, halo: true });
   };
+  const labelAt = (x, y, text, anchor, bold) => {                    // a label at a spot, kept on the page
+    const w = K.w(text, FS, bold), left = anchor === 'start' ? x : anchor === 'end' ? x - w : x - w / 2;
+    if (left < PAD) x += PAD - left; else if (left + w > W - PAD) x -= left + w - (W - PAD);
+    return txt(x, clamp(y, PAD + FS, H - PAD), text, { anchor, bold, halo: true });
+  };
+  const shown = ob => !hid.has(ob.id) && !hid.has(OBJECT_KINDS[ob.kind].token || 'objects');      // tables answer to their own token, not "all points and shapes"
+  const ghostOf = ob => !K.isQ && o.ghost && spec.hidden.includes(ob.id) ? ' opacity=".3"' : '';
+  const pick = o.hits ? ' style="cursor:pointer"' : '';
+  const ids = objs.map(ob => ob.id);
   objs.forEach((ob, i) => {
-    if (hid.has('objects') || hid.has(ob.id) || !OBJECT_KINDS[ob.kind]) return;
-    const C = { o, K, S, lw, sx, sy, ax, ay, inside, hatch, labelNear, col: spec.style.colour ? PALETTE[i % PALETTE.length] : '#000' };
+    if (!OBJECT_KINDS[ob.kind] || !shown(ob)) return;
+    const C = { o, K, S, lw, sx, sy, ax, ay, inside, hatch, labelNear, labelAt, head: arrowHead, res: objs.res, ids, x0, x1, y0, y1, xAx, yAx, xAtBottom, yAtLeft, yLabW,
+                win: { xlo: ax.lo, xhi: ax.hi, ylo: ay.lo, yhi: ay.hi }, kx: pw / axSpan(ax), ky: ph / axSpan(ay), col: spec.style.colour ? PALETTE[i % PALETTE.length] : '#000' };
     const res = OBJECT_KINDS[ob.kind].draw(ob, C);
     if (!res) return;
-    const ghost = !K.isQ && o.ghost && spec.hidden.includes(ob.id) ? ' opacity=".3"' : '';
-    data.push(`<g data-obj="${ob.id}"${ghost}${o.hits ? ' style="cursor:pointer"' : ''}>${res.shape}</g>`);
-    if (res.label) labels.push(`<g${ghost}>${res.label}</g>`);
+    data.push(`<g data-obj="${ob.id}"${ghostOf(ob)}${pick}>${res.shape}</g>`);
+    if (res.label) labels.push(`<g${ghostOf(ob)}>${res.label}</g>`);
   });
   if (data.length) out.push(`<g clip-path="url(#${clipId})">${data.join('')}</g>`);
+  /* tables of values sit in the margin: to the right of the graph, top-aligned, or below it */
+  let tyR = y0;
+  rightTabs.forEach(({ ob, lay }) => { if (shown(ob)) out.push(`<g data-obj="${ob.id}"${ghostOf(ob)}${pick}>${paintTable(ob, K, W - PAD - (rightW - tgap), tyR)}</g>`); tyR += lay.ht + tgap; });
+  let tyB = y1 + Math.max(xTickSp, extLoY) + xTitleSp + tgap;
+  belowTabs.forEach(({ ob, lay }) => { if (shown(ob)) out.push(`<g data-obj="${ob.id}"${ghostOf(ob)}${pick}>${paintTable(ob, K, clamp((x0 + x1) / 2 - lay.w / 2, PAD, Math.max(PAD, W - PAD - lay.w)), tyB)}</g>`); tyB += lay.ht + tgap; });
 
   /* ----- tick labels (drawn under the objects' own labels, which carry a white halo, so a point's name always wins) ----- */
   const lab = [], skip0 = atOrigin;                                  // the shared "0" at the origin is drawn once
   if (!hid.has('xTicks')) {
-    const spacing = (x1 - x0) * ax.step / axSpan(ax), every = spec.x.labelEvery || Math.max(1, Math.ceil((Math.max(...xL.map(s => textW(s, FT))) + 1.6) / spacing)), anchor = anchorIndex(ax);
+    const spacing = (x1 - x0) * ax.step / axSpan(ax), every = spec.x.labelEvery || Math.max(1, Math.ceil((Math.max(...xL.map(s => K.w(s, FT))) + 1.6) / spacing)), anchor = anchorIndex(ax);
     xT.forEach((v, i) => {
       if ((i - anchor) % every || (skip0 && v === 0)) return;
       lab.push(txt(sx(v), yAx + TICK + 1.1 + FT * .8, xL[i], { fs: FT, halo: !xAtBottom }));
@@ -1130,7 +2012,7 @@ function pngWithDpi(u8, dpi) {
 
   /* ---------- state: the spec is the truth; view/pick/tab are UI-only ---------- */
   let spec = sampleSpec();
-  const state = { view: 'key', pick: false, edit: false, tab: 'graph', size: null, outside: [], geom: {}, printJob: null };
+  const state = { view: 'key', pick: false, edit: false, tab: 'graph', size: null, outside: [], issues: [], geom: {}, printJob: null };
   const hist = [JSON.stringify(spec)];
   let idx = 0, lastKey = null, lastT = 0;
 
@@ -1143,7 +2025,9 @@ function pngWithDpi(u8, dpi) {
   const VIS_ROWS = [
     ['title', 'Title', true], ['xTitle', 'X-axis title', true], ['yTitle', 'Y-axis title', true], ['units', 'Units in axis titles', true],
     ['xTicks', 'X-axis numbers'], ['yTicks', 'Y-axis numbers'], ['axisLetters', 'Axis letters (x, y)'], ['quadrantLabels', 'Quadrant labels'],
-    ['pointLabels', 'Point and vertex names (A, B, C…)'], ['coordLabels', 'Coordinates beside points'], ['objects', 'All points and shapes']
+    ['pointLabels', 'Point and vertex names (A, B, C…)'], ['coordLabels', 'Coordinates beside points'],
+    ['equations', 'Equation and function-name labels'], ['keyPoints', 'Intercepts and intersections'], ['slopeTriangle', 'Slope triangles'],
+    ['tables', 'Tables of values'], ['objects', 'All points, shapes and graphs']
   ];
   const MARKER_SYMBOLS = { circle: '●', square: '■', triangle: '▲', diamond: '◆', cross: '✕', plus: '＋' };
 
@@ -1233,7 +2117,7 @@ function pngWithDpi(u8, dpi) {
         <td><select data-bind="objects.${i}.marker" aria-label="Point ${r + 1} marker">${Object.keys(MARKER_SYMBOLS).map(k => `<option value="${k}">${MARKER_SYMBOLS[k]}</option>`).join('')}</select></td>
         <td class="act"><button class="xbtn" type="button" data-act="delObj" data-i="${i}" title="Remove this point">×</button></td></tr>`).join('') + '</tbody></table></div>'
       : '<p class="hint">No points yet. Add one, paste a block from a spreadsheet, or click on the graph.</p>');
-    const shapes = spec.objects.map((o, i) => [o, i]).filter(([o]) => o.kind !== 'point');
+    const shapes = spec.objects.map((o, i) => [o, i]).filter(([o]) => o.kind === 'polygon' || o.kind === 'path');
     $('#shapesWrap').innerHTML = shapes.length ? `<h3 class="section-title">Polygons and line segments</h3><div style="display:grid;gap:12px">` + shapes.map(([o, i]) => `<div class="card">
       <div class="row"><div><h4>${OBJECT_KINDS[o.kind].name} <span class="pill" data-lnames="${o.id}"></span></h4></div><div style="flex:none"><button class="xbtn" type="button" data-act="delObj" data-i="${i}" title="Remove this shape">×</button></div></div>
       <div class="row">
@@ -1245,6 +2129,91 @@ function pngWithDpi(u8, dpi) {
       o.vertices.map((v, k) => `<tr><td class="ix">${k + 1}</td>${inp('v', i, k, 0, o.labels[k])}${inp('v', i, k, 1, v[0])}${inp('v', i, k, 2, v[1])}<td class="act"><button class="xbtn" type="button" data-act="delVert" data-i="${i}" data-k="${k}" title="Remove this vertex">×</button></td></tr>`).join('') +
       `</tbody></table></div>
       <div class="row tight"><button class="btn small" type="button" data-act="addVert" data-i="${i}">+ Vertex</button></div></div>`).join('') + '</div>' : '';
+  }
+
+  /* ---------- the Equations tab: equations, tables of values, related lines and marks ---------- */
+  const OBJ_KINDS = { fn: ['function', 'related'], pt: ['point'] };
+  function fillObjSelects() {                                        // pickers list the current objects, by their current names
+    $$('[data-objsel]').forEach(sel => {
+      const kinds = OBJ_KINDS[sel.dataset.objsel];
+      const want = [['', sel.dataset.first || 'choose…'], ...spec.objects.filter(o => kinds.includes(o.kind)).map(o => [o.id, objName(o)])];
+      const have = [...sel.options].map(o => [o.value, o.textContent]);
+      if (JSON.stringify(want) !== JSON.stringify(have)) { const cur = sel.value; sel.innerHTML = want.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join(''); sel.value = cur; }
+    });
+  }
+  function buildFunctions() {
+    const objsOf = k => spec.objects.map((o, i) => [o, i]).filter(([o]) => o.kind === k);
+    const dash = optList(DASH_NAMES), labels = optList({ none: 'Nothing', equation: 'The equation', name: 'The function name, f(x)' });
+    const num = (path, lab, ph, extra) => `<div${extra || ''}><label class="lab">${lab}</label><input type="number" step="any" data-bind="${path}"${ph ? ` placeholder="${ph}"` : ''}></div>`;
+    const del = (i, what) => `<div style="flex:none"><button class="xbtn" type="button" data-act="delObj" data-i="${i}" title="Remove ${what}">×</button></div>`;
+    const pick = (path, kinds, first) => `<select data-bind="${path}" data-objsel="${kinds}" data-first="${first}"></select>`;
+    const tcell = (i, k, c, v) => `<td><input type="text" data-cell="t" data-oi="${i}" data-r="${k}" data-c="${c}" value="${esc(cellStr(v))}" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Row ${k + 1}, ${TABLE_COLS[c]}" class="${badCell(v) ? 'bad' : ''}"></td>`;
+    const eqs = objsOf('function').map(([o, i]) => `<div class="card">
+      <div class="row"><div><label class="lab">Equation</label><input type="text" data-bind="objects.${i}.expr" placeholder="e.g. y = 2x + 3" spellcheck="false" autocomplete="off"></div>${del(i, 'this equation')}</div>
+      <p class="issue" data-eqerr="${i}"></p>
+      <div class="row"><div><label class="lab">Line</label><select data-bind="objects.${i}.dash">${dash}</select></div>
+        <div><label class="lab">Write beside the line</label><select data-bind="objects.${i}.label">${labels}</select></div></div>
+      <div class="row"><div><label class="lab">Intercepts</label><select data-bind="objects.${i}.intercepts">${optList({ none: 'Not marked', marked: 'Marked', labelled: 'Marked, with coordinates' })}</select></div>
+        <div><label class="lab">Slope triangle</label><select data-bind="objects.${i}.slope">${optList({ none: 'None', triangle: 'Triangle only', labelled: 'With rise and run' })}</select></div></div>
+      <div class="row" data-kinds="triangle,labelled" data-kindpath="objects.${i}.slope">${num(`objects.${i}.slopeAt`, 'Start at x', 'auto')}${num(`objects.${i}.slopeRun`, 'Run', 'auto')}</div>
+      <div class="row" style="gap:16px"><label class="check"><input type="checkbox" data-bind="objects.${i}.arrows"> Arrows on the ends</label>
+        <label class="check"><input type="checkbox" data-bind="objects.${i}.discrete"> Points only</label></div>
+      <div class="row" data-showif="objects.${i}.discrete">${num(`objects.${i}.every`, 'One point every (x)')}</div>
+      <div><label class="lab">Only draw between (blank = the whole graph)</label>
+        <div class="row">${num(`objects.${i}.domain.min`, 'From x')}${num(`objects.${i}.domain.max`, 'To x')}</div>
+        <div class="row" style="gap:16px;margin-top:6px"><label class="check sm"><input type="checkbox" data-bind="objects.${i}.domain.minClosed"> Filled start</label><label class="check sm"><input type="checkbox" data-bind="objects.${i}.domain.maxClosed"> Filled end</label></div></div>
+    </div>`).join('');
+    const tables = objsOf('table').map(([o, i]) => `<div class="card">
+      <div class="row"><div><h4>Table of values</h4></div>${del(i, 'this table')}</div>
+      <div><label class="lab">y-values</label>${pick(`objects.${i}.of`, 'fn', 'typed in below')}</div>
+      <div class="row"><div><label class="lab">x from</label><input type="number" step="any" value="-2" data-fill="${i}:from"></div><div><label class="lab">to</label><input type="number" step="any" value="2" data-fill="${i}:to"></div>
+        <div><label class="lab">step</label><input type="number" step="any" min="0" value="1" data-fill="${i}:step"></div><button class="btn small" type="button" style="flex:none" data-act="fillRows" data-i="${i}">Fill x</button></div>
+      <div class="row tight" data-showif="objects.${i}.of"><button class="btn small" type="button" data-act="suggestRows" data-i="${i}" title="Replace the x-values with whole numbers that give whole-number y-values">Suggest x-values with whole-number y</button></div>
+      <div class="tblwrap"><table class="dt"><thead><tr><th class="ix">#</th><th>x</th><th>y</th><th title="Leave x empty in the question">Blank x</th><th title="Leave y empty in the question">Blank y</th><th class="act"></th></tr></thead><tbody>` +
+      o.rows.map((r, k) => `<tr><td class="ix">${k + 1}</td>${tcell(i, k, 0, r.x)}${o.of ? `<td class="c" style="color:var(--muted);font-family:var(--mono)" data-ycell="${i}:${k}"></td>` : tcell(i, k, 1, r.y)}
+        <td class="c"><input type="checkbox" data-tblank="${i}:x:${k}" aria-label="Row ${k + 1}, x blank in the question"></td><td class="c"><input type="checkbox" data-tblank="${i}:y:${k}" aria-label="Row ${k + 1}, y blank in the question"></td>
+        <td class="act"><button class="xbtn" type="button" data-act="delTRow" data-i="${i}" data-k="${k}" title="Remove this row">×</button></td></tr>`).join('') +
+      `</tbody></table></div>
+      <div class="row tight"><button class="btn small" type="button" data-act="addTRow" data-i="${i}">+ Row</button></div>
+      <div class="row"><div><label class="lab">x heading</label><input type="text" data-bind="objects.${i}.xHead" placeholder="x"></div><div><label class="lab">y heading</label><input type="text" data-bind="objects.${i}.yHead" placeholder="auto"></div></div>
+      <div class="row"><div><label class="lab">Place</label><select data-bind="objects.${i}.place"><option value="right">Right of the graph</option><option value="below">Below the graph</option></select></div>
+        <div><label class="lab">Layout</label><select data-bind="objects.${i}.orient"><option value="vertical">x and y in columns</option><option value="horizontal">x and y in rows</option></select></div></div>
+      <div><label class="lab">Plot the table on the graph</label><select data-bind="objects.${i}.plot"><option value="none">Not plotted</option><option value="points">As points</option><option value="line">As points joined by a line</option></select>
+        <label class="check sm" style="margin-top:6px" data-kinds="points,line" data-kindpath="objects.${i}.plot"><input type="checkbox" data-bind="objects.${i}.plotInQuestion"> Show the plotted points in the question too</label></div>
+    </div>`).join('');
+    const rels = objsOf('related').map(([o, i]) => `<div class="card">
+      <div class="row"><div><label class="lab">Line</label><select data-bind="objects.${i}.rel"><option value="parallel">Parallel to</option><option value="perpendicular">Perpendicular to</option></select></div><div><label class="lab">…this graph</label>${pick(`objects.${i}.of`, 'fn', 'choose a graph')}</div>${del(i, 'this line')}</div>
+      <div class="row"><div><label class="lab">Through the point</label>${pick(`objects.${i}.through.point`, 'pt', 'or type x, y →')}</div>${num(`objects.${i}.through.x`, 'x')}${num(`objects.${i}.through.y`, 'y')}</div>
+      <div class="row"><div><label class="lab">Line</label><select data-bind="objects.${i}.dash">${dash}</select></div><div><label class="lab">Write beside the line</label><select data-bind="objects.${i}.label">${labels}</select></div></div>
+      <label class="check" data-kinds="perpendicular" data-kindpath="objects.${i}.rel"><input type="checkbox" data-bind="objects.${i}.rightAngle"> Right-angle marker where they cross</label>
+    </div>`).join('');
+    const inter = objsOf('intersect').map(([o, i]) => `<div class="card">
+      <div class="row"><div><label class="lab">Where this graph…</label>${pick(`objects.${i}.of.0`, 'fn', 'choose a graph')}</div><div><label class="lab">…meets this one</label>${pick(`objects.${i}.of.1`, 'fn', 'choose a graph')}</div>${del(i, 'this intersection')}</div>
+      <div class="row"><label class="check" style="flex:none"><input type="checkbox" data-bind="objects.${i}.coords"> Write the coordinates</label><div><input type="text" data-bind="objects.${i}.label" placeholder="name, e.g. P" aria-label="Name"></div></div>
+    </div>`).join('');
+    const guides = objsOf('guide').map(([o, i]) => `<div class="card">
+      <div class="row"><div><h4>Guide lines to the axes</h4></div>${del(i, 'these guide lines')}</div>
+      <div><label class="lab">From the point</label>${pick(`objects.${i}.point`, 'pt', 'a point on an equation →')}</div>
+      <div class="row" data-showif-not="objects.${i}.point"><div><label class="lab">Equation</label>${pick(`objects.${i}.fn`, 'fn', 'choose a graph')}</div>${num(`objects.${i}.x`, 'at x')}</div>
+      <div class="row" style="gap:14px;flex-wrap:wrap"><label class="check sm"><input type="checkbox" data-bind="objects.${i}.vertical"> Down to the x-axis</label><label class="check sm"><input type="checkbox" data-bind="objects.${i}.horizontal"> Across to the y-axis</label><label class="check sm"><input type="checkbox" data-bind="objects.${i}.labels"> Write the values</label></div>
+    </div>`).join('');
+    const vlts = objsOf('vlt').map(([o, i]) => `<div class="card">
+      <div class="row"><div><label class="lab">Vertical test lines at x =</label><input type="text" data-vlt="${i}" value="${esc(o.at.map(cellStr).join(', '))}" placeholder="e.g. -2, 3" spellcheck="false"></div>${del(i, 'this test')}</div>
+      <label class="check sm"><input type="checkbox" data-bind="objects.${i}.dots"> Ring where each line meets a graph or point</label>
+    </div>`).join('');
+    $('#functionsPane').innerHTML = `
+      <div><h3 class="section-title">Equations</h3>
+        <button class="btn small" type="button" data-act="addEq">+ Equation</button>
+        <p class="hint" style="margin:8px 0">Try <b>y = 2x + 3</b>, <b>y − 2 = 3(x + 1)</b>, <b>2x + 3y = 6</b>, <b>x = 4</b>, <b>y = 1/2x + 1</b> or <b>f(x) = x^2 − 4</b>. Fractions and powers are set properly. Start with <b>f(x) =</b> to name a function.</p>
+        <div style="display:grid;gap:10px">${eqs || '<p class="hint">No equations yet.</p>'}</div></div>
+      <div><h3 class="section-title">Tables of values</h3>
+        <button class="btn small" type="button" data-act="addTable">+ Table of values</button>
+        <p class="hint" style="margin:8px 0">Calculate y from an equation, or type both columns. Tick “Blank” to leave a cell empty in the question. Hiding the equation and blanking the y-values gives “complete the table and graph”.</p>
+        <div style="display:grid;gap:10px">${tables}</div></div>
+      <div><h3 class="section-title">Lines, intersections and marks</h3>
+        <div class="row tight" style="flex-wrap:wrap"><button class="btn small" type="button" data-act="addRelated">+ Parallel / perpendicular line</button><button class="btn small" type="button" data-act="addIntersect">+ Intersection</button>
+          <button class="btn small" type="button" data-act="addGuide">+ Guide lines</button><button class="btn small" type="button" data-act="addVlt">+ Vertical line test</button></div>
+        <div style="display:grid;gap:10px;margin-top:10px">${rels}${inter}${guides}${vlts}</div></div>`;
   }
 
   function buildTest() {
@@ -1281,10 +2250,15 @@ function pngWithDpi(u8, dpi) {
   const levelName = () => { const l = scaffoldLevel(spec); return l === 'custom' ? 'Custom' : LEVEL_INFO[l][0]; };
   function countBad() {
     let n = 0;
-    spec.objects.forEach(o => { if (o.kind === 'point') n += badCell(o.x) + badCell(o.y); else o.vertices.forEach(v => { n += badCell(v[0]) + badCell(v[1]); }); });
+    spec.objects.forEach(o => {
+      if (o.kind === 'point') n += badCell(o.x) + badCell(o.y);
+      else if (o.kind === 'table') o.rows.forEach(r => { n += badCell(r.x) + (o.of ? 0 : badCell(r.y)); });
+      else if (o.vertices) o.vertices.forEach(v => { n += badCell(v[0]) + badCell(v[1]); });
+    });
     return n;
   }
   function syncControls() {
+    fillObjSelects();
     const auto = computeAxes(spec), active = document.activeElement;
     $$('[data-bind]').forEach(el => {
       const v = getPath(spec, el.dataset.bind);
@@ -1292,12 +2266,17 @@ function pngWithDpi(u8, dpi) {
       else if (el !== active) el.value = v === null || v === undefined ? '' : String(v);
       if (el.dataset.auto) {
         const [ak, af] = el.dataset.auto.split('.'), a = auto[ak];
-        el.placeholder = a ? String(af === 'step' ? a.step : fmtTick(a[af], a).replace('−', '-')) : '';
+        el.placeholder = a ? String(af === 'step' ? a.step : fmtTick(a[af], a, true).replace('−', '-')) : '';
       }
     });
     $$('[data-seg]').forEach(g => $$('button', g).forEach(b => b.classList.toggle('active', String(getPath(spec, g.dataset.seg)) === b.dataset.v)));
     $$('[data-kinds]').forEach(el => { el.hidden = !el.dataset.kinds.split(',').includes(getPath(spec, el.dataset.kindpath)); });
     $$('[data-open]').forEach(el => { el.checked = spec.objects[+el.dataset.open].style === 'open'; });
+    $$('[data-showif]').forEach(el => { el.hidden = !getPath(spec, el.dataset.showif); });
+    $$('[data-showif-not]').forEach(el => { el.hidden = !!getPath(spec, el.dataset.showifNot); });
+    $$('[data-eqerr]').forEach(el => { const o = spec.objects[+el.dataset.eqerr]; el.textContent = o && o.expr.trim() ? parseEquation(o.expr).error || '' : ''; });
+    $$('[data-tblank]').forEach(el => { const [i, c, k] = el.dataset.tblank.split(':'); el.checked = spec.objects[+i].blank.includes(c + ':' + k); });
+    if ($('[data-ycell]')) { const R = resolveObjects(spec); $$('[data-ycell]').forEach(el => { const [i, k] = el.dataset.ycell.split(':'), r = R.res(spec.objects[+i].id); el.textContent = r && r.model && r.model.rows[+k] ? r.model.rows[+k].ytext : ''; }); }
     $$('[data-lnames]').forEach(el => { const o = spec.objects.find(x => x.id === el.dataset.lnames); el.textContent = o ? o.labels.filter(Boolean).join('') || 'no names' : ''; });
     $$('[data-oname]').forEach(el => { const o = spec.objects.find(x => x.id === el.dataset.oname); el.textContent = o ? objName(o) : ''; });
     const locked = spec.scale.lock, { w, h } = state.size || { w: 0, h: 0 }, sz = sizeMM(spec.size);
@@ -1315,10 +2294,12 @@ function pngWithDpi(u8, dpi) {
     });
     const rb = $('#readBox');
     if (rb) {
-      const n = state.outside.length;
-      rb.innerHTML = n
-        ? `<p class="hint" style="margin-bottom:6px">${n} ${n === 1 ? 'object reaches' : 'objects reach'} outside the grid and ${n === 1 ? 'is' : 'are'} cut off. Widen the range on the Axes tab, or move ${n === 1 ? 'it' : 'them'}.</p>` + state.outside.slice(0, 6).map(o => `<p class="issue">${esc(o.name)}</p>`).join('') + (n > 6 ? `<p class="hint">…and ${n - 6} more.</p>` : '')
-        : '<p class="ok-line">✓ Everything sits inside the grid.</p>';
+      const out = state.outside, iss = state.issues, n = out.length;
+      rb.innerHTML = out.length || iss.length
+        ? (n ? `<p class="hint" style="margin-bottom:6px">${n} ${n === 1 ? 'object reaches' : 'objects reach'} outside the grid and ${n === 1 ? 'is' : 'are'} cut off. Widen the range on the Axes tab, or move ${n === 1 ? 'it' : 'them'}.</p>` + out.slice(0, 5).map(o => `<p class="issue">${esc(o.name)}</p>`).join('') : '') +
+          (iss.length ? `<p class="hint" style="margin:${n ? 8 : 0}px 0 6px">Students may struggle to read these exactly:</p>` + iss.slice(0, 8).map(i => `<p class="issue">${esc(i.text)}</p>`).join('') + (iss.length > 8 ? `<p class="hint">…and ${iss.length - 8} more.</p>` : '') : '') +
+          (iss.some(i => i.fix === 'snap') ? `<div class="row tight" style="margin-top:8px"><button class="btn small" type="button" data-act="snap">Snap points and corners to the nearest gridline</button></div>` : '')
+        : '<p class="ok-line">✓ Everything sits inside the grid and lands on gridlines.</p>';
     }
     const marks = spec.hidden.filter(t => !ELEMENT_TOKENS.includes(t)).length;
     const mp = $('#markPill'); if (mp) mp.textContent = marks ? marks + ' hidden' : 'none hidden';
@@ -1343,15 +2324,16 @@ function pngWithDpi(u8, dpi) {
     $$('#viewSeg button').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
   }
   function renderStatus() {
-    const { w, h } = state.size, bad = countBad(), out = state.outside.length, dot = '<span class="dotline"></span>';
+    const { w, h } = state.size, bad = countBad(), out = state.outside.length, iss = state.issues.length, dot = '<span class="dotline"></span>';
     $('#status').innerHTML = `<span><b>${+w.toFixed(1)} × ${+h.toFixed(1)}</b> mm</span>${dot}<span><b>${mmToPx(w, 300)} × ${mmToPx(h, 300)}</b> px at 300 DPI</span>` +
       (spec.scale.lock ? `${dot}<span>1 grid square = <b>${+spec.scale.mm.toFixed(2)}</b> mm</span>` : `${dot}<span>1 grid square ≈ <b>${+state.geom.cell.toFixed(1)}</b> mm</span>`) +
       (spec.scale.lock && w > 180 ? `${dot}<span class="warn">wider than a letter/A4 page’s usable width (about 180 mm): use a smaller square or a shorter range</span>` : '') +
       (out ? `${dot}<span class="warn">${out} object${out === 1 ? '' : 's'} outside the grid</span>` : '') +
+      (iss ? `${dot}<span class="warn">${iss} readability warning${iss === 1 ? '' : 's'} (Test tab)</span>` : '') +
       (bad ? `${dot}<span class="warn">${bad} cell${bad === 1 ? ' isn’t a number and is' : 's aren’t numbers and are'} left off the graph</span>` : '');
   }
-  function refresh() { state.outside = outsideObjects(spec); renderPreview(); syncControls(); renderStatus(); }
-  function rebuildStructure() { buildObjects(); buildTest(); refresh(); }
+  function refresh() { state.outside = outsideObjects(spec); state.issues = readability(spec); renderPreview(); syncControls(); renderStatus(); }
+  function rebuildStructure() { buildObjects(); buildFunctions(); buildTest(); refresh(); }
 
   /* ---------- actions ---------- */
   function showQuestion() { if (state.view !== 'question') { state.view = 'question'; state.pick = false; state.edit = false; const p = $('#pick'); if (p) p.checked = false; } }
@@ -1368,10 +2350,45 @@ function pngWithDpi(u8, dpi) {
   }
   function addShape(kind) {
     if (spec.objects.length >= MAX_OBJECTS) return toast('Object limit reached (' + MAX_OBJECTS + ').', 'err');
-    const u = computeAxes(spec).x.step, n = spec.objects.filter(o => o.kind !== 'point').length, off = n % 4 * u, labs = nextLabels(spec, 3);
+    const u = computeAxes(spec).x.step, n = spec.objects.filter(o => o.kind === 'polygon' || o.kind === 'path').length, off = n % 4 * u, labs = nextLabels(spec, 3);
     const tri = [[1, 1], [4, 1], [1, 4]].map(([a, b]) => [clean(a * u + off), clean(b * u + off)]);
     spec.objects.push(makeObject(spec, kind, kind === 'polygon' ? { vertices: tri, labels: labs } : { vertices: tri.slice(0, 2), labels: labs.slice(0, 2) }));
     commit(null, true);
+  }
+  const fnObjs = () => spec.objects.filter(o => o.kind === 'function' || o.kind === 'related');
+  function addObj(kind, props) {
+    if (spec.objects.length >= MAX_OBJECTS) return toast('Object limit reached (' + MAX_OBJECTS + ').', 'err');
+    spec.objects.push(makeObject(spec, kind, props)); commit(null, true);
+  }
+  function addEq() {
+    addObj('function', { expr: spec.objects.some(o => o.kind === 'function') ? '' : 'y = 2x + 1' });
+    const c = $$('#functionsPane input[data-bind$=".expr"]').pop(); if (c) { c.focus(); c.select(); }
+  }
+  function addTable() {
+    const f = fnObjs()[0], win = computeAxes(spec);
+    let xs = [];
+    if (f) { const r = resolveObjects(spec).res(f.id); if (r && r.eq && r.eq.ok && r.eq.vertical === null) xs = suggestXs(r.eq.fn, win.x.lo, win.x.hi, 5); }
+    if (xs.length < 3) xs = f ? [-2, -1, 0, 1, 2] : [0, 1, 2, 3, 4];
+    addObj('table', { of: f ? f.id : '', rows: xs.map(x => ({ x, y: null })) });
+  }
+  function addRelated() { const f = fnObjs()[0], p = spec.objects.find(o => o.kind === 'point'); addObj('related', { of: f ? f.id : '', through: { point: p ? p.id : '', x: 0, y: 0 } }); }
+  function addIntersect() { const f = fnObjs(); addObj('intersect', { of: [f[0] ? f[0].id : '', f[1] ? f[1].id : ''] }); }
+  function addGuide() { const p = spec.objects.find(o => o.kind === 'point'), f = fnObjs()[0]; addObj('guide', p ? { point: p.id } : { fn: f ? f.id : '', x: 2 }); }
+  function addTRow(i) {
+    const o = spec.objects[i]; if (o.rows.length >= MAX_ROWS) return toast('Row limit reached (' + MAX_ROWS + ').', 'err');
+    const xs = o.rows.map(r => parseNum(r.x)).filter(Number.isFinite), n = xs.length, next = n ? clean(xs[n - 1] + (n > 1 ? xs[n - 1] - xs[n - 2] : 1)) : 0;
+    o.rows.push({ x: next, y: null }); commit(null, true);
+  }
+  function fillTable(i) {
+    const g = k => Number($(`[data-fill="${i}:${k}"]`).value), n = fillRows(spec.objects[i], g('from'), g('to'), g('step'));
+    if (!n) return toast('Give a start, an end and a step above zero.', 'err');
+    commit(null, true);
+  }
+  function suggestTable(i) {
+    const o = spec.objects[i], r = resolveObjects(spec).res(o.id), win = computeAxes(spec);
+    const xs = r && r.model && r.model.eq ? suggestXs(r.model.eq.fn, win.x.lo, win.x.hi, clamp(o.rows.length, 5, 8)) : [];
+    if (!xs.length) return toast('No whole-number y-values in the graph’s range for this equation.', 'err');
+    o.rows = xs.map(x => ({ x, y: null })); o.blank = []; commit(null, true); toast('Now using x = ' + xs.map(fmtNum).join(', ') + '.', 'ok');
   }
   function delObj(i) { removeObject(spec, spec.objects[i].id); commit(null, true); }
   function addVert(i) {
@@ -1437,12 +2454,19 @@ function pngWithDpi(u8, dpi) {
       setPath(spec, t.dataset.bind, v);
       spec = normalize(spec);
       commit(t.dataset.bind);
-    } else if (t.dataset.cell) {                                    // a cell of the points table or a shape's vertex table
-      const o = spec.objects[+t.dataset.oi], f = POINT_COLS[+t.dataset.c], r = +t.dataset.r;
+    } else if (t.dataset.cell) {                                    // a cell of the points table, a shape's vertex table or a table of values
+      const o = spec.objects[+t.dataset.oi], f = (t.dataset.cell === 't' ? TABLE_COLS : POINT_COLS)[+t.dataset.c], r = +t.dataset.r;
       if (t.dataset.cell === 'p') { if (f === 'label') o.label = t.value; else o[f] = cellFromText(t.value); }
+      else if (t.dataset.cell === 't') o.rows[r][f] = cellFromText(t.value);
       else if (f === 'label') o.labels[r] = t.value; else o.vertices[r][f === 'x' ? 0 : 1] = cellFromText(t.value);
       if (f !== 'label') t.classList.toggle('bad', badCell(cellFromText(t.value)));
       commit('cell:' + t.dataset.oi + ':' + r + ':' + f);
+    } else if (t.dataset.tblank) {
+      const [i, c, k] = t.dataset.tblank.split(':'), o = spec.objects[+i], tok = c + ':' + k, at = o.blank.indexOf(tok);
+      if (t.checked && at < 0) o.blank.push(tok); else if (!t.checked && at >= 0) o.blank.splice(at, 1);
+      showQuestion(); commit(null);
+    } else if (t.dataset.vlt !== undefined) {
+      spec.objects[+t.dataset.vlt].at = t.value.split(/[,;\s]+/).filter(Boolean).map(cellFromText).slice(0, 12); commit('vlt:' + t.dataset.vlt);
     } else if (t.dataset.open !== undefined) {
       spec.objects[+t.dataset.open].style = t.checked ? 'open' : 'filled'; commit(null);
     } else if (t.dataset.vis) {
@@ -1480,6 +2504,17 @@ function pngWithDpi(u8, dpi) {
     else if (a === 'delObj') delObj(+b.dataset.i);
     else if (a === 'addVert') addVert(+b.dataset.i);
     else if (a === 'delVert') delVert(+b.dataset.i, +b.dataset.k);
+    else if (a === 'addEq') addEq();
+    else if (a === 'addTable') addTable();
+    else if (a === 'addRelated') addRelated();
+    else if (a === 'addIntersect') addIntersect();
+    else if (a === 'addGuide') addGuide();
+    else if (a === 'addVlt') addObj('vlt', { at: [-2, 3] });
+    else if (a === 'addTRow') addTRow(+b.dataset.i);
+    else if (a === 'delTRow') { dropRow(spec.objects[+b.dataset.i], +b.dataset.k); commit(null, true); }
+    else if (a === 'fillRows') fillTable(+b.dataset.i);
+    else if (a === 'suggestRows') suggestTable(+b.dataset.i);
+    else if (a === 'snap') { const n = snapPoints(spec); spec = normalize(spec); commit(null, true); toast(n ? 'Moved ' + n + ' value' + (n === 1 ? '' : 's') + ' onto gridlines. Undo puts them back.' : 'Nothing to snap.', n ? 'ok' : ''); }
   });
   function previewClick(e) {
     const g = e.target.closest && e.target.closest('[data-obj]');
@@ -1487,27 +2522,28 @@ function pngWithDpi(u8, dpi) {
     toggleToken(g.dataset.obj); commit(null);
   }
 
-  $('#objectsPane').addEventListener('paste', e => {
+  const onCellPaste = e => {
     const t = e.target; if (!t.dataset.cell) return;
     const text = e.clipboardData.getData('text');
     if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return;          // a single value: let the browser paste it normally
     e.preventDefault();
-    const grid = parseTSV(text).filter((r, i, a) => i < a.length - 1 || r.some(c => c !== ''));
-    const res = t.dataset.cell === 'p' ? pastePoints(spec, grid, +t.dataset.r, +t.dataset.c) : pasteVertices(spec.objects[+t.dataset.oi], grid, +t.dataset.r, +t.dataset.c);
+    const grid = parseTSV(text).filter((r, i, a) => i < a.length - 1 || r.some(c => c !== '')), r0 = +t.dataset.r, c0 = +t.dataset.c, o = spec.objects[+t.dataset.oi];
+    const res = t.dataset.cell === 'p' ? pastePoints(spec, grid, r0, c0) : t.dataset.cell === 't' ? pasteRows(o, grid, r0, c0) : pasteVertices(o, grid, r0, c0);
     spec = normalize(spec); commit(null, true);
     if (res.ignored) toast(res.ignored + ' pasted cell(s) didn’t fit and were ignored.', 'err');
-  });
-  $('#objectsPane').addEventListener('keydown', e => {              // Enter moves down a row, adding one at the bottom
+  };
+  const onCellKey = e => {                                            // Enter moves down a row, adding one at the bottom
     const t = e.target;
     if (e.key !== 'Enter' || !t.dataset.cell) return;
     e.preventDefault();
-    const sel = `input[data-cell="${t.dataset.cell}"]${t.dataset.cell === 'v' ? `[data-oi="${t.dataset.oi}"]` : ''}`;
+    const sel = `input[data-cell="${t.dataset.cell}"]${t.dataset.cell !== 'p' ? `[data-oi="${t.dataset.oi}"]` : ''}`;
     const rows = $$(sel + `[data-c="${t.dataset.c}"]`), next = rows[rows.indexOf(t) + 1];
     if (next) { next.focus(); next.select(); return; }
     const c = t.dataset.c;
-    if (t.dataset.cell === 'p') addPoint(); else addVert(+t.dataset.oi);
+    if (t.dataset.cell === 'p') addPoint(); else if (t.dataset.cell === 't') addTRow(+t.dataset.oi); else addVert(+t.dataset.oi);
     const now = $$(sel + `[data-c="${c}"]`).pop(); if (now) { now.focus(); now.select(); }
-  });
+  };
+  for (const pane of ['#objectsPane', '#functionsPane']) { $(pane).addEventListener('paste', onCellPaste); $(pane).addEventListener('keydown', onCellKey); }
 
   $('#pasteBtn').onclick = () => { $('#pasteText').value = ''; $('#pasteDlg').showModal(); $('#pasteText').focus(); };
   $('#pasteCancel').onclick = () => $('#pasteDlg').close();
