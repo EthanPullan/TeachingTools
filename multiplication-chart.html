@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multiplication Chart</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1b1f24;
+    --header-bg: #1f4e8c;
+    --header-fg: #ffffff;
+    --cell-a: #f4f7fb;
+    --cell-b: #ffffff;
+    --diag: #ffe8a3;
+    --hl: #ffd0d0;
+    --line: #c9d1dc;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+    padding: 10px 16px; border-bottom: 1px solid var(--line);
+  }
+  .controls label { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .controls input[type=number] { width: 4.5em; font-size: 16px; padding: 4px 6px; }
+  .controls button { font-size: 15px; padding: 6px 14px; cursor: pointer; }
+  .spacer { flex: 1; }
+
+  main {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 12px;
+  }
+  h1 { margin: 0 0 8px; font-size: 1.6rem; }
+
+  /* The grid is a square sized to the smaller of available width/height. */
+  #chart {
+    --n: 12;
+    display: grid;
+    grid-template-columns: repeat(calc(var(--n) + 1), 1fr);
+    grid-template-rows: repeat(calc(var(--n) + 1), 1fr);
+    width: min(100%, calc((100vh - 130px) * 1));
+    aspect-ratio: 1 / 1;
+    max-height: 100%;
+    border: 1px solid var(--line);
+    font-size: clamp(8px, calc(min(100vw, 100vh - 130px) / (var(--n) + 1) * 0.42), 64px);
+    font-variant-numeric: tabular-nums;
+  }
+  #chart div {
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line);
+    background: var(--cell-b);
+  }
+  #chart .alt { background: var(--cell-a); }
+  #chart .diag { background: var(--diag); font-weight: 600; }
+  #chart .head { background: var(--header-bg); color: var(--header-fg); font-weight: 700; }
+  #chart .hl { background: var(--hl); }
+  #chart .head.hl { background: #c0392b; }
+
+  body.fs .controls { display: none; }
+  body.fs h1 { display: none; }
+  body.fs main { padding: 0; }
+  body.fs #chart { width: min(100vw, 100vh); max-height: none; font-size: calc(min(100vw, 100vh) / (var(--n) + 1) * 0.42); }
+  body.fs.fs-hint::after {
+    content: "Press Esc to exit";
+    position: fixed; bottom: 8px; right: 12px; font-size: 13px; opacity: .6;
+  }
+
+  @media print {
+    @page { size: landscape; margin: 10mm; }
+    .controls, body.fs-hint::after { display: none !important; }
+    body { display: block; height: auto; }
+    main { display: block; padding: 0; }
+    h1 { text-align: center; font-size: 20pt; margin-bottom: 6mm; }
+    #chart {
+      width: min(277mm, 170mm); height: min(277mm, 170mm); margin: 0 auto;
+      font-size: calc(170mm / (var(--n) + 1) * 0.42);
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    #chart .hl { background: inherit; }
+  }
+</style>
+</head>
+<body>
+  <div class="controls">
+    <label>Size (n × n)
+      <input id="n" type="number" min="2" max="30" value="12">
+    </label>
+    <label><input id="hover" type="checkbox" checked> Highlight row &amp; column on hover</label>
+    <span class="spacer"></span>
+    <button id="print" type="button">Print</button>
+    <button id="fullscreen" type="button">Fullscreen</button>
+  </div>
+  <main>
+    <h1>Multiplication Chart</h1>
+    <div id="chart" role="table" aria-label="Multiplication chart"></div>
+  </main>
+
+<script>
+(() => {
+  const MIN = 2, MAX = 30;
+  const chart = document.getElementById('chart');
+  const nInput = document.getElementById('n');
+  const hoverBox = document.getElementById('hover');
+  let n = 12;
+
+  function build() {
+    chart.style.setProperty('--n', n);
+    chart.textContent = '';
+    const frag = document.createDocumentFragment();
+    for (let r = 0; r <= n; r++) {
+      for (let c = 0; c <= n; c++) {
+        const d = document.createElement('div');
+        d.dataset.r = r; d.dataset.c = c;
+        if (r === 0 && c === 0) { d.textContent = '×'; d.className = 'head'; }
+        else if (r === 0) { d.textContent = c; d.className = 'head'; }
+        else if (c === 0) { d.textContent = r; d.className = 'head'; }
+        else {
+          d.textContent = r * c;
+          if (r === c) d.className = 'diag';
+          else if (r % 2) d.className = 'alt';
+        }
+        frag.appendChild(d);
+      }
+    }
+    chart.appendChild(frag);
+  }
+
+  function setHighlight(r, c) {
+    chart.querySelectorAll('.hl').forEach(e => e.classList.remove('hl'));
+    if (r == null) return;
+    chart.querySelectorAll('div').forEach(e => {
+      if (e.dataset.r === r || e.dataset.c === c) {
+        // highlight only up to the hovered cell, like tracing with a finger
+        if (+e.dataset.r <= +r && +e.dataset.c <= +c) e.classList.add('hl');
+      }
+    });
+  }
+
+  chart.addEventListener('mouseover', e => {
+    if (!hoverBox.checked) return;
+    const t = e.target.closest('#chart > div');
+    if (t) setHighlight(t.dataset.r, t.dataset.c);
+  });
+  chart.addEventListener('mouseleave', () => setHighlight());
+
+  nInput.addEventListener('input', () => {
+    const v = parseInt(nInput.value, 10);
+    if (v >= MIN && v <= MAX) { n = v; build(); }
+  });
+  nInput.addEventListener('change', () => { nInput.value = n; });
+
+  document.getElementById('print').addEventListener('click', () => window.print());
+
+  const fsBtn = document.getElementById('fullscreen');
+  function syncFs() {
+    const on = !!document.fullscreenElement;
+    document.body.classList.toggle('fs', on);
+    document.body.classList.toggle('fs-hint', on);
+    if (on) setTimeout(() => document.body.classList.remove('fs-hint'), 3000);
+  }
+  fsBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  });
+  document.addEventListener('fullscreenchange', syncFs);
+  // "f" toggles fullscreen; arrow keys can't be typed in the number box while fullscreen
+  document.addEventListener('keydown', e => {
+    if (e.key === 'f' && e.target.tagName !== 'INPUT') fsBtn.click();
+  });
+
+  build();
+})();
+</script>
+</body>
+</html>
