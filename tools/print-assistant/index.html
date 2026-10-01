@@ -57,10 +57,14 @@
   .field-label{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
     color:var(--muted);margin:0 0 5px;}
 
-  select,input[type=number]{border:1px solid var(--line);border-radius:8px;padding:7px 9px;
-    background:var(--panel-2);}
-  select{width:100%;}
+  select,input[type=number],input[type=text]{border:1px solid var(--line);border-radius:8px;
+    padding:7px 9px;background:var(--panel-2);}
+  select,input[type=text]{width:100%;}
   input[type=number]{font-family:var(--mono);font-weight:600;text-align:center;width:72px;}
+  input[type=text]{font-family:var(--mono);font-size:13px;}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;
+    margin-top:12px;user-select:none;}
+  .check input{width:16px;height:16px;accent-color:var(--board);}
 
   /* PDF drop zone */
   .drop{display:block;border:1px dashed var(--line);border-radius:10px;padding:16px;
@@ -79,6 +83,7 @@
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
   .seg button{border:none;background:#fff;padding:6px 12px;cursor:pointer;font-size:12.5px;
     font-weight:600;color:var(--muted);}
+  .seg.wide{display:flex;} .seg.wide button{flex:1;}
   .seg button.active{background:var(--board);color:#fff;}
 
   .summary{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:12px;}
@@ -135,14 +140,29 @@
         <h2 class="section-title">1 · Your PDF</h2>
         <label class="drop" id="drop" for="file">
           <input type="file" id="file" accept=".pdf,application/pdf">
-          <span id="dropText">Drop a 1–2 page PDF here, or click to choose one.</span>
+          <span id="dropText">Drop a PDF here, or click to choose one.</span>
         </label>
+        <div style="margin-top:12px;">
+          <label class="field-label" for="range">Pages to use</label>
+          <input type="text" id="range" placeholder="All pages  ·  or 3-4  ·  or 1,5" autocomplete="off" spellcheck="false">
+          <p class="hint" id="rangeNote">Leave blank to use every page.</p>
+        </div>
         <div class="error" id="error" role="alert" hidden></div>
       </section>
 
       <section class="section">
-        <h2 class="section-title">2 · Two-up copies</h2>
-        <span class="field-label" id="copiesLabel">Copies of the document</span>
+        <h2 class="section-title">2 · Layout</h2>
+        <div class="seg wide" id="layout">
+          <button data-v="2up" class="active">2 copies</button>
+          <button data-v="4up">4 copies</button>
+          <button data-v="4pages">4 pages</button>
+        </div>
+        <p class="hint" id="layoutHint"></p>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">3 · Copies</h2>
+        <span class="field-label" id="copiesLabel">Number of copies</span>
         <div class="stepper">
           <button class="btn" id="minus" aria-label="One fewer copy">−</button>
           <input type="number" id="copies" min="1" max="500" value="2" aria-labelledby="copiesLabel">
@@ -155,23 +175,23 @@
           <button class="btn small" data-n="25">25</button>
           <button class="btn small" data-n="30">30</button>
         </div>
-        <p class="hint">Each sheet carries two copies side by side. Print double-sided, then cut every sheet in half.</p>
       </section>
 
       <section class="section">
-        <h2 class="section-title">3 · Sheet</h2>
+        <h2 class="section-title">4 · Sheet</h2>
         <label class="field-label" for="paper">Paper</label>
         <select id="paper">
           <option value="letter">Letter (8.5 × 11 in)</option>
           <option value="a4">A4 (210 × 297 mm)</option>
         </select>
+        <label class="check"><input type="checkbox" id="cut" checked>Dashed cut lines between the pieces</label>
         <div id="flipRow" hidden style="margin-top:12px;">
           <span class="field-label">Duplex flip</span>
           <div class="seg" id="flip">
             <button data-v="long" class="active">Long edge</button>
             <button data-v="short">Short edge</button>
           </div>
-          <p class="hint">With an odd number of copies, one half-sheet is left blank. Match this to your printer's two-sided setting so its back page lands behind the front. If it doesn't, switch it.</p>
+          <p class="hint">The last sheet isn't full. Match this to your printer's two-sided setting so its back page lands behind the front. If it doesn't, switch it.</p>
         </div>
       </section>
 
@@ -180,7 +200,7 @@
         <div class="summary" aria-live="polite">
           <div class="row"><span>Copies</span><b id="sCopies">–</b></div>
           <div class="row"><span>Sheets of paper</span><b id="sSheets">–</b></div>
-          <div class="row"><span>Pages in the PDF</span><b id="sPages">–</b></div>
+          <div class="row"><span>Pages used</span><b id="sPages">–</b></div>
           <p class="note" id="sNote">Choose a PDF to see the layout.</p>
         </div>
       </section>
@@ -189,7 +209,7 @@
         <h2 class="section-title">Printing tips</h2>
         <ul class="tips">
           <li>Print at <b>100% / Actual size</b>, not “fit to page”.</li>
-          <li>Turn on <b>two-sided</b> for a 2-page PDF.</li>
+          <li>Turn on <b>two-sided</b> when each copy has 2 pages.</li>
           <li>Pick the same paper size you chose above.</li>
         </ul>
       </section>
@@ -215,81 +235,174 @@
 <div class="toast-wrap" id="toasts"></div>
 
 <script>
-/* Print Assistant. Feature 1: two-up duplicate.
-   Takes a 1–2 page PDF and builds a new PDF where every sheet holds two copies
-   side by side (page 1 | page 1 on the front, page 2 | page 2 on the back).
-   PDF reading/writing is done by the vendored pdf-lib in the LAST <script> of
-   this file (MIT, https://github.com/Hopding/pdf-lib). It is only touched inside
+/* Print Assistant. Lays a PDF out for the copier. Layouts:
+     2up    two copies per sheet   (1–2 pages per copy; front page 1 | 1, back page 2 | 2)
+     4up    four copies per sheet  (same, 2 × 2 grid)
+     4pages four different pages per sheet, reading order, 2 × 2 grid
+   "Pages to use" picks which pages of the PDF go in. PDF reading/writing is done by
+   the vendored pdf-lib in the LAST <script> of this file (MIT,
+   https://github.com/Hopding/pdf-lib). It is only touched inside openPdf() and
    buildPdf(), so this script can sit above it. */
 (function(){
   'use strict';
 
   const PAPER = { letter:{w:612, h:792}, a4:{w:595.28, h:841.89} };   // PDF points, portrait
-  const MARGIN = 18;        // pt (0.25 in) kept clear inside each half-sheet
+  const MARGIN = 18;        // pt (0.25 in) kept clear inside each piece of the sheet
   const MAX_COPIES = 500;
+  const PER_SHEET = { '2up':2, '4up':4, '4pages':4 };
+  const LABEL = { '2up':'2-up copies', '4up':'4-up copies', '4pages':'4 pages per sheet' };
+  const HINT = {
+    '2up':'Two copies per sheet. Page 1 | page 1 on the front, page 2 | page 2 on the back. Print double-sided, then cut each sheet in half. Uses 1–2 pages per copy.',
+    '4up':'Four copies per sheet in a 2 × 2 grid: the front is page 1 four times, the back is page 2 four times. Print double-sided, then cut into quarters. Uses 1–2 pages per copy.',
+    '4pages':'Four different pages per sheet in reading order (2 × 2), for any number of pages. Copies repeat the whole set, one after another.'
+  };
 
   const $ = id => document.getElementById(id);
-  const state = { bytes:null, name:'', pages:0, pageInfo:'', copies:2, paper:'letter', flip:'long',
+  const state = { doc:null, loadError:'', name:'', pages:0, pageInfo:'',
+                  layout:'2up', range:'', copies:2, paper:'letter', cut:true, flip:'long',
                   url:null, token:0, timer:0 };
 
   class UserError extends Error {}
 
-  /* ---------- the layout: one pure function, no DOM ---------- */
-  async function buildPdf(srcBytes, opt){
-    const { PDFDocument, degrees } = PDFLib;
-    let src;
-    try { src = await PDFDocument.load(srcBytes); }
+  /* ---------- pure helpers: no DOM, no PDF ---------- */
+
+  // "3-4", "1,5", "2" → zero-based page indexes, in the order typed. Blank = every page.
+  function parseRange(text, total){
+    const all = () => Array.from({ length: total }, (_, i) => i);
+    if (!text.trim()) return all();
+    const out = [];
+    for (const raw of text.split(',')){
+      const part = raw.trim();
+      if (!part) continue;
+      const m = /^(\d+)\s*(?:[-–]\s*(\d+))?$/.exec(part);
+      if (!m) throw new UserError('Pages: “' + part + '” isn’t a page number or range. Try 3-4 or 1,5.');
+      const a = +m[1], b = m[2] ? +m[2] : a;
+      if (a < 1 || b > total)
+        throw new UserError('Pages: page ' + (a < 1 ? a : b) + ' doesn’t exist. This PDF has ' + total + (total === 1 ? ' page.' : ' pages.'));
+      if (b < a) throw new UserError('Pages: “' + part + '” runs backwards. Write it as ' + b + '-' + a + '.');
+      for (let i = a; i <= b; i++) out.push(i - 1);
+    }
+    return out.length ? out : all();
+  }
+
+  function validate(layout, used){
+    if (layout !== '4pages' && used > 2)
+      return 'Copy layouts take 1–2 pages per copy, and your selection has ' + used +
+             '. Type a page range such as 3-4 under “Pages to use”, or switch to 4 pages.';
+    return '';
+  }
+
+  function counts(layout, used, copies){
+    if (layout === '4pages'){
+      const per = Math.ceil(used / 4);
+      return { sheets: per * copies, sides: per * copies, blank: (4 - used % 4) % 4, partial: used % 4 !== 0 };
+    }
+    const k = PER_SHEET[layout], sheets = Math.ceil(copies / k), blank = sheets * k - copies;
+    return { sheets, sides: sheets * used, blank, partial: blank > 0 };
+  }
+
+  // Pieces of a sheet, numbered row by row from the top left. `land` = landscape sheet.
+  function gridFor(layout, tall){
+    if (layout === '2up') return tall ? { rows:1, cols:2, land:true } : { rows:2, cols:1, land:false };
+    return { rows:2, cols:2, land:!tall };
+  }
+
+  // Which piece of the back is behind `slot` of the front. A long-edge flip turns the sheet over
+  // its long edge: that swaps left/right on a portrait sheet and top/bottom on a landscape one.
+  function mirrorSlot(slot, g, flip){
+    const r = Math.floor(slot / g.cols), c = slot % g.cols;
+    const swapCols = g.land ? flip === 'short' : flip === 'long';
+    return swapCols ? r * g.cols + (g.cols - 1 - c) : (g.rows - 1 - r) * g.cols + c;
+  }
+
+  // The whole job as data: sheets of [slot, index into the selected pages] on the front and back.
+  function planSheets(layout, g, used, copies, flip){
+    const k = PER_SHEET[layout], sheets = [];
+    if (layout === '4pages'){
+      for (let c = 0; c < copies; c++)
+        for (let p = 0; p < used; p += 4){
+          const front = [];
+          for (let i = 0; i < 4 && p + i < used; i++) front.push([i, p + i]);
+          sheets.push({ front, back:null });
+        }
+      return sheets;
+    }
+    for (let left = copies; left > 0; left -= k){                    // the last sheet may be partly empty
+      const slots = Array.from({ length: Math.min(k, left) }, (_, i) => i);
+      sheets.push({ front: slots.map(s => [s, 0]),
+                    back: used === 2 ? slots.map(s => [mirrorSlot(s, g, flip), 1]) : null });
+    }
+    return sheets;
+  }
+
+  /* ---------- PDF work (pdf-lib) ---------- */
+
+  async function openPdf(bytes){
+    let doc;
+    try { doc = await PDFLib.PDFDocument.load(bytes); }
     catch(e){
       if (/encrypt/i.test(e && (e.name + ' ' + e.message)))
         throw new UserError('This PDF is password-protected. Save an unprotected copy and try again.');
       throw new UserError('Could not read this file as a PDF.');
     }
-    const n = src.getPageCount();
-    if (n < 1 || n > 2) throw new UserError('This layout takes a 1–2 page PDF. Yours has ' + n + ' pages.');
+    if (doc.getPageCount() < 1) throw new UserError('This PDF has no pages.');
+    return doc;
+  }
+
+  // src: an opened PDFDocument. opt: { idx, layout, copies, paper, flip, cut } → { bytes, sheets }
+  async function buildPdf(src, opt){
+    const { PDFDocument, degrees, rgb } = PDFLib;
+    const problem = validate(opt.layout, opt.idx.length);
+    if (problem) throw new UserError(problem);
 
     const out = await PDFDocument.create();
-    const pages = [];
-    for (let i = 0; i < n; i++){
-      const p = src.getPage(i), cb = p.getCropBox();      // the box viewers display
+    const embedded = new Map();                       // each source page is embedded once, drawn many times
+    for (const i of new Set(opt.idx)){
+      const p = src.getPage(i), cb = p.getCropBox();   // the box viewers display
       const emb = await out.embedPage(p, { left:cb.x, bottom:cb.y, right:cb.x + cb.width, top:cb.y + cb.height });
       const rot = ((p.getRotation().angle % 360) + 360) % 360;   // embedPage ignores /Rotate
       const swap = rot === 90 || rot === 270;
-      pages.push({ emb, rot, cw:cb.width, ch:cb.height,
-                   w: swap ? cb.height : cb.width, h: swap ? cb.width : cb.height });  // as displayed
+      embedded.set(i, { emb, rot, cw:cb.width, ch:cb.height,
+                        w: swap ? cb.height : cb.width, h: swap ? cb.width : cb.height });  // w, h as displayed
     }
+    const pages = opt.idx.map(i => embedded.get(i));
 
-    // Portrait pages sit side by side on a landscape sheet; landscape pages stack on a portrait sheet.
+    // The first page decides the sheet's orientation; every page is scaled to fit its piece.
     const paper = PAPER[opt.paper] || PAPER.letter;
-    const tall = pages[0].h >= pages[0].w;
-    const sw = tall ? paper.h : paper.w, sh = tall ? paper.w : paper.h;
-    const cells = tall
-      ? [{x:0, y:0, w:sw/2, h:sh}, {x:sw/2, y:0, w:sw/2, h:sh}]
-      : [{x:0, y:sh/2, w:sw, h:sh/2}, {x:0, y:0, w:sw, h:sh/2}];
+    const g = gridFor(opt.layout, pages[0].h >= pages[0].w);
+    const sw = g.land ? paper.h : paper.w, sh = g.land ? paper.w : paper.h;
+    const cell = slot => {
+      const w = sw / g.cols, h = sh / g.rows, r = Math.floor(slot / g.cols), c = slot % g.cols;
+      return { x:c * w, y:sh - (r + 1) * h, w, h };
+    };
 
-    function place(sheet, pg, cell){
-      const s = Math.min((cell.w - 2*MARGIN)/pg.w, (cell.h - 2*MARGIN)/pg.h);
+    function place(sheet, pg, slot){
+      const cl = cell(slot);
+      const s = Math.min((cl.w - 2*MARGIN) / pg.w, (cl.h - 2*MARGIN) / pg.h);
       const dw = pg.w*s, dh = pg.h*s, cw = pg.cw*s, ch = pg.ch*s;
-      const X = cell.x + (cell.w - dw)/2, Y = cell.y + (cell.h - dh)/2;
+      const X = cl.x + (cl.w - dw)/2, Y = cl.y + (cl.h - dh)/2;
       // pdf-lib rotates counter-clockwise about the lower-left corner; /Rotate is clockwise.
       const o = pg.rot === 90 ? [X, Y + dh] : pg.rot === 180 ? [X + cw, Y + ch]
               : pg.rot === 270 ? [X + dw, Y] : [X, Y];
       sheet.drawPage(pg.emb, { x:o[0], y:o[1], width:cw, height:ch, rotate:degrees(-pg.rot) });
     }
+    function cutLines(sheet){
+      if (!opt.cut) return;
+      const style = { thickness:0.6, color:rgb(0.5, 0.5, 0.5), dashArray:[5, 4] };
+      if (g.cols > 1) sheet.drawLine({ start:{ x:sw/2, y:0 }, end:{ x:sw/2, y:sh }, ...style });
+      if (g.rows > 1) sheet.drawLine({ start:{ x:0, y:sh/2 }, end:{ x:sw, y:sh/2 }, ...style });
+    }
 
-    const sheets = Math.ceil(opt.copies / 2), odd = opt.copies % 2 === 1;
-    for (let s = 0; s < sheets; s++){
-      const lastOdd = odd && s === sheets - 1;           // only one copy on this sheet
-      let slots = lastOdd ? [0] : [0, 1];
-      const front = out.addPage([sw, sh]);
-      slots.forEach(c => place(front, pages[0], cells[c]));
-      if (n === 2){
-        // Turning the sheet over: a short-edge flip mirrors which half is behind which.
-        if (lastOdd && opt.flip === 'short') slots = [1];
-        const back = out.addPage([sw, sh]);
-        slots.forEach(c => place(back, pages[1], cells[c]));
+    const plan = planSheets(opt.layout, g, pages.length, opt.copies, opt.flip);
+    for (const s of plan){
+      for (const side of [s.front, s.back]){
+        if (!side) continue;
+        const page = out.addPage([sw, sh]);
+        side.forEach(([slot, p]) => place(page, pages[p], slot));
+        cutLines(page);
       }
     }
-    return { bytes: await out.save(), sheets, pages:n, tall, srcW:pages[0].w, srcH:pages[0].h };
+    return { bytes: await out.save(), sheets: plan.length };
   }
 
   /* ---------- UI ---------- */
@@ -321,21 +434,41 @@
     if (state.url) URL.revokeObjectURL(state.url);
     state.url = null; setLinks(null); setPreview(null);
   }
-  function summarize(info){
-    const c = state.copies, sheets = Math.ceil(c/2);
-    $('sCopies').textContent = state.bytes ? c : '–';
-    $('sSheets').textContent = state.bytes ? sheets : '–';
-    $('sPages').textContent = state.bytes ? state.pages : '–';
-    const odd = c % 2 === 1;
-    $('flipRow').hidden = !(state.pages === 2 && odd);
+
+  // Which pages the "Pages to use" box selects, or why it can't.
+  function selection(){
+    if (!state.pages) return { idx:[], error:'' };
+    try { return { idx: parseRange(state.range, state.pages), error:'' }; }
+    catch(e){ return { idx:[], error: e.message }; }
+  }
+
+  function summarize(){
+    const L = state.layout, c = state.copies, sel = selection(), used = sel.idx.length;
+    const problem = state.pages && !sel.error ? validate(L, used) : '';
+    const ok = state.pages > 0 && !sel.error && !problem;
+    const n = counts(L, used, c);
+    $('layoutHint').textContent = HINT[L];
+    $('sCopies').textContent = state.doc ? c : '–';
+    $('sSheets').textContent = ok ? n.sheets : '–';
+    $('sPages').textContent = state.pages && !sel.error ? used : '–';
+    $('flipRow').hidden = !(ok && L !== '4pages' && used === 2 && n.partial);
+
+    $('rangeNote').textContent = !state.pages || sel.error ? 'Leave blank to use every page.'
+      : !state.range.trim() ? 'Using all ' + state.pages + (state.pages === 1 ? ' page.' : ' pages.')
+      : used <= 12 ? 'Using ' + (used === 1 ? 'page ' : 'pages ') + sel.idx.map(i => i + 1).join(', ') + '.'
+      : 'Using ' + used + ' pages.';
+
     let note = 'Choose a PDF to see the layout.';
-    if (state.pages > 2){
-      note = 'This layout needs a 1–2 page PDF.';
-    } else if (state.pages){
-      note = state.pages === 2
-        ? 'Print double-sided (' + sheets*2 + ' sides), then cut each sheet in half.'
-        : 'Print single-sided, then cut each sheet in half.';
-      if (odd) note += ' The last sheet has one half left blank.';
+    if (state.pages && sel.error) note = 'Fix the page range to see the layout.';
+    else if (problem) note = 'Adjust the pages or the layout to continue.';
+    else if (ok && L === '4pages'){
+      note = 'Four pages per sheet in reading order. Each sheet is a full page, so single- or double-sided both work.';
+      if (n.partial) note += ' The last sheet of each set has ' + n.blank + (n.blank === 1 ? ' empty quarter.' : ' empty quarters.');
+    } else if (ok){
+      const piece = L === '2up' ? 'half' : 'quarter';
+      note = (used === 2 ? 'Print double-sided (' + n.sides + ' sides)' : 'Print single-sided') +
+             ', then cut each sheet ' + (L === '2up' ? 'in half' : 'into quarters') + '.';
+      if (n.partial) note += ' The last sheet has ' + (n.blank === 1 ? 'one ' + piece : n.blank + ' ' + piece + 's') + ' left blank.';
     }
     $('sNote').textContent = note;
   }
@@ -343,13 +476,19 @@
   async function rebuild(){
     const token = ++state.token;
     summarize();
-    if (!state.bytes) return;
+    if (!state.doc){
+      if (state.loadError){ clearOutput(); showError(state.loadError); }
+      return;
+    }
+    const sel = selection();
+    const problem = sel.error || validate(state.layout, sel.idx.length);
+    if (problem){ clearOutput(); showError(problem); return; }
     try {
-      const r = await buildPdf(state.bytes, { copies:state.copies, paper:state.paper, flip:state.flip });
+      const r = await buildPdf(state.doc, { idx:sel.idx, layout:state.layout, copies:state.copies,
+                                            paper:state.paper, flip:state.flip, cut:state.cut });
       if (token !== state.token) return;                 // a newer change superseded this one
       showError('');
-      const base = state.name.replace(/\.pdf$/i, '');
-      const name = base + ' – 2-up ×' + state.copies + '.pdf';
+      const name = state.name.replace(/\.pdf$/i, '') + ' – ' + LABEL[state.layout] + ' ×' + state.copies + '.pdf';
       if (state.url) URL.revokeObjectURL(state.url);
       state.url = URL.createObjectURL(new Blob([r.bytes], { type:'application/pdf' }));
       setLinks(state.url, name); setPreview(state.url);
@@ -364,17 +503,19 @@
   async function loadFile(file){
     if (!file) return;
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf'){ toast('That doesn’t look like a PDF.'); return; }
-    state.bytes = new Uint8Array(await file.arrayBuffer());
-    state.name = file.name; state.pages = 0;
-    // Read the page count and size now so the drop zone and summary are right even if the build fails.
+    state.name = file.name; state.doc = null; state.pages = 0; state.loadError = ''; state.pageInfo = '';
+    state.range = ''; $('range').value = '';
+    // Parse once; every later change reuses the opened document.
     try {
-      const doc = await PDFLib.PDFDocument.load(state.bytes);
-      state.pages = doc.getPageCount();
-      const p = doc.getPage(0), sz = p.getSize(), r = p.getRotation().angle % 180 === 90;
+      state.doc = await openPdf(new Uint8Array(await file.arrayBuffer()));
+      state.pages = state.doc.getPageCount();
+      const p = state.doc.getPage(0), sz = p.getSize(), r = p.getRotation().angle % 180 === 90;
       const w = (r ? sz.height : sz.width)/72, h = (r ? sz.width : sz.height)/72;
       state.pageInfo = state.pages + (state.pages === 1 ? ' page' : ' pages') + ' · ' +
-        +w.toFixed(2) + ' × ' + +h.toFixed(2) + ' in ' + (h >= w ? 'portrait' : 'landscape');
-    } catch(e){ state.pageInfo = ''; }
+        +w.toFixed(2) + ' × ' + +h.toFixed(2) + ' in ' + (h >= w ? 'portrait' : 'landscape') + ' (page 1)';
+    } catch(e){
+      state.loadError = e instanceof UserError ? e.message : 'Could not read this file as a PDF.';
+    }
     const drop = $('drop');
     drop.classList.add('has-file');
     $('dropText').innerHTML = '<div class="fname"></div><div class="meta"></div>';
@@ -387,6 +528,14 @@
     v = Math.max(1, Math.min(MAX_COPIES, Math.round(Number(v)) || 1));
     state.copies = v; $('copies').value = v; schedule();
   }
+  function bindSeg(id, key){
+    $(id).onclick = e => {
+      const b = e.target.closest('[data-v]'); if (!b) return;
+      state[key] = b.dataset.v;
+      $(id).querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+      schedule();
+    };
+  }
 
   $('chooseBtn').onclick = () => $('file').click();
   $('file').onchange = e => { loadFile(e.target.files[0]); e.target.value = ''; };
@@ -395,18 +544,16 @@
   ['dragleave','drop'].forEach(t => window.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
   window.addEventListener('drop', e => loadFile(e.dataTransfer.files[0]));
 
+  $('range').oninput = e => { state.range = e.target.value; schedule(); };
+  bindSeg('layout', 'layout');
+  bindSeg('flip', 'flip');
   $('minus').onclick = () => setCopies(state.copies - 1);
   $('plus').onclick = () => setCopies(state.copies + 1);
   $('copies').oninput = e => { if (e.target.value !== '') setCopies(e.target.value); };
   $('copies').onblur = () => setCopies($('copies').value);
   $('chips').onclick = e => { const b = e.target.closest('[data-n]'); if (b) setCopies(b.dataset.n); };
   $('paper').onchange = e => { state.paper = e.target.value; schedule(); };
-  $('flip').onclick = e => {
-    const b = e.target.closest('[data-v]'); if (!b) return;
-    state.flip = b.dataset.v;
-    document.querySelectorAll('#flip button').forEach(x => x.classList.toggle('active', x === b));
-    schedule();
-  };
+  $('cut').onchange = e => { state.cut = e.target.checked; schedule(); };
   $('openBtn').onclick = e => { if ($('openBtn').getAttribute('aria-disabled') === 'true') e.preventDefault(); };
   $('dlBtn').onclick = e => { if ($('dlBtn').getAttribute('aria-disabled') === 'true') e.preventDefault(); };
 
