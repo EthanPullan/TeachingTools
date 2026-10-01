@@ -185,14 +185,14 @@
           <option value="letter">Letter (8.5 × 11 in)</option>
           <option value="a4">A4 (210 × 297 mm)</option>
         </select>
-        <label class="check"><input type="checkbox" id="cut" checked>Dashed cut lines between the pieces</label>
+        <label class="check"><input type="checkbox" id="cut">Dashed cut lines between the pieces</label>
         <div id="flipRow" hidden style="margin-top:12px;">
-          <span class="field-label">Duplex flip</span>
+          <span class="field-label">Two-sided printing</span>
           <div class="seg" id="flip">
             <button data-v="long" class="active">Long edge</button>
             <button data-v="short">Short edge</button>
           </div>
-          <p class="hint">The last sheet isn't full. Match this to your printer's two-sided setting so its back page lands behind the front. If it doesn't, switch it.</p>
+          <p class="hint">Match the “Two-sided” option in your print dialog (long edge is the usual default). The backs are turned so they read the right way up when you flip each cut piece like a book page. That means the backs can look upside down in the preview: that is on purpose. If a printed back still comes out upside down, switch this.</p>
         </div>
       </section>
 
@@ -237,7 +237,8 @@
 
 <script>
 /* Print Assistant. Lays a PDF out for the copier. Layouts:
-     2up    two copies per sheet   (1–2 pages per copy; front page 1 | 1, back page 2 | 2)
+     2up    two copies per sheet   (1–2 pages per copy; front page 1 | 1, back page 2 | 2, drawn
+            so each cut piece reads upright when turned like a book page; see backNeedsTurn)
      4up    four copies per sheet  (same, 2 × 2 grid)
      4pages four different pages per sheet, reading order, 2 × 2 grid
    "Pages to use" picks which pages of the PDF go in. PDF reading/writing is done by
@@ -260,7 +261,7 @@
 
   const $ = id => document.getElementById(id);
   const state = { doc:null, loadError:'', name:'', pages:0, pageInfo:'',
-                  layout:'2up', range:'', copies:2, paper:'letter', cut:true, flip:'long',
+                  layout:'2up', range:'', copies:2, paper:'letter', cut:false, flip:'long',
                   url:null, token:0, timer:0 };
 
   class UserError extends Error {}
@@ -308,15 +309,18 @@
     return { rows:2, cols:2, land:!tall };
   }
 
-  // Which piece of the back is behind `slot` of the front. A long-edge flip turns the sheet over
-  // its long edge: that swaps left/right on a portrait sheet and top/bottom on a landscape one.
-  function mirrorSlot(slot, g, flip){
+  // Each cut piece is turned over like a book page, so the back of a piece sits at the mirrored
+  // column. That turn is a flip over the SHORT edge of a landscape sheet but the LONG edge of a
+  // portrait one. If the printer's two-sided setting is the other edge, its back sides come out
+  // upside down, so the back is drawn turned 180° to make up for it (which also moves the pieces
+  // to the mirrored row instead of the mirrored column).
+  function backNeedsTurn(g, flip){ return g.land ? flip === 'long' : flip === 'short'; }
+  function backSlot(slot, g, turned){
     const r = Math.floor(slot / g.cols), c = slot % g.cols;
-    const swapCols = g.land ? flip === 'short' : flip === 'long';
-    return swapCols ? r * g.cols + (g.cols - 1 - c) : (g.rows - 1 - r) * g.cols + c;
+    return turned ? (g.rows - 1 - r) * g.cols + c : r * g.cols + (g.cols - 1 - c);
   }
 
-  // The whole job as data: sheets of [slot, index into the selected pages] on the front and back.
+  // The whole job as data: sheets of [slot, index into the selected pages(, turned 180°)] per side.
   function planSheets(layout, g, used, copies, flip){
     const k = PER_SHEET[layout], sheets = [];
     if (layout === '4pages'){
@@ -328,10 +332,11 @@
         }
       return sheets;
     }
+    const turned = backNeedsTurn(g, flip);
     for (let left = copies; left > 0; left -= k){                    // the last sheet may be partly empty
       const slots = Array.from({ length: Math.min(k, left) }, (_, i) => i);
       sheets.push({ front: slots.map(s => [s, 0]),
-                    back: used === 2 ? slots.map(s => [mirrorSlot(s, g, flip), 1]) : null });
+                    back: used === 2 ? slots.map(s => [backSlot(s, g, turned), 1, turned]) : null });
     }
     return sheets;
   }
@@ -377,15 +382,15 @@
       return { x:c * w, y:sh - (r + 1) * h, w, h };
     };
 
-    function place(sheet, pg, slot){
-      const cl = cell(slot);
+    function place(sheet, pg, slot, turned){
+      const cl = cell(slot), rot = turned ? (pg.rot + 180) % 360 : pg.rot;
       const s = Math.min((cl.w - 2*MARGIN) / pg.w, (cl.h - 2*MARGIN) / pg.h);
       const dw = pg.w*s, dh = pg.h*s, cw = pg.cw*s, ch = pg.ch*s;
       const X = cl.x + (cl.w - dw)/2, Y = cl.y + (cl.h - dh)/2;
       // pdf-lib rotates counter-clockwise about the lower-left corner; /Rotate is clockwise.
-      const o = pg.rot === 90 ? [X, Y + dh] : pg.rot === 180 ? [X + cw, Y + ch]
-              : pg.rot === 270 ? [X + dw, Y] : [X, Y];
-      sheet.drawPage(pg.emb, { x:o[0], y:o[1], width:cw, height:ch, rotate:degrees(-pg.rot) });
+      const o = rot === 90 ? [X, Y + dh] : rot === 180 ? [X + cw, Y + ch]
+              : rot === 270 ? [X + dw, Y] : [X, Y];
+      sheet.drawPage(pg.emb, { x:o[0], y:o[1], width:cw, height:ch, rotate:degrees(-rot) });
     }
     function cutLines(sheet){
       if (!opt.cut) return;
@@ -399,7 +404,7 @@
       for (const side of [s.front, s.back]){
         if (!side) continue;
         const page = out.addPage([sw, sh]);
-        side.forEach(([slot, p]) => place(page, pages[p], slot));
+        side.forEach(([slot, p, turned]) => place(page, pages[p], slot, turned));
         cutLines(page);
       }
     }
@@ -452,7 +457,7 @@
     $('sCopies').textContent = state.doc ? c : '–';
     $('sSheets').textContent = ok ? n.sheets : '–';
     $('sPages').textContent = state.pages && !sel.error ? used : '–';
-    $('flipRow').hidden = !(ok && L !== '4pages' && used === 2 && n.partial);
+    $('flipRow').hidden = !(ok && L !== '4pages' && used === 2);       // only when there is a back side
 
     $('rangeNote').textContent = !state.pages || sel.error ? 'Leave blank to use every page.'
       : !state.range.trim() ? 'Using all ' + state.pages + (state.pages === 1 ? ' page.' : ' pages.')
