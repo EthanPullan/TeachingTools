@@ -183,6 +183,8 @@
     overflow-wrap:break-word;}
   .qanswer{font-family:var(--mono);font-weight:800;font-size:clamp(23px,19cqw,86px);line-height:1.1;
     color:var(--board);overflow-wrap:break-word;}
+  .qprompt sup,.qanswer sup{font-size:.6em;line-height:0;position:relative;top:-.55em;vertical-align:baseline;
+    margin-left:.04em;}
   .qcard.long .qprompt{font-size:clamp(16px,10cqw,40px);}
   .qcard.long .qanswer{font-size:clamp(17px,11cqw,44px);}
   .qcard.xlong .qprompt{font-size:clamp(13px,6.5cqw,24px);}
@@ -395,6 +397,23 @@
   }
   var SUP = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','-':'⁻'};
   function sup(n){ return String(n).split('').map(function(c){ return SUP[c] || c; }).join(''); }
+  function bs(n){ return n < 0 ? '('+fmt(n)+')' : fmt(n); }   // base, bracketed when negative
+  function pw(n,e){ return e === 1 ? bs(n) : bs(n)+sup(e); }  // n to the power e, e >= 1
+  /* Show runs of Unicode superscripts as real <sup> elements — in the monospace
+     answer font each superscript glyph otherwise takes a full, gappy cell. */
+  var UNSUP = {'ˣ':'x'};
+  Object.keys(SUP).forEach(function(k){ UNSUP[SUP[k]] = k === '-' ? '−' : k; });
+  function setRich(el, text){
+    var re = /[⁰¹²³⁴⁵⁶⁷⁸⁹⁻ˣ]+/g, last = 0, m;
+    while((m = re.exec(text))){
+      if(m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var s = document.createElement('sup');
+      s.textContent = m[0].split('').map(function(c){ return UNSUP[c]; }).join('');
+      el.appendChild(s);
+      last = m.index + m[0].length;
+    }
+    if(last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+  }
   function toStandardForm(n){
     var sign = n < 0 ? '-' : '';
     var abs = Math.abs(n);
@@ -411,6 +430,7 @@
     {id:'arith', label:'Arithmetic'},
     {id:'quick', label:'Quick facts'},
     {id:'pow',   label:'Powers & roots'},
+    {id:'exp',   label:'Exponents & laws'},
     {id:'props', label:'Number properties'},
     {id:'round', label:'Rounding'},
     {id:'share', label:'Sharing'},
@@ -456,6 +476,57 @@
         var lo = Math.floor(r), hi = Math.ceil(r);
         if(lo === hi) hi = lo+1;
         return {q:'Cube root is between', a:fmt(lo)+' and '+fmt(hi)};
+      }},
+
+    /* Exponent laws — the number of the day is the base. Answers stay in
+       exponent form so they never blow up for big numbers. */
+    {id:'expprod',cat:'exp',label:'Product rule: N² × N³', gen:function(n){
+        var a=randInt(2,9), b=randInt(2,9);
+        return {q:'Simplify '+pw(n,a)+' × '+pw(n,b), a:pw(n,a+b)};
+      }},
+    {id:'expquot',cat:'exp',label:'Quotient rule: N⁵ ÷ N²', gen:function(n){
+        if(n === 0) return null;
+        var b=randInt(2,6), a=b+randInt(1,6);
+        return {q:'Simplify '+pw(n,a)+' ÷ '+pw(n,b), a:pw(n,a-b)};
+      }},
+    {id:'exppow',cat:'exp',label:'Power of a power: (N²)³', gen:function(n){
+        var a=randInt(2,5), b=randInt(2,5);
+        return {q:'Simplify ('+pw(n,a)+')'+sup(b), a:pw(n,a*b)};
+      }},
+    {id:'expzero',cat:'exp',label:'Zero exponent: N⁰', gen:function(n){
+        if(n === 0) return null;
+        return {q:'Evaluate '+bs(n)+'⁰', a:'1'};
+      }},
+    {id:'expneg',cat:'exp',label:'Negative exponent: N⁻²', gen:function(n){
+        if(n === 0) return null;
+        var k=randInt(1,5);
+        return {q:'Write '+bs(n)+sup(-k)+' as a fraction', a:'1⁄'+pw(n,k)};
+      }},
+    {id:'expcombo',cat:'exp',label:'Combine laws: (N²)³ ÷ N⁴', gen:function(n){
+        if(n === 0) return null;
+        var a=randInt(2,4), b=randInt(2,4), c=randInt(1,a*b-1);
+        return {q:'Simplify ('+pw(n,a)+')'+sup(b)+' ÷ '+pw(n,c), a:pw(n,a*b-c)};
+      }},
+    {id:'expprodpow',cat:'exp',label:'Power of a product: (Nx)²', gen:function(n){
+        if(Math.abs(n) < 2) return null;
+        var k=randInt(2,3), c=Math.pow(n,k);
+        if(Math.abs(c) > 1e9) return null;
+        return {q:'Expand ('+fmt(n)+'x)'+sup(k), a:fmt(c)+'x'+sup(k)};
+      }},
+    {id:'expquotpow',cat:'exp',label:'Power of a quotient: (x⁄N)²', gen:function(n){
+        if(n < 2) return null;
+        var k=randInt(2,3), c=Math.pow(n,k);
+        if(c > 1e9) return null;
+        return {q:'Expand (x⁄'+fmt(n)+')'+sup(k), a:'x'+sup(k)+'⁄'+fmt(c)};
+      }},
+    {id:'expmissing',cat:'exp',label:'Find the missing exponent', gen:function(n){
+        if(Math.abs(n) < 2) return null;   // 0, 1 and -1 would make x ambiguous
+        if(Math.random() < 0.5){
+          var a=randInt(2,6), b=a+randInt(1,6);
+          return {q:'Solve for x: '+pw(n,a)+' × '+bs(n)+'ˣ = '+pw(n,b), a:'x = '+(b-a)};
+        }
+        var p=randInt(2,5), x=randInt(2,5);
+        return {q:'Solve for x: ('+pw(n,p)+')ˣ = '+pw(n,p*x), a:'x = '+x};
       }},
 
     {id:'factors',cat:'props',label:'List its factors', gen:function(n){
@@ -907,13 +978,13 @@
 
     var prompt = document.createElement('div');
     prompt.className = 'qprompt';
-    prompt.textContent = card.q;
+    setRich(prompt, card.q);
     el.appendChild(prompt);
 
     if(revealed){
       var ans = document.createElement('div');
       ans.className = 'qanswer';
-      ans.textContent = card.a;
+      setRich(ans, card.a);
       el.appendChild(ans);
     }
 
