@@ -51,14 +51,14 @@
   .view.show{display:flex;}
 
   /* ── setup view ── */
-  #setup{align-items:center;justify-content:center;padding:24px;}
-  .setup-card{width:min(680px,94vw);background:var(--panel);border:1px solid var(--line);
+  #setup{padding:24px;overflow-y:auto;}   /* card is centred with margin:auto, and scrolls if the screen is short */
+  .setup-card{width:min(680px,94vw);margin:auto;background:var(--panel);border:1px solid var(--line);
     border-radius:18px;box-shadow:var(--shadow);padding:clamp(22px,4vh,40px);
-    display:flex;flex-direction:column;gap:18px;}
+    display:flex;flex-direction:column;gap:18px;flex:none;}
   .setup-card h1{margin:0;font-size:clamp(22px,4vh,32px);letter-spacing:-.01em;}
   .setup-card .lead{margin:0;color:var(--muted);font-size:15px;line-height:1.55;}
   .field{display:flex;flex-direction:column;gap:7px;}
-  .field label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .field label,.field .lbl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
   .secret-row{display:flex;gap:10px;}
   .secret-row input{flex:1;border:2px solid var(--line);border-radius:12px;background:var(--panel-2);
     padding:14px 16px;font-size:clamp(20px,3.4vh,28px);font-family:var(--mono);letter-spacing:.18em;}
@@ -71,6 +71,21 @@
   .hide-note{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);}
   .err{color:var(--danger);font-size:13px;font-weight:600;min-height:1.2em;}
   .setup-card .go{align-self:flex-start;font-size:17px;padding:13px 26px;}
+
+  /* random word picker */
+  .picker{display:flex;flex-direction:column;gap:14px;padding:16px 18px;border:1px solid var(--line);
+    border-radius:14px;background:var(--panel-2);}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 14px;
+    border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;
+    transition:background .12s,border-color .12s,color .12s;}
+  .chip:hover{background:var(--accent-soft);border-color:var(--accent);}
+  .chip[aria-pressed="true"]{background:var(--board);border-color:var(--board);color:#fff;}
+  .pick-foot{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .pool-note{font-size:13px;color:var(--muted);}
+  .or{display:flex;align-items:center;gap:12px;font-size:11px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);}
+  .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line);}
 
   /* ── play view ── */
   #play{flex-direction:column;}
@@ -145,14 +160,33 @@
     <div class="spacer"></div>
     <button class="btn" id="fsBtn" aria-pressed="false" title="Toggle full screen"><span class="ic">⛶</span><span class="fs-label">Full screen</span></button>
     <button class="btn" id="restartBtn" style="display:none"><span class="ic">↺</span>Same word</button>
+    <button class="btn" id="nextRandBtn" style="display:none" title="Pick another random word with the same category and difficulty"><span class="ic">🎲</span>Next random</button>
     <button class="btn primary" id="newBtn"><span class="ic">＋</span>New word</button>
   </header>
 
   <!-- SETUP -->
   <section class="view show" id="setup">
     <div class="setup-card">
-      <h1>Set a secret word</h1>
-      <p class="lead">One person types a word or short phrase. It stays hidden so the class can't peek — then everyone guesses letters before the balloons pop.</p>
+      <h1>Pick a secret word</h1>
+      <p class="lead">Let the game pick a random word, or type your own. It stays hidden so the class can't peek — then everyone guesses letters before the balloons pop.</p>
+
+      <div class="picker">
+        <div class="field">
+          <span class="lbl" id="catLbl">Random word · category</span>
+          <div class="chips" id="catChips" role="group" aria-labelledby="catLbl"></div>
+        </div>
+        <div class="field">
+          <span class="lbl" id="tierLbl">Difficulty</span>
+          <div class="chips" id="tierChips" role="group" aria-labelledby="tierLbl"></div>
+          <span class="hide-note">Easy = everyday school words · Hard = advanced vocabulary</span>
+        </div>
+        <div class="pick-foot">
+          <button class="btn primary go" id="randomBtn" type="button"><span class="ic">🎲</span>Random word</button>
+          <span class="pool-note" id="poolNote" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <div class="or">or type your own</div>
 
       <div class="field">
         <label for="secret">Secret word or phrase</label>
@@ -174,7 +208,7 @@
         <label for="balloonCount">Balloons (wrong guesses allowed)</label>
         <input id="balloonCount" class="clue-input" type="number" inputmode="numeric"
                min="2" max="12" value="6" style="max-width:130px;" aria-describedby="balloonHint">
-        <span id="balloonHint" class="hide-note">More balloons = easier. Default is 6 (2–12).</span>
+        <span id="balloonHint" class="hide-note">More balloons = easier. Default is 6 (2–12). Applies to random words too.</span>
       </div>
 
       <div class="err" id="err"></div>
@@ -210,10 +244,100 @@
   const secretIn=$('secret'), clueIn=$('clue'), errEl=$('err'), countIn=$('balloonCount');
   const balloonsEl=$('balloons'), wordEl=$('word'), msgEl=$('msg'),
         kbEl=$('keyboard'), clueChip=$('clueChip'), livesNum=$('livesNum'), livesMax=$('livesMax');
-  const restartBtn=$('restartBtn'), newBtn=$('newBtn');
+  const restartBtn=$('restartBtn'), newBtn=$('newBtn'), nextRandBtn=$('nextRandBtn');
 
   // state
-  let secret='', clue='', guessed=new Set(), wrong=0, status='setup';
+  let secret='', clue='', guessed=new Set(), wrong=0, status='setup', fromRandom=false;
+
+  /* ----- random word bank -----
+     Category → difficulty → comma-separated words/phrases. Letters and spaces only (the game
+     only draws A–Z), US spellings, nothing with a common alternate spelling. */
+  const TIERS = ['Easy','Medium','Hard'];
+  const BANK = {
+    'Science': {
+      Easy:  'atom, cell, energy, force, gravity, magnet, planet, orbit, fossil, volcano, oxygen, climate, habitat, weather, mineral, friction, nucleus, skeleton, lightning, predator',
+      Medium:'ecosystem, molecule, electron, neutron, mitosis, evolution, velocity, momentum, bacteria, sediment, igneous, circuit, density, inertia, asteroid, genetics, compound, element, erosion, galaxy',
+      Hard:  'photosynthesis, chromosome, mitochondria, metamorphosis, thermodynamics, electromagnet, biodiversity, endothermic, exothermic, osmosis, homeostasis, hypothesis, equilibrium, refraction, decomposer, ribosome, chloroplast, stoichiometry, tectonic plates, nucleotide'
+    },
+    'Math': {
+      Easy:  'angle, circle, fraction, decimal, percent, triangle, square, perimeter, rectangle, graph, average, divide, multiply, number, ratio, volume, equation, integer, median, factor',
+      Medium:'variable, exponent, coefficient, quadratic, hypotenuse, parallel, polygon, symmetry, probability, inequality, diameter, circumference, numerator, denominator, quotient, reciprocal, perpendicular, parallelogram, expression, function',
+      Hard:  'trigonometry, logarithm, polynomial, asymptote, derivative, integral, hyperbola, parabola, permutation, factorial, congruent, quadrilateral, exponential, binomial, discriminant, sinusoidal, Pythagorean, absolute value, transversal, tessellation'
+    },
+    'Social Studies': {
+      Easy:  'democracy, president, congress, citizen, election, freedom, culture, economy, colony, pioneer, explorer, empire, history, government, justice, treaty, pharaoh, pyramid, settler, monarchy',
+      Medium:'constitution, revolution, immigration, amendment, legislature, civilization, abolition, suffrage, feudalism, imperialism, nationalism, propaganda, depression, reconstruction, renaissance, judiciary, executive, bill of rights, tariff, legislation',
+      Hard:  'sovereignty, totalitarian, bureaucracy, mercantilism, enlightenment, emancipation, secession, isolationism, jurisdiction, capitalism, socialism, oligarchy, aristocracy, filibuster, gerrymandering, habeas corpus, federalism, authoritarian, impeachment, proletariat'
+    },
+    'Geography': {
+      Easy:  'continent, island, ocean, desert, mountain, river, equator, valley, canyon, glacier, coastline, prairie, jungle, capital, compass, waterfall, Canada, Mexico, Brazil, Europe',
+      Medium:'peninsula, hemisphere, latitude, longitude, plateau, tributary, grassland, Antarctica, Australia, Himalayas, Mediterranean, population, elevation, topography, Argentina, Indonesia, Switzerland, Mississippi, Caribbean, Scandinavia',
+      Hard:  'archipelago, meridian, isthmus, Kilimanjaro, Madagascar, Mesopotamia, Mozambique, Appalachian, demographics, urbanization, cartography, geothermal, prime meridian, Patagonia, Bosphorus, Mount Everest, Lake Titicaca, Mariana Trench, Serengeti, Kazakhstan'
+    },
+    'Language Arts': {
+      Easy:  'noun, verb, adjective, adverb, sentence, paragraph, author, character, setting, story, poem, rhyme, chapter, fiction, dialogue, essay, summary, biography, narrator, mystery',
+      Medium:'metaphor, simile, alliteration, protagonist, antagonist, conflict, climax, resolution, narrative, nonfiction, preposition, conjunction, pronoun, imagery, flashback, hyperbole, idiom, stanza, autobiography, thesis',
+      Hard:  'personification, onomatopoeia, foreshadowing, juxtaposition, oxymoron, allegory, soliloquy, enjambment, dramatic irony, point of view, denouement, rhetoric, antithesis, euphemism, synecdoche, connotation, allusion, paradox, satire, anachronism'
+    },
+    'Vocabulary': {
+      Easy:  'abundant, ancient, barrier, cautious, curious, distant, enormous, evidence, fragile, genuine, hesitate, journey, nervous, observe, require, flexible, vivid, ignore, mention, reluctant',
+      Medium:'adequate, anticipate, arbitrary, contradict, dilemma, diligent, elaborate, eloquent, fluctuate, hostile, inevitable, innovate, perspective, persuade, predict, resilient, compromise, substantial, tolerance, prosperous',
+      Hard:  'ambiguous, benevolent, meticulous, ephemeral, ubiquitous, pragmatic, ostentatious, scrupulous, tenacious, magnanimous, belligerent, obsolete, pernicious, reticent, serendipity, ambivalent, cacophony, conundrum, plausible, lethargic'
+    }
+  };
+  const ANY = 'Any';
+  let pickCat = ANY, pickTier = ANY, lastPick = '';
+  const usedWords = new Set();       // no repeats until the current pool runs dry
+
+  function poolFor(cat, tier){
+    const out = [];
+    Object.keys(BANK).forEach(c=>{
+      if(cat!==ANY && c!==cat) return;
+      TIERS.forEach(t=>{
+        if(tier!==ANY && t!==tier) return;
+        BANK[c][t].split(',').forEach(w=>out.push({word:w.trim(), cat:c}));
+      });
+    });
+    return out;
+  }
+
+  function pickRandom(){
+    const pool = poolFor(pickCat, pickTier);
+    let fresh = pool.filter(p=>!usedWords.has(p.word));
+    if(!fresh.length){                // pool exhausted: start a new lap, but don't repeat the last word
+      pool.forEach(p=>usedWords.delete(p.word));
+      fresh = pool.filter(p=>p.word!==lastPick);
+      if(!fresh.length) fresh = pool;
+    }
+    const p = fresh[Math.floor(Math.random()*fresh.length)];
+    usedWords.add(p.word); lastPick = p.word;
+    return p;
+  }
+
+  function buildChips(el, options, current, onPick){
+    el.innerHTML='';
+    options.forEach(o=>{
+      const b=document.createElement('button');
+      b.type='button'; b.className='chip'; b.textContent=o;
+      b.setAttribute('aria-pressed', o===current ? 'true' : 'false');
+      b.addEventListener('click', ()=>{
+        onPick(o);
+        Array.prototype.forEach.call(el.children, x=>x.setAttribute('aria-pressed', x===b ? 'true' : 'false'));
+        updatePoolNote();
+      });
+      el.appendChild(b);
+    });
+  }
+
+  function updatePoolNote(){
+    $('poolNote').textContent = poolFor(pickCat, pickTier).length + ' words to pick from · the category is the clue';
+  }
+
+  buildChips($('catChips'), [ANY].concat(Object.keys(BANK)), pickCat, v=>{ pickCat=v; });
+  buildChips($('tierChips'), [ANY].concat(TIERS), pickTier, v=>{ pickTier=v; });
+  updatePoolNote();
+  $('randomBtn').addEventListener('click', startRandom);
+  nextRandBtn.addEventListener('click', startRandom);
 
   /* ----- setup ----- */
   let revealed=false;
@@ -233,8 +357,19 @@
     if(!/[a-zA-Z]/.test(raw)){ errEl.textContent='Please enter a word with at least one letter.'; return; }
     if(raw.length>40){ errEl.textContent='Keep it under 40 characters.'; return; }
     errEl.textContent='';
-    secret = raw.toUpperCase();
-    clue = clueIn.value.trim();
+    beginRound(raw, clueIn.value.trim(), false);
+  }
+
+  function startRandom(){
+    errEl.textContent='';
+    const p = pickRandom();
+    beginRound(p.word, p.cat, true);     // the category is the clue
+  }
+
+  function beginRound(word, clueText, random){
+    secret = word.toUpperCase();
+    clue = clueText;
+    fromRandom = random;
     let n = parseInt(countIn.value, 10);
     if(!Number.isFinite(n)) n = DEFAULT_BALLOONS;
     MAX = Math.max(MIN_BALLOONS, Math.min(MAX_BALLOONS, n));
@@ -248,16 +383,17 @@
   function showSetup(){
     status='setup';
     setupView.classList.add('show'); playView.classList.remove('show');
-    restartBtn.style.display='none';
+    restartBtn.style.display='none'; nextRandBtn.style.display='none';
     secretIn.value=''; clueIn.value=''; errEl.textContent='';
     revealed=false; secretIn.type='password'; $('peekBtn').classList.remove('on');
-    secretIn.focus();
+    secretIn.focus({preventScroll:true});   // don't scroll past the random picker on short screens
   }
 
   /* ----- play ----- */
   function showPlay(){
     setupView.classList.remove('show'); playView.classList.add('show');
     restartBtn.style.display='';
+    nextRandBtn.style.display = fromRandom ? '' : 'none';
     buildBalloons();
     buildKeyboard();
     clueChip.innerHTML = clue ? '<span>Clue</span>'+escapeHtml(clue) : '';

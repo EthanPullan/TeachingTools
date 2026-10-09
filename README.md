@@ -37,7 +37,7 @@ still open and look right offline.
 | --- | --- |
 | [Tic-Tac-Toe](https://ethanpullan.github.io/TeachingTools/tools/games/tic-tac-toe/) | Tap to play, auto X / O, scoreboard — built for the smart board |
 | [Super Tic-Tac-Toe](https://ethanpullan.github.io/TeachingTools/tools/games/super-tic-tac-toe/) | The ultimate 81-square version with forced boards |
-| [Balloon Pop](https://ethanpullan.github.io/TeachingTools/tools/games/balloon-pop/) | Word-guessing game with a hidden entry and on-screen keys |
+| [Balloon Pop](https://ethanpullan.github.io/TeachingTools/tools/games/balloon-pop/) | Word-guessing game with on-screen keys. Type a hidden word, or tap Random word for a built-in middle / high school vocabulary pick by subject (science, math, social studies, geography, language arts, vocabulary) and difficulty, with the subject as the clue |
 | [Dice](https://ethanpullan.github.io/TeachingTools/tools/games/dice/) | Felt tray, d4–d20 + d100, roll a pool with an auto total |
 | [Farkle](https://ethanpullan.github.io/TeachingTools/tools/games/farkle/) | Two-player press-your-luck dice on a felt tray |
 | [Tavern Dice](https://ethanpullan.github.io/TeachingTools/tools/games/tavern-dice/) | Loaded-dice wagering with a badge shop, two players |
