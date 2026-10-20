@@ -28,6 +28,8 @@ Everything for PDFs lives under one card on the home page. Each runs in the brow
 | Tool | What it does |
 | --- | --- |
 | [PDF Arranger](https://ethanpullan.github.io/TeachingTools/tools/pdf-tools/pdf-arranger/) | Merge several PDFs and arrange their pages. Add files, see every page as a thumbnail, drag pages into order (selected pages move together), rotate, duplicate or remove them, undo, optionally add bookmarks (a table of contents in the viewer's side bar) on any pages you choose, and download one new PDF |
+| [PDF Splitter](https://ethanpullan.github.io/TeachingTools/tools/pdf-tools/pdf-splitter/) | Split one PDF into several files: every N pages, typed ranges (or one combined extract), split points you click on page thumbnails, or at the PDF's own bookmarks. Each file is named from the original, with a download button per file or Download all |
+| [PDF Compressor](https://ethanpullan.github.io/TeachingTools/tools/pdf-tools/pdf-compressor/) | Make PDFs smaller. Re-compresses the pictures inside (text stays selectable) or flattens pages to images. Choose how much with a slider, or enter a maximum size in MB and it finds the lightest compression that fits. Shows before and after sizes |
 | [Print Assistant](https://ethanpullan.github.io/TeachingTools/tools/pdf-tools/print-assistant/) | Lays a PDF out for the copier: 2 or 4 copies per sheet (page 1 on the front, page 2 on the back, ready to print double-sided and cut), or 4 different pages per sheet. Pick which pages to use (3-4, 1,5), any number of copies, Letter or A4, dashed cut lines |
 
 ### Daily
@@ -58,8 +60,8 @@ still open and look right offline.
 - **One file per tool.** Inline CSS/JS, no CDNs, no web fonts, no network — open
   the `index.html` by double-click and it just works, online or off.
   The one exception to "hand-written": the PDF tools inline the minified
-  [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT) to read and write PDFs, and PDF Arranger also
-  inlines [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) to draw page thumbnails. Still
+  [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT) to read and write PDFs, and the Arranger, Splitter and Compressor also
+  inline [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) to draw pages. Still
   one file each, still offline.
 - **Static site.** Served straight from the repo root with GitHub Pages.
 - **Design system.** Shared tokens and components live in
