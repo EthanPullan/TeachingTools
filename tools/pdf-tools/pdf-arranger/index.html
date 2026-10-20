@@ -139,6 +139,19 @@
   .ib:hover{background:var(--panel-2);} .ib.del:hover{color:var(--danger);background:var(--danger-soft);}
   .src{display:flex;align-items:center;gap:6px;margin-top:4px;min-height:30px;font-size:11.5px;color:var(--muted);}
   .src .sname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;user-select:none;}
+  .check input{width:16px;height:16px;accent-color:var(--board);}
+  .ib.bm{display:none;} .bm-on .ib.bm{display:inline-block;}
+  .ib.bm.on{background:var(--accent-soft);border-color:var(--accent);}
+  .bmrow{display:flex;align-items:center;gap:5px;margin-top:6px;padding:2px 7px;border-radius:6px;font-size:11.5px;
+    font-weight:600;color:var(--accent-deep);background:var(--accent-soft);}
+  .bmrow[hidden]{display:none;}
+  .bmrow span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #bms li{padding:4px 4px 4px 6px;}
+  #bms input[type=text]{flex:1;min-width:0;font-family:var(--sans);font-weight:600;}
+  .bmpg{border:1px solid var(--line);background:var(--panel-2);border-radius:20px;cursor:pointer;flex:none;
+    font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;color:var(--board);}
+  .bmpg:hover{border-color:var(--accent);}
   .grip{width:28px;height:28px;flex:none;cursor:grab;touch-action:none;border-radius:6px;
     background:radial-gradient(circle,var(--muted) 1.3px,transparent 1.6px) center/6px 6px;
     -webkit-mask:linear-gradient(#000,#000) center/12px 18px no-repeat;mask:linear-gradient(#000,#000) center/12px 18px no-repeat;}
@@ -200,7 +213,18 @@
       </section>
 
       <section class="section">
-        <h2 class="section-title">2 · Download</h2>
+        <h2 class="section-title">2 · Bookmarks</h2>
+        <label class="check"><input type="checkbox" id="tocOn">Add bookmarks to the PDF</label>
+        <div id="bmBody" hidden>
+          <p class="hint">Bookmarks are the table of contents in your PDF viewer’s side bar. Click the 🔖 on any page to make it one, then name it here.</p>
+          <ul class="files" id="bms"></ul>
+          <p class="hint" id="bmEmpty">No bookmarks yet.</p>
+          <button class="btn small" id="bmEach" style="margin-top:8px;"><span class="ic">🔖</span>One per file</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">3 · Download</h2>
         <label class="field-label" for="outName">File name</label>
         <input type="text" id="outName" placeholder="merged.pdf" autocomplete="off" spellcheck="false">
         <p class="hint">Pages keep their own size, so a mix of Letter and A4 stays as it is.</p>
@@ -253,7 +277,7 @@
 <script>
 /* PDF Arranger. Merge PDFs and arrange their pages.
    Model: `files` are the PDFs you added; `pages` is the ordered list of page tiles (each one points at
-   a page of a file and carries an extra rotation). The grid is that list; Download copies the listed
+   a page of a file, an extra rotation and optionally a bookmark title). The grid is that list; Download copies the listed
    pages, in order, into a new PDF.
    Reading/writing PDFs is done by the vendored pdf-lib (MIT, https://github.com/Hopding/pdf-lib).
    Page thumbnails are drawn by the vendored pdf.js (Apache-2.0, https://github.com/mozilla/pdf.js),
@@ -269,7 +293,7 @@
   const UNDO_MAX = 60;
 
   const state = { files:[], pages:[], sel:new Set(), anchor:null, undo:[], nextId:1, busy:false, nameTouched:false,
-                  moved:false };               // true once an individual page has been moved: files can no longer be reordered
+                  moved:false, toc:false };               // true once an individual page has been moved: files can no longer be reordered
   const tiles = new Map();                 // page id → tile element
 
   class UserError extends Error {}
@@ -296,10 +320,27 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([src], { type:'text/javascript' }));
   }
 
+  // pdf-lib has no outline helper, so build the bookmark tree by hand: a flat list, each entry
+  // pointing at the top of its page. The viewer opens with the bookmarks pane showing.
+  function addBookmarks(out, items){
+    if (!items.length) return;
+    const { PDFName, PDFHexString } = PDFLib, ctx = out.context;
+    const root = ctx.nextRef(), refs = items.map(() => ctx.nextRef());
+    items.forEach((it, i) => {
+      const d = { Title:PDFHexString.fromText(it.title), Parent:root, Dest:[it.page.ref, 'Fit'] };
+      if (i > 0) d.Prev = refs[i - 1];
+      if (i < items.length - 1) d.Next = refs[i + 1];
+      ctx.assign(refs[i], ctx.obj(d));
+    });
+    ctx.assign(root, ctx.obj({ Type:'Outlines', First:refs[0], Last:refs[refs.length - 1], Count:items.length }));
+    out.catalog.set(PDFName.of('Outlines'), root);
+    out.catalog.set(PDFName.of('PageMode'), PDFName.of('UseOutlines'));
+  }
+
   // The new PDF: pages copied in grid order. Pages of one file are copied in one batch so shared fonts
   // and images are stored once; a page used twice goes in a later batch (a fresh copy, so rotating one
   // doesn't turn the other).
-  async function buildPdf(pages){
+  async function buildPdf(pages, withBookmarks){
     const { PDFDocument, degrees } = PDFLib;
     const out = await PDFDocument.create();
     const seen = new Map(), jobs = new Map(), copied = new Array(pages.length);
@@ -319,6 +360,8 @@
       if (p.rot) pg.setRotation(degrees((pg.getRotation().angle + p.rot) % 360));
       out.addPage(pg);
     });
+    if (withBookmarks) addBookmarks(out, pages.map((p, pos) => ({ p, pos })).filter(x => x.p.bm != null)
+      .map(x => ({ title:bmTitle(x.p, x.pos), page:copied[x.pos] })));
     out.setProducer('Teaching Tools · PDF Arranger');
     out.setCreator('Teaching Tools · PDF Arranger');
     return out.save();
@@ -387,7 +430,9 @@
       '<div class="thumb"><div class="pg"><img alt="" draggable="false"><span class="miss">No preview</span></div></div>' +
       '<span class="num"></span>' +
       '<div class="acts"><button class="ib" data-act="rot" title="Rotate right" aria-label="Rotate page right">↻</button>' +
+      '<button class="ib bm" data-act="bm" title="Bookmark this page" aria-label="Bookmark this page">🔖</button>' +
       '<button class="ib del" data-act="del" title="Remove page" aria-label="Remove page">✕</button></div>' +
+      '<div class="bmrow" hidden>🔖<span></span></div>' +
       '<div class="src"><i class="dot"></i><span class="sname"></span><span class="grip" title="Drag to move"></span></div>';
     const label = f.name.replace(/\.pdf$/i, '') + ' · p.' + (p.src + 1);
     el.querySelector('.sname').textContent = label; el.querySelector('.sname').title = label;
@@ -399,6 +444,10 @@
   function updateTile(el, p, i){
     const f = fileById(p.file), s = f.sizes[p.src], swap = p.rot % 180 !== 0;
     el.querySelector('.num').textContent = i + 1;
+    const bm = state.toc && p.bm != null;
+    el.querySelector('.bmrow').hidden = !bm;
+    if (bm) el.querySelector('.bmrow span').textContent = bmTitle(p, i);
+    el.querySelector('[data-act=bm]').classList.toggle('on', p.bm != null);
     el.classList.toggle('sel', state.sel.has(p.id));
     el.setAttribute('aria-selected', state.sel.has(p.id));
     el.setAttribute('aria-label', 'Page ' + (i + 1) + ', ' + f.name + ' page ' + (p.src + 1) + (p.rot ? ', turned ' + p.rot + ' degrees' : ''));
@@ -462,7 +511,7 @@
     $('selAll').disabled = !n || s === n; $('selNone').disabled = !s;
     $('undoBtn').disabled = !state.undo.length;
     $('dlBtn').disabled = !n || state.busy;
-    renderFiles();
+    renderFiles(); renderBookmarks();
   }
 
   /* ---------- editing ---------- */
@@ -507,7 +556,7 @@
   function duplicate(){
     const picked = selectedPages(); if (!picked.length) return;
     snapshot();
-    const copies = new Map(picked.map(p => [p.id, { ...p, id:state.nextId++ }]));
+    const copies = new Map(picked.map(p => { const c = { ...p, id:state.nextId++ }; delete c.bm; return [p.id, c]; }));
     state.pages = state.pages.flatMap(p => copies.has(p.id) ? [p, copies.get(p.id)] : [p]);
     state.sel = new Set([...copies.values()].map(p => p.id));
     render();
@@ -534,6 +583,54 @@
     snapshot(); state.pages = a; state.moved = true; render();
     const first = state.pages.find(p => sel.has(p.id));
     if (first) tiles.get(first.id).scrollIntoView({ block:'nearest', inline:'nearest' });
+  }
+
+  /* ---------- bookmarks ---------- */
+
+  const bmDefault = p => {
+    const base = fileById(p.file).name.replace(/\.pdf$/i, '');
+    return p.src === 0 ? base : base + ' · p.' + (p.src + 1);
+  };
+  const bmTitle = (p, i) => p.bm.trim() || 'Page ' + (i + 1);
+
+  function toggleBookmark(id){
+    const p = state.pages.find(x => x.id === id); if (!p) return;
+    snapshot();
+    if (p.bm == null) p.bm = bmDefault(p); else delete p.bm;
+    render();
+    const inp = $('bms').querySelector('[data-id="' + id + '"]');
+    if (inp && p.bm != null){ inp.focus(); inp.select(); }
+  }
+  function bookmarkEachFile(){
+    const todo = state.files.map(f => state.pages.find(p => p.file === f.id)).filter(p => p && p.bm == null);
+    if (!todo.length){ toast('Every file’s first page is already bookmarked.'); return; }
+    snapshot();
+    for (const p of todo) p.bm = bmDefault(p);
+    render();
+  }
+  function renderBookmarks(){
+    $('bmBody').hidden = !state.toc;
+    document.body.classList.toggle('bm-on', state.toc);
+    if (!state.toc) return;
+    const ul = $('bms'); ul.innerHTML = '';
+    state.pages.forEach((p, i) => {
+      if (p.bm == null) return;
+      const li = document.createElement('li');
+      li.innerHTML = '<button class="bmpg" title="Show this page"></button>' +
+                     '<input type="text" spellcheck="false" autocomplete="off" aria-label="Bookmark title">' +
+                     '<button class="xbtn" aria-label="Remove this bookmark">✕</button>';
+      const num = li.querySelector('.bmpg'), inp = li.querySelector('input');
+      num.textContent = 'p.' + (i + 1);
+      inp.value = p.bm; inp.dataset.id = p.id; inp.placeholder = 'Page ' + (i + 1);
+      inp.oninput = () => { p.bm = inp.value; updateTile(tiles.get(p.id), p, state.pages.indexOf(p)); };
+      num.onclick = () => {
+        state.sel = new Set([p.id]); state.anchor = p.id; render();
+        tiles.get(p.id).scrollIntoView({ block:'center', behavior:'smooth' });
+      };
+      li.querySelector('.xbtn').onclick = () => toggleBookmark(p.id);
+      ul.appendChild(li);
+    });
+    $('bmEmpty').hidden = ul.children.length > 0;
   }
 
   // Reorder a file: all of its pages move with it. Only possible while no single page has been moved,
@@ -643,7 +740,7 @@
     state.busy = true; chrome(); showError('');
     const label = $('dlBtn').innerHTML; $('dlBtn').innerHTML = 'Building…';
     try {
-      const bytes = await buildPdf(state.pages);
+      const bytes = await buildPdf(state.pages, state.toc);
       let name = $('outName').value.trim().replace(/[\\/:*?"<>|]+/g, '-') || 'merged';
       if (!/\.pdf$/i.test(name)) name += '.pdf';
       const url = URL.createObjectURL(new Blob([bytes], { type:'application/pdf' }));
@@ -753,6 +850,7 @@
     const id = +tile.dataset.id, btn = e.target.closest('.ib');
     if (btn){
       if (btn.dataset.act === 'rot') rotate([state.pages.find(p => p.id === id)], 90);
+      else if (btn.dataset.act === 'bm') toggleBookmark(id);
       else remove([id]);
       return;
     }
@@ -802,6 +900,8 @@
   $('dup').onclick = duplicate;
   $('del').onclick = () => remove(selectedPages().map(p => p.id));
   $('undoBtn').onclick = undo;
+  $('tocOn').onchange = e => { state.toc = e.target.checked; render(); };
+  $('bmEach').onclick = bookmarkEachFile;
   $('outName').oninput = () => { state.nameTouched = true; };
 
   const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
