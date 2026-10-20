@@ -5,6 +5,8 @@ static site via **GitHub Pages** from the repo root.
 
 ## Layout
 - `index.html` — the homepage / launcher (links to every tool).
+- `tools/pdf-tools/index.html` — a sub-launcher: the home page's *PDF Tools* card opens it, and every PDF tool lives
+  in its own folder beneath it (`tools/pdf-tools/<tool-name>/index.html`).
 - `tools/<tool-name>/index.html` — one self-contained tool per folder. Each tool
   must run offline by double-click: inline all CSS/JS, no CDNs, no web fonts, no
   network requests.
