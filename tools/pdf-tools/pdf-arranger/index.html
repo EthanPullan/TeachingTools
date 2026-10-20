@@ -77,6 +77,15 @@
   .files .fi{flex:1;min-width:0;}
   .files .fn{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .files .fm{font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .files li.gap-before{box-shadow:0 -3px 0 var(--accent);} .files li.gap-after{box-shadow:0 3px 0 var(--accent);}
+  .files li.moving{opacity:.4;}
+  .files li{user-select:none;-webkit-user-select:none;}
+  .fgrip{width:22px;height:28px;flex:none;cursor:grab;touch-action:none;border-radius:6px;margin-left:-6px;
+    background:radial-gradient(circle,var(--muted) 1.3px,transparent 1.6px) center/6px 6px;
+    -webkit-mask:linear-gradient(#000,#000) center/12px 18px no-repeat;mask:linear-gradient(#000,#000) center/12px 18px no-repeat;}
+  .fgrip:hover{background-color:var(--panel-2);}
+  .xbtn[disabled]{opacity:.3;cursor:not-allowed;pointer-events:none;}
+  .xbtn.mv{font-size:11px;}
   .xbtn{border:none;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;
     padding:4px 6px;border-radius:6px;}
   .xbtn:hover{color:var(--danger);background:var(--danger-soft);}
@@ -180,6 +189,7 @@
           <span id="dropText">Drop PDFs here, or click to choose them. Add as many as you like.</span>
         </label>
         <ul class="files" id="files"></ul>
+        <p class="hint" id="fileHint" hidden></p>
         <div class="error" id="error" role="alert" hidden></div>
       </section>
 
@@ -249,7 +259,8 @@
   const THUMB_PX = 2;                      // render thumbnails at 2x for sharpness
   const UNDO_MAX = 60;
 
-  const state = { files:[], pages:[], sel:new Set(), anchor:null, undo:[], nextId:1, busy:false, nameTouched:false };
+  const state = { files:[], pages:[], sel:new Set(), anchor:null, undo:[], nextId:1, busy:false, nameTouched:false,
+                  moved:false };               // true once an individual page has been moved: files can no longer be reordered
   const tiles = new Map();                 // page id → tile element
 
   class UserError extends Error {}
@@ -409,16 +420,29 @@
 
   function renderFiles(){
     const ul = $('files'); ul.innerHTML = '';
-    for (const f of state.files){
+    const many = state.files.length > 1, lock = state.moved;
+    state.files.forEach((f, i) => {
       const used = state.pages.filter(p => p.file === f.id).length;
       const li = document.createElement('li'); li.style.setProperty('--fc', f.color);
-      li.innerHTML = '<i class="dot"></i><div class="fi"><div class="fn"></div><div class="fm"></div></div>' +
-                     '<button class="xbtn" aria-label="Remove this file">✕</button>';
+      li.innerHTML = (many && !lock ? '<span class="fgrip" title="Drag to move all of this file’s pages"></span>' : '') +
+                     '<i class="dot"></i><div class="fi"><div class="fn"></div><div class="fm"></div></div>' +
+                     (many ? '<button class="xbtn mv" data-d="-1" aria-label="Move this file earlier">▲</button>' +
+                             '<button class="xbtn mv" data-d="1" aria-label="Move this file later">▼</button>' : '') +
+                     '<button class="xbtn" data-rm aria-label="Remove this file">✕</button>';
       li.querySelector('.fn').textContent = f.name; li.querySelector('.fn').title = f.name;
       li.querySelector('.fm').textContent = f.count + (f.count === 1 ? ' page' : ' pages') + ' · ' + used + ' used';
-      li.querySelector('.xbtn').onclick = () => removeFile(f);
+      li.querySelector('[data-rm]').onclick = () => removeFile(f);
+      li.querySelectorAll('.mv').forEach(b => {
+        const to = i + +b.dataset.d;
+        b.disabled = lock || to < 0 || to >= state.files.length;
+        b.onclick = () => moveFile(i, to);
+      });
       ul.appendChild(li);
-    }
+    });
+    const hint = $('fileHint');
+    hint.hidden = !many;
+    hint.textContent = lock ? '🔒 File order is locked because you moved individual pages. Undo those moves to reorder files again.'
+                            : 'Drag a file (or use ▲ ▼) to move all of its pages at once. This locks once you move a single page.';
   }
 
   function chrome(){
@@ -435,12 +459,12 @@
   /* ---------- editing ---------- */
 
   const snapshot = () => {
-    state.undo.push({ pages:state.pages.map(p => ({ ...p })), sel:[...state.sel] });
+    state.undo.push({ pages:state.pages.map(p => ({ ...p })), sel:[...state.sel], files:state.files.slice(), moved:state.moved });
     if (state.undo.length > UNDO_MAX) state.undo.shift();
   };
   function undo(){
     const s = state.undo.pop(); if (!s) return;
-    state.pages = s.pages; state.sel = new Set(s.sel); render();
+    state.pages = s.pages; state.sel = new Set(s.sel); state.files = s.files; state.moved = s.moved; render();
   }
   const selectedPages = () => state.pages.filter(p => state.sel.has(p.id));
 
@@ -486,7 +510,7 @@
     const at = gap - state.pages.slice(0, gap).filter(p => state.sel.has(p.id)).length;
     const next = rest.slice(0, at).concat(picked, rest.slice(at));
     if (next.every((p, i) => p === state.pages[i])) return;
-    snapshot(); state.pages = next; render();
+    snapshot(); state.pages = next; state.moved = true; render();
   }
   function nudge(dir){
     const a = state.pages.slice(), sel = state.sel; let moved = false;
@@ -498,10 +522,57 @@
         if (sel.has(a[i].id) && !sel.has(a[i+1].id)){ [a[i+1], a[i]] = [a[i], a[i+1]]; moved = true; }
     }
     if (!moved) return;
-    snapshot(); state.pages = a; render();
+    snapshot(); state.pages = a; state.moved = true; render();
     const first = state.pages.find(p => sel.has(p.id));
     if (first) tiles.get(first.id).scrollIntoView({ block:'nearest', inline:'nearest' });
   }
+
+  // Reorder a file: all of its pages move with it. Only possible while no single page has been moved,
+  // because until then every file's pages sit together in one block.
+  function moveFile(from, to){
+    if (state.moved || from === to || to < 0 || to >= state.files.length) return;
+    snapshot();
+    state.files.splice(to, 0, state.files.splice(from, 1)[0]);
+    state.pages = state.files.flatMap(f => state.pages.filter(p => p.file === f.id));
+    render();
+  }
+
+  let fdrag = null;                        // { from, pid, gap }
+  function fileGap(y){
+    const rows = [...$('files').children];
+    const i = rows.findIndex(li => y < li.getBoundingClientRect().top + li.offsetHeight / 2);
+    return i < 0 ? rows.length : i;
+  }
+  function fileMarks(gap){
+    [...$('files').children].forEach((li, i) => {
+      li.classList.toggle('gap-before', gap === i && i < state.files.length);
+      li.classList.toggle('gap-after', gap === state.files.length && i === state.files.length - 1);
+    });
+  }
+  function endFileDrag(commit){
+    const d = fdrag; fdrag = null;
+    window.removeEventListener('pointermove', onFileMove); window.removeEventListener('pointerup', onFileUp);
+    window.removeEventListener('pointercancel', onFileCancel);
+    document.body.style.cursor = '';
+    if (!d) return;
+    fileMarks(-1); $('files').children[d.from].classList.remove('moving');
+    if (commit) moveFile(d.from, d.gap > d.from ? d.gap - 1 : d.gap);
+  }
+  function onFileMove(e){
+    if (!fdrag || e.pointerId !== fdrag.pid) return;
+    fdrag.gap = fileGap(e.clientY); fileMarks(fdrag.gap); e.preventDefault();
+  }
+  const onFileUp = e => { if (fdrag && e.pointerId === fdrag.pid){ fdrag.gap = fileGap(e.clientY); endFileDrag(true); } };
+  const onFileCancel = e => { if (fdrag && e.pointerId === fdrag.pid) endFileDrag(false); };
+  $('files').addEventListener('pointerdown', e => {
+    const grip = e.target.closest('.fgrip');
+    if (!grip || e.button !== 0 || state.moved) return;
+    const li = grip.closest('li'), from = [...$('files').children].indexOf(li);
+    fdrag = { from, pid:e.pointerId, gap:from };
+    li.classList.add('moving'); document.body.style.cursor = 'grabbing';
+    window.addEventListener('pointermove', onFileMove, { passive:false });
+    window.addEventListener('pointerup', onFileUp); window.addEventListener('pointercancel', onFileCancel);
+  });
 
   /* ---------- files ---------- */
 
