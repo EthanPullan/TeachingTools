@@ -466,17 +466,24 @@ const SCHEDULES = {
 };
 let periodPrevKind = null, periodSkipChime = true;
 
+/* Alberta stays on UTC-6 all year, so the bell times are read against that fixed
+   offset instead of the device's time-zone data (which can disagree with the
+   system clock). schoolNow() returns a Date whose UTC fields are the school's
+   wall-clock time; every Date in this section is one of these, read with UTC getters. */
+const SCHOOL_UTC_OFFSET_MIN = -6*60;
+function schoolNow(){ return new Date(Date.now() + SCHOOL_UTC_OFFSET_MIN*60000); }
+
 function scheduleForDay(date){
-  const day = date.getDay(); // 0 Sun … 6 Sat
+  const day = date.getUTCDay(); // 0 Sun … 6 Sat
   if(day>=1 && day<=4) return { label:'Regular schedule', periods:SCHEDULES.regular };
   if(day===5) return { label:'Friday schedule', periods:SCHEDULES.friday };
   return null; // weekend
 }
 function atTime(date,hhmm){
   const [h,m,s] = hhmm.split(':').map(Number);
-  const d = new Date(date); d.setHours(h,m,s||0,0); return d;
+  const d = new Date(date); d.setUTCHours(h,m,s||0,0); return d;
 }
-function formatClock(date){ return date.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}); }
+function formatClock(date){ return date.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',timeZone:'UTC'}); }
 
 function computePeriodState(nowD){
   const sched = scheduleForDay(nowD);
@@ -511,7 +518,7 @@ function computePeriodState(nowD){
   return { kind:'afterSchool', dayLabel:sched.label, eyebrow:"School's Out", phrase:'See you next class!', sub:'' };
 }
 function renderPeriod(){
-  const nowD = new Date();
+  const nowD = schoolNow();
   const state = computePeriodState(nowD);
 
   $('clock').textContent = formatClock(nowD);
