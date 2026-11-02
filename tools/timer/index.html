@@ -65,6 +65,9 @@
   .time{font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.01em;color:#fff;line-height:1;
     text-shadow:0 2px 22px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.5);
     font-size:clamp(56px,16vw,300px);}
+  /* Stopwatch digits change every centisecond; a monospace face keeps the centred text from jittering,
+     even where the system font ignores tabular-nums at this weight. */
+  #swDisplay{font-family:var(--mono);}
   .time.done{color:#fff;animation:pulse 1s ease infinite;}
   .time.phrase{font-family:var(--sans);font-size:clamp(28px,6vw,64px);letter-spacing:normal;max-width:20ch;line-height:1.15;}
   .time.urgent{color:var(--danger);animation:pulse 1s ease infinite;}
