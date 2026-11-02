@@ -106,6 +106,57 @@ function pngInfo(buf) {
   check('zoom buttons keep a triangle on screen', (await page.locator('#paper svg').count()) === 1);
   await page.click('[data-bind="mode"] button[data-v="build"]');
 
+  /* locking side lengths while dragging */
+  const sides = async () => page.evaluate(() => { const m = window.TriangleMaker.core.resolve(window.TriangleMaker.spec).m; return m.sides; });
+  const dragRing = async (i, dx, dy) => { const b = await ringBox(i), x = b.x + b.width / 2, y = b.y + b.height / 2; await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + dx / 2, y + dy / 2, { steps: 4 }); await page.mouse.move(x + dx, y + dy, { steps: 4 }); await page.mouse.up(); };
+  await page.click('[data-preset="3"]');                         // right 3-4-5; corners A(4,0) B(0,3) C(0,0)
+  check('the lock card is there with three checkboxes named for the sides', (await page.locator('#lockRow input').count()) === 3 && /a · BC/.test(await page.locator('#lockRow').innerText()));
+  check('with nothing locked the hint says corners move freely', /move freely/.test(await page.locator('#lockHint').innerText()));
+  await page.check('[data-bind="lock.0"]');                      // side a = BC = 3
+  check('locking a side explains itself', /Side a keeps its length/.test(await page.locator('#lockHint').innerText()));
+  check('the locked side is highlighted on screen', (await page.locator('#paper svg line[stroke="#e0982e"]').count()) === 1);
+  const L0 = await sides();
+  await dragRing(0, 60, -90);                                    // drag A: side a does not touch A, so A is free
+  check('dragging from build mode keeps the locks', (await spec()).mode === 'free' && JSON.stringify((await spec()).lock) === '[true,false,false]');
+  await dragRing(2, 40, -70); await dragRing(2, -90, 30);        // C is an end of side a: it swings round B
+  let L1 = await sides();
+  check('the locked side keeps its length through two drags', Math.abs(L1[0] - L0[0]) < 1e-6, [L0[0], L1[0]]);
+  check('...while another side changes', Math.abs(L1[1] - L0[1]) > 0.05 || Math.abs(L1[2] - L0[2]) > 0.05, [L0, L1]);
+  await shot('locked-one-side');
+  await page.keyboard.press('Control+z');
+  check('one undo takes the last drag back, locks still on', JSON.stringify((await spec()).lock) === '[true,false,false]');
+
+  /* a hinge: lock a and b, then open and close it */
+  await page.check('[data-bind="lock.1"]');
+  check('two locks describe the hinge', /Hinge at corner C/.test(await page.locator('#lockHint').innerText()));
+  const H0 = await sides();
+  const bA = await ringBox(0), bC = await ringBox(2), ux = bA.x - bC.x, uy = bA.y - bC.y, ul = Math.hypot(ux, uy);
+  await dragRing(0, -uy / ul * 90, ux / ul * 90);                // along the tangent: that is the direction a hinge opens
+  const H1 = await sides();
+  check('hinge: both locked sides keep their lengths and the third changes', Math.abs(H1[0] - H0[0]) < 1e-6 && Math.abs(H1[1] - H0[1]) < 1e-6 && Math.abs(H1[2] - H0[2]) > 0.05, [H0, H1]);
+  await page.focus('.vh[data-i="0"]');
+  await page.keyboard.press('ArrowUp'); await page.keyboard.press('ArrowDown');
+  const H2 = await sides();
+  check('arrow keys also move a hinged corner and keep the locks', Math.abs(H2[0] - H0[0]) < 1e-6 && Math.abs(H2[1] - H0[1]) < 1e-6);
+
+  /* rigid: all three locked */
+  await page.check('[data-bind="lock.2"]');
+  check('three locks say rigid', /Rigid/.test(await page.locator('#lockHint').innerText()));
+  const R0 = await sides(), g0 = await page.evaluate(() => window.TriangleMaker.core.resolve(window.TriangleMaker.spec).m.centroid);
+  await page.click('[data-act="zoomOut"]'); await page.click('[data-act="zoomOut"]');
+  const ptsBefore = JSON.stringify((await spec()).free.pts);
+  await dragRing(1, 70, 10);
+  const R1 = await sides(), g1 = await page.evaluate(() => window.TriangleMaker.core.resolve(window.TriangleMaker.spec).m.centroid);
+  check('rigid: dragging turns the triangle, keeping every length', R1.every((v, i) => Math.abs(v - R0[i]) < 1e-6) && Math.hypot(g1[0] - g0[0], g1[1] - g0[1]) < 1e-6);
+  check('rigid: it did turn', JSON.stringify((await spec()).free.pts) !== ptsBefore);
+  for (const i of [0, 1, 2]) await page.uncheck('[data-bind="lock.' + i + '"]');
+  check('unlocking everything frees the corners again', /move freely/.test(await page.locator('#lockHint').innerText()) && (await page.locator('#paper svg line[stroke="#e0982e"]').count()) === 0);
+  check('lock highlights never reach an SVG export', !/e0982e/.test(await page.evaluate(() => window.TriangleMaker.core.drawFigure(window.TriangleMaker.spec, {}).svg)));
+  await page.check('[data-bind="lock.1"]'); await page.reload(); await page.waitForSelector('#paper svg');
+  check('locks are remembered after a reload', JSON.stringify((await spec()).lock) === '[false,true,false]' && await page.locator('[data-bind="lock.1"]').isChecked());
+  await page.uncheck('[data-bind="lock.1"]');
+  await page.click('[data-bind="mode"] button[data-v="build"]');
+
   /* worksheet: unknowns hide on the question, show on the key */
   await page.click('[data-preset="6"]');
   await page.click('.tab[data-tab="labels"]');

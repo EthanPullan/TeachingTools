@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const G = vm.runInNewContext(core + `;({ fmtNum, textW, defaultSpec, normalize, serialize, parseFile, solveTriangle, anglesFromSides, placeTriangle,
-  measure, classify, resolve, fitView, sideLabel, angleLabel, captionLines, drawFigure, renderSVG, mmToPx, PRESETS, crc32, pngWithDpi, footOn, SIZES })`, {});
+  measure, classify, resolve, fitView, dragCorner, lockSummary, sideLabel, angleLabel, captionLines, drawFigure, renderSVG, mmToPx, PRESETS, crc32, pngWithDpi, footOn, SIZES })`, {});
 const plain = v => JSON.parse(JSON.stringify(v));
 const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) <= e, a + ' vs ' + b);
 const spec = (patch = {}, build = {}) => { const s = G.normalize({}); Object.assign(s, patch); Object.assign(s.build, build); return s; };
@@ -241,4 +241,125 @@ test('PNG gets a 300 DPI pHYs chunk right after IHDR', () => {
   const png = new Uint8Array(33 + 25); png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const out = G.pngWithDpi(png, 300), dv = new DataView(out.buffer);
   assert.equal(out.length, png.length + 21); assert.equal(String.fromCharCode(...out.slice(37, 41)), 'pHYs'); assert.equal(dv.getUint32(41), 11811);
+});
+
+/* ---------- dragging with locked sides ---------- */
+const T0 = () => [[0, 0], [6, 0], [2, 4]];                                // corners A, B, C
+const sidesOf = pts => G.measure(pts).sides, angs = pts => G.measure(pts).angles;
+const sweep = (fn) => { for (let r = 0.5; r <= 12; r += 1.7) for (let a = 0; a < 360; a += 17) fn([2 + r * Math.cos(a * Math.PI / 180), 1 + r * Math.sin(a * Math.PI / 180)]); };
+const WIN = [-20, -20, 20, 20];
+
+test('no locks: the corner goes to the snapped target and the others do not move', () => {
+  const r = G.dragCorner(T0(), 2, [2.3, 3.8], [false, false, false], { step: 0.5, win: WIN });
+  assert.deepEqual(plain(r.pts), [[0, 0], [6, 0], [2.5, 4]]); assert.equal(r.note, null);
+});
+test('no locks: the edge of the view stops the corner and says so', () => {
+  const r = G.dragCorner(T0(), 2, [99, 3], [false, false, false], { win: [-5, -5, 8, 8] });
+  assert.equal(r.pts[2][0], 8); assert.equal(r.note, 'edge');
+});
+test('locking one side: the corner swings on a circle and that length never changes', () => {
+  const L = sidesOf(T0());
+  for (const lock of [[false, false, true], [true, false, false], [false, true, false]]) for (let i = 0; i < 3; i++) {
+    sweep(t => {
+      const r = G.dragCorner(T0(), i, t, lock, { win: WIN }); assert.ok(r.pts);
+      const m = sidesOf(r.pts); lock.forEach((on, s) => { if (on) near(m[s], L[s], 1e-9); });
+      assert.ok(!G.measure(r.pts).degenerate, 'still a real triangle');
+      for (let q = 0; q < 3; q++) if (q !== i) assert.deepEqual(plain(r.pts[q]), plain(T0()[q]), 'other corners stay');
+    });
+  }
+});
+test('a locked side opposite the dragged corner does not hold it: that corner is free', () => {
+  const r = G.dragCorner(T0(), 2, [3, 7], [false, false, true], { win: WIN });   // side c is opposite C
+  assert.deepEqual(plain(r.pts[2]), [3, 7]);
+});
+test('the corner follows the pointer round its circle (nearest allowed spot)', () => {
+  const r = G.dragCorner(T0(), 1, [0, 9], [false, true, false], { win: WIN });   // side b = CA is not touching B... b is opposite B
+  assert.deepEqual(plain(r.pts[1]), [0, 9]);
+  const q = G.dragCorner(T0(), 2, [10, 0], [false, false, true].map((x, i) => i === 0), { win: WIN });   // side a = BC locked: C swings round B
+  near(dist2(q.pts[2], [6, 0]), dist2(T0()[2], [6, 0]), 1e-9);
+  assert.ok(q.pts[2][0] > 6, 'it went to the pointer side');
+});
+function dist2(p, q) { return Math.hypot(p[0] - q[0], p[1] - q[1]); }
+test('angle snapping: swinging around a locked side gives whole-degree angles at the pivot', () => {
+  const lock = [true, false, false];                                           // side a = BC locked; drag C, pivot B
+  sweep(t => {
+    const r = G.dragCorner(T0(), 2, t, lock, { win: WIN, snapAngle: true });
+    const ang = angs(r.pts)[1];                                                // the angle at B, between BA and BC
+    near(ang, Math.round(ang), 1e-7);
+    assert.ok(ang >= 1 - 1e-7 && ang <= 179 + 1e-7);
+  });
+  const ex = G.dragCorner([[0, 0], [6, 0], [0, 4]], 2, [0.2, 5], [true, false, false], { win: WIN, snapAngle: true });
+  assert.ok(Math.abs(angs(ex.pts)[1] - Math.round(angs(ex.pts)[1])) < 1e-7);
+});
+test('a hinge (two locked sides): dragging an end opens and closes it; the third side changes', () => {
+  const lock = [true, true, false];                                            // a and b meet at C
+  const L = sidesOf(T0()); let sawBigger = false, sawSmaller = false;
+  sweep(t => {
+    for (const i of [0, 1]) {
+      const m = sidesOf(G.dragCorner(T0(), i, t, lock, { win: WIN }).pts);
+      near(m[0], L[0], 1e-9); near(m[1], L[1], 1e-9);
+      if (m[2] > L[2] + 0.1) sawBigger = true; if (m[2] < L[2] - 0.1) sawSmaller = true;
+    }
+  });
+  assert.ok(sawBigger && sawSmaller, 'side c both grows and shrinks');
+});
+test('the hinge corner itself cannot slide, only flip across the opposite side', () => {
+  const lock = [true, true, false];
+  const stay = G.dragCorner(T0(), 2, [3, 9], lock, { win: WIN }); assert.deepEqual(plain(stay.pts[2]), [2, 4]);
+  const flip = G.dragCorner(T0(), 2, [3, -9], lock, { win: WIN }); assert.deepEqual(plain(flip.pts[2]), [2, -4]);
+  sweep(t => { const m = sidesOf(G.dragCorner(T0(), 2, t, lock, { win: WIN }).pts); near(m[0], sidesOf(T0())[0], 1e-9); near(m[1], sidesOf(T0())[1], 1e-9); near(m[2], sidesOf(T0())[2], 1e-9); });
+});
+test('all three locked: the triangle turns and every length is kept', () => {
+  const L = sidesOf(T0()), c0 = G.measure(T0()).centroid;
+  sweep(t => {
+    for (let i = 0; i < 3; i++) {
+      const r = G.dragCorner(T0(), i, t, [true, true, true], { win: WIN }); assert.ok(r.pts);
+      const m = G.measure(r.pts); m.sides.forEach((v, s) => near(v, L[s], 1e-8)); near(m.centroid[0], c0[0], 1e-8); near(m.centroid[1], c0[1], 1e-8);
+    }
+  });
+  const q = G.dragCorner(T0(), 1, [c0[0], c0[1] + 5], [true, true, true], { win: WIN });   // pointer straight above the centre: B turns to point up
+  const g = G.measure(q.pts).centroid, b = q.pts[1]; near(b[0], g[0], 1e-6); assert.ok(b[1] > g[1]);
+});
+test('rigid turn that would leave the view stops at the nearest turn that fits', () => {
+  const win = [-1.5, -1.5, 7.5, 5.5], L = sidesOf(T0());
+  const q = G.dragCorner(T0(), 1, [8 / 3, -30], [true, true, true], { win });      // B aimed straight down would drop 3.6 below the centre: out of view
+  assert.ok(q.pts, 'it still turns'); assert.equal(q.note, 'edge');
+  q.pts.forEach(p => assert.ok(p[0] >= win[0] - 1e-9 && p[0] <= win[2] + 1e-9 && p[1] >= win[1] - 1e-9 && p[1] <= win[3] + 1e-9));
+  sidesOf(q.pts).forEach((v, i) => near(v, L[i], 1e-8));
+  const tight = [-0.01, -0.01, 6.01, 4.01];                                      // a box this tight leaves no room to turn
+  const none = G.dragCorner(T0(), 1, [-30, 1], [true, true, true], { win: tight });
+  assert.ok(none.pts, 'the nearest allowed spot is staying (almost) put'); assert.equal(none.note, 'edge');
+  none.pts.forEach((p, i) => { assert.ok(dist2(p, T0()[i]) < 0.1); assert.ok(p[0] >= tight[0] - 1e-9 && p[0] <= tight[2] + 1e-9 && p[1] >= tight[1] - 1e-9 && p[1] <= tight[3] + 1e-9); });
+});
+test('rigid turning with angle snap goes in whole degrees', () => {
+  const r = G.dragCorner([[0, 0], [6, 0], [0, 4]], 1, [5, 4], [true, true, true], { win: WIN, snapAngle: true });
+  assert.ok(r.pts);
+  const deg0 = Math.atan2(0, 6), rot = Math.atan2(r.pts[1][1] - r.pts[0][1], r.pts[1][0] - r.pts[0][0]) * 180 / Math.PI;
+  near(rot, Math.round(rot), 1e-6);                                   // the base was level, so its new direction is a whole number of degrees
+});
+test('a swing that would leave the view stays on its circle, at the nearest spot in view', () => {
+  const win = [-3, -3, 9, 4.5], L = sidesOf(T0());
+  const r = G.dragCorner(T0(), 2, [2, 30], [true, false, false], { win });      // side a locked; C pulled far above the view
+  near(sidesOf(r.pts)[0], L[0], 1e-9); assert.ok(r.pts[2][1] <= 4.5 + 1e-9); assert.equal(r.note, 'edge');
+});
+test('a target on the pivot itself does not produce NaN', () => {
+  for (const lock of [[false, false, true], [true, true, false], [true, true, true]]) {
+    const r = G.dragCorner(T0(), 2, [6, 0], lock, { win: WIN }); noBad(JSON.stringify(r.pts));
+  }
+});
+test('lockSummary names the hinge corner and the unlocked side', () => {
+  assert.match(G.lockSummary([false, false, false], ['A', 'B', 'C']), /freely/);
+  assert.match(G.lockSummary([true, true, false], ['A', 'B', 'C']), /Hinge at corner C.*sides a and b/);
+  assert.match(G.lockSummary([false, true, true], ['P', 'Q', 'R']), /Hinge at corner P.*sides b and c/);
+  assert.match(G.lockSummary([true, true, true], ['A', 'B', 'C']), /Rigid/);
+});
+test('locks default off, survive save and open, and junk is repaired', () => {
+  assert.deepEqual(plain(G.normalize({}).lock), [false, false, false]);
+  const s = G.normalize({ lock: [true, false, true] }); assert.deepEqual(plain(G.parseFile(G.serialize(s)).lock), [true, false, true]);
+  assert.deepEqual(plain(G.normalize({ lock: 'yes' }).lock), [false, false, false]);
+});
+test('locked sides get an amber highlight on screen only', () => {
+  const s = spec({}); s.lock = [true, false, false];
+  assert.match(G.drawFigure(s, { ui: true }).svg, /stroke="#e0982e" stroke-opacity="\.5"/);
+  assert.ok(!/e0982e/.test(G.renderSVG(s, {})), 'never in exports');
 });

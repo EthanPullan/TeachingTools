@@ -188,6 +188,11 @@
           <div><h3 class="section-title">Make it by</h3>
             <div class="seg full" data-bind="mode" role="group" aria-label="How the triangle is made">
               <button type="button" data-v="build">Measurements</button><button type="button" data-v="free">Dragging corners</button></div></div>
+          <div class="card">
+            <h3 class="section-title" style="margin:0">Keep a side’s length when dragging</h3>
+            <div class="lines3" id="lockRow"></div>
+            <p class="hint" id="lockHint"></p>
+          </div>
           <div class="card" data-if="mode=build">
             <div><label class="lab" for="method">What you know</label>
               <select id="method" data-bind="build.method">
@@ -210,7 +215,8 @@
           <div class="card" data-if="mode=free">
             <p class="hint">Drag any corner (the amber rings) on the figure, or tab to a ring and use the arrow keys. The sides, angles and type update as you move.</p>
             <div><label class="lab" for="snap">Snap corners to</label>
-              <select id="snap" data-bind="snap"><option value="0">Off (anywhere)</option><option value="0.1">0.1 units</option><option value="0.25">0.25 units</option><option value="0.5">0.5 units</option><option value="1">1 unit</option><option value="5">5 units</option></select></div>
+              <select id="snap" data-bind="snap"><option value="0">Off (anywhere)</option><option value="0.1">0.1 units</option><option value="0.25">0.25 units</option><option value="0.5">0.5 units</option><option value="1">1 unit</option><option value="5">5 units</option></select>
+              <p class="hint" style="margin-top:6px">Around a locked side the angle snaps to whole degrees instead.</p></div>
             <div class="row"><button class="btn small" type="button" data-act="zoomFit">Zoom to fit</button><button class="btn small" type="button" data-act="zoomOut">Zoom out</button></div>
             <button class="btn small" type="button" data-act="toBuild" title="Switch to Measurements with this triangle’s three sides filled in">Use these sides as measurements</button>
           </div>
@@ -365,7 +371,7 @@ function defaultSpec() {
     tool: TOOL, v: SPEC_VERSION, name: '', caption: '', typeCaption: 'off', mode: 'build',
     build: { method: 'rightlegs', a: 3, b: 4, c: 5, A: 40, B: 60, C: 60, ssaCase: 0, orient: 'auto', rotate: 0, flip: false },
     free: { pts: [[0, 0], [4, 0], [0, 3]], view: null },
-    snap: '0.5', unit: 'cm', showUnit: true, decimals: 'auto',
+    snap: '0.5', lock: [false, false, false], unit: 'cm', showUnit: true, decimals: 'auto',
     names: ['A', 'B', 'C'], showNames: true,
     sides: [side(), side(), side()], angles: [side(), side(), side()], unknown: '?',
     arcs: 'all', ticks: true, rightMark: true,
@@ -546,6 +552,74 @@ function fitView(pts, grow) {                             // a window around the
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const w = Math.max(x1 - x0, 1), h = Math.max(y1 - y0, 1), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   return [cx - w * grow / 2, cy - h * grow / 2, cx + w * grow / 2, cy + h * grow / 2];
+}
+
+/* ---------- dragging a corner, with some side lengths locked ----------
+   Side i is opposite corner i, so moving corner i changes sides j and k (the two that touch it) and leaves side i alone.
+   Locked side(s) touching the corner:  none = free (snapped to the grid);  one = the corner swings on a circle around the
+   other end of that side;  both = the corner can only sit where the two circles meet (it can flip, not slide);
+   all three locked = the triangle is rigid and turns about its centre. A drag that cannot be honoured stops at the nearest
+   allowed spot, and the triangle stays a real one. `base` is the corners when the drag began, so slow drags never stall.
+   Returns { pts, note }: pts is null when nothing could move; note is 'edge' when the view's edge got in the way. */
+function dragCorner(base, i, target, lock, o) {
+  o = o || {};
+  const step = o.step || 0, win = o.win, snapAngle = !!o.snapAngle, j = (i + 1) % 3, k = (i + 2) % 3;
+  const P = base.map(p => p.slice()), lj = !!lock[j], lk = !!lock[k];
+  const inWin = p => !win || (p[0] >= win[0] - 1e-9 && p[0] <= win[2] + 1e-9 && p[1] >= win[1] - 1e-9 && p[1] <= win[3] + 1e-9);
+  const place = (p, note) => { const out = P.map(q => q.slice()); out[i] = [clean(p[0]), clean(p[1])]; return { pts: out, note }; };
+  if (lock[0] && lock[1] && lock[2]) {                                   // rigid: turn about the centre
+    const g = [(P[0][0] + P[1][0] + P[2][0]) / 3, (P[0][1] + P[1][1] + P[2][1]) / 3];
+    let d = deg(Math.atan2(target[1] - g[1], target[0] - g[0]) - Math.atan2(P[i][1] - g[1], P[i][0] - g[0]));
+    d = ((d + 180) % 360 + 360) % 360 - 180;
+    if (snapAngle) d = Math.round(d);
+    const turn = t => { const c = Math.cos(rad(t)), sn = Math.sin(rad(t)); return P.map(q => [g[0] + (q[0] - g[0]) * c - (q[1] - g[1]) * sn, g[1] + (q[0] - g[0]) * sn + (q[1] - g[1]) * c]); };
+    let out = turn(d), note = null;
+    if (!out.every(inWin)) {                                             // nearest turn that keeps every corner in view
+      note = 'edge'; out = null;
+      for (let e = 0.5; e <= 180 && !out; e += 0.5) for (const t of [d + e, d - e]) { const cand = turn(t); if (cand.every(inWin)) { out = cand; break; } }
+      if (!out) return { pts: null, note };
+    }
+    return { pts: out.map(q => [clean(q[0]), clean(q[1])]), note };
+  }
+  if (lj && lk) {                                                        // both circles: two places, pick the nearer
+    const A = P[j], B = P[k], dd = dist(A, B), r1 = dist(P[i], A), r2 = dist(P[i], B);
+    const a = (r1 * r1 - r2 * r2 + dd * dd) / (2 * dd), h = Math.sqrt(Math.max(0, r1 * r1 - a * a));
+    const m = [A[0] + (B[0] - A[0]) * a / dd, A[1] + (B[1] - A[1]) * a / dd], nx = -(B[1] - A[1]) / dd, ny = (B[0] - A[0]) / dd;
+    const cands = [[m[0] + nx * h, m[1] + ny * h], [m[0] - nx * h, m[1] - ny * h]].filter(inWin);
+    if (!cands.length) return { pts: null, note: 'edge' };
+    cands.sort((p, q) => dist(p, target) - dist(q, target));
+    return place(cands[0], null);
+  }
+  if (lj || lk) {                                                        // one circle: swing round the far end of the locked side
+    const c = lk ? P[j] : P[k], third = lk ? P[k] : P[j], r = dist(P[i], c);
+    const a0 = Math.atan2(third[1] - c[1], third[0] - c[0]), at = t => [c[0] + r * Math.cos(a0 + rad(t)), c[1] + r * Math.sin(a0 + rad(t))];
+    const lim = snapAngle ? 1 : 0.5;                                     // never swing flat
+    let t = deg(Math.atan2(target[1] - c[1], target[0] - c[0]) - a0);
+    t = ((t + 180) % 360 + 360) % 360 - 180;
+    if (snapAngle) t = Math.round(t);
+    t = (t < 0 ? -1 : 1) * Math.min(Math.max(Math.abs(t), lim), 180 - lim);
+    let p = at(t), note = null;
+    if (!inWin(p)) {                                                     // nearest spot on the arc that is still in view
+      let best = null, bd = Infinity; note = 'edge';
+      for (let u = -180 + lim; u <= 180 - lim; u += 0.5) { const q = at(u), d = dist(q, target); if (inWin(q) && d < bd) { bd = d; best = q; } }
+      if (!best) return { pts: null, note };
+      p = best;
+    }
+    return place(p, note);
+  }
+  let x = target[0], y = target[1];                                      // nothing locked: the grid
+  if (step > 0) { x = Math.round(x / step) * step; y = Math.round(y / step) * step; }
+  let note = null;
+  if (win) { const cx = Math.min(Math.max(x, win[0]), win[2]), cy = Math.min(Math.max(y, win[1]), win[3]); if (cx !== x || cy !== y) note = 'edge'; x = cx; y = cy; }
+  return place([x, y], note);
+}
+function lockSummary(lock, names) {                                      // one plain sentence about what the locks do
+  const n = lock.filter(Boolean).length, side = i => 'abc'[i];
+  if (n === 0) return 'No sides locked: corners move freely.';
+  if (n === 3) return 'Rigid: the triangle keeps its shape. Drag a corner to turn it.';
+  if (n === 1) { const i = lock.indexOf(true); return 'Side ' + side(i) + ' keeps its length: drag either end of it and that corner swings round the other end.'; }
+  const u = lock.indexOf(false);
+  return 'Hinge at corner ' + names[u] + ': sides ' + [0, 1, 2].filter(x => x !== u).map(side).join(' and ') + ' keep their lengths. Drag ' + names[(u + 1) % 3] + ' or ' + names[(u + 2) % 3] + ' to open and close it; side ' + side(u) + ' and the angle at ' + names[u] + ' change.';
 }
 
 /* ---------- labels: what each side, angle and caption says ---------- */
@@ -788,6 +862,11 @@ function uiLayer(spec, R, L) {                            // screen-only extras:
       for (let y = Math.ceil(w[1] / step) * step; y <= w[3] + 1e-9 && n < 5000; y += step) { const p = L.toMM(x, y); d += 'M' + p[0].toFixed(2) + ' ' + p[1].toFixed(2) + 'h.01'; n++; }
     g += '<path d="' + d + '" stroke="#9aa7a1" stroke-width="0.6" stroke-linecap="round" fill="none"/>';
   }
+  (spec.lock || []).forEach((on, i) => {                    // amber highlight on a locked side
+    if (!on) return;
+    const a = L.toMM(R.pts[(i + 1) % 3][0], R.pts[(i + 1) % 3][1]), b = L.toMM(R.pts[(i + 2) % 3][0], R.pts[(i + 2) % 3][1]);
+    g += '<line x1="' + a[0].toFixed(2) + '" y1="' + a[1].toFixed(2) + '" x2="' + b[0].toFixed(2) + '" y2="' + b[1].toFixed(2) + '" stroke="#e0982e" stroke-opacity=".5" stroke-width="1.8" stroke-linecap="round" pointer-events="none"/>';
+  });
   R.pts.forEach((p, i) => {
     const q = L.toMM(p[0], p[1]);
     g += '<g class="vh" data-i="' + i + '" tabindex="0" role="button" aria-label="Move corner ' + esc(vname(spec, i)) + '"><circle cx="' + q[0].toFixed(2) + '" cy="' + q[1].toFixed(2) + '" r="2.6" fill="rgba(224,152,46,.12)" stroke="#e0982e" stroke-width=".6"/></g>';
@@ -841,6 +920,7 @@ function pngWithDpi(u8, dpi) {
   const hist = { list: [], i: -1, key: null, t: 0 };
 
   function toast(msg, kind) {
+    if (Array.from($('#toasts').children).some(t => t.textContent === msg)) return;       // one of each at a time
     const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg;
     $('#toasts').appendChild(el); setTimeout(() => el.remove(), 3800);
   }
@@ -897,6 +977,7 @@ function pngWithDpi(u8, dpi) {
     const am = '<option value="value">Size</option><option value="letter">Letter (∠A)</option><option value="unknown">Unknown</option><option value="custom">My text</option><option value="hidden">None</option>';
     $('#sideRows').innerHTML = [0, 1, 2].map(i => rowHtml('sides', i, sm, 'Side ' + 'abc'[i])).join('');
     $('#angleRows').innerHTML = [0, 1, 2].map(i => rowHtml('angles', i, am, 'Angle at corner ' + (i + 1))).join('');
+    $('#lockRow').innerHTML = [0, 1, 2].map(i => '<label class="check" title="Keep side ' + 'abc'[i] + ' the same length"><input type="checkbox" data-bind="lock.' + i + '" aria-label="Lock side ' + 'abc'[i] + '"><span class="lockN" data-side="' + i + '"></span></label>').join('');
     const lineKinds = [['alt', 'Height (altitude)'], ['med', 'Median'], ['bis', 'Angle bisector'], ['perp', 'Perpendicular bisector']];
     $('#lineRows').innerHTML = lineKinds.map(([k, t]) => '<div class="lines3"><span class="t">' + t + '</span>' +
       [0, 1, 2].map(i => '<label class="check"><input type="checkbox" data-bind="lines.' + k + '.' + i + '" aria-label="' + t + ' from corner ' + (i + 1) + '"><span class="cn" data-corner="' + i + '"></span></label>').join('') + '</div>').join('');
@@ -907,6 +988,8 @@ function pngWithDpi(u8, dpi) {
       $('#sidesN' + i).textContent = 'abc'[i] + ' · ' + vname(spec, j) + vname(spec, k);
       $('#anglesN' + i).textContent = '∠' + n;
     }
+    $$('.lockN').forEach(el => { const i = +el.dataset.side; el.textContent = 'abc'[i] + ' · ' + vname(spec, (i + 1) % 3) + vname(spec, (i + 2) % 3); });
+    $('#lockHint').textContent = lockSummary(spec.lock, [0, 1, 2].map(i => vname(spec, i)));
     $$('.cn').forEach(el => { el.textContent = vname(spec, +el.dataset.corner); });
   }
   function cond(expr) { const [p, v] = expr.split('='); return String(getPath(spec, p)) === v; }
@@ -968,13 +1051,15 @@ function pngWithDpi(u8, dpi) {
     spec.free = { pts: R.pts.map(p => p.map(clean)), view: [cx - hw, cy - hh, cx + hw, cy + hh] };
     spec.mode = 'free'; return true;
   }
-  function moveCorner(i, mp) {
-    const step = parseFloat(spec.snap) || 0, w = state.fig.L.win;
-    let x = mp[0], y = mp[1];
-    if (step > 0) { x = Math.round(x / step) * step; y = Math.round(y / step) * step; }
-    const cx = Math.min(Math.max(x, w[0]), w[2]), cy = Math.min(Math.max(y, w[1]), w[3]);
-    if ((cx !== x || cy !== y) && !state.drag) toast('That is the edge of the view. Use Zoom out for more room.');
-    spec.free.pts[i] = [clean(cx), clean(cy)];
+  const NOTES = { edge: 'That is the edge of the view. Use Zoom out for more room.' };
+  function moveCorner(i, mp, base) {                       // base: the corners when the drag began (see dragCorner)
+    const step = parseFloat(spec.snap) || 0, before = JSON.stringify(spec.free.pts);
+    const r = dragCorner(base || spec.free.pts, i, mp, spec.lock, { step, win: state.fig.L.win, snapAngle: step > 0 });
+    if (r.pts) spec.free.pts = r.pts;
+    if (!state.drag) {
+      if (r.note) toast(NOTES[r.note]);
+      else if (spec.lock.some(Boolean) && JSON.stringify(spec.free.pts) === before) toast('That corner is held by a locked side, so it can only swing round it. Try another arrow key.');
+    }
   }
   function pointerModel(ev) {
     const svg = $('#paper svg'), ctm = svg.getScreenCTM(); if (!ctm) return null;
@@ -987,7 +1072,8 @@ function pngWithDpi(u8, dpi) {
     const i = +h.dataset.i;
     if (spec.mode !== 'free' && !toFree()) return;
     state.drag = i; state.focus = i;
-    const move = ev => { const mp = pointerModel(ev); if (mp) { moveCorner(i, mp); render(); } };
+    const base = spec.free.pts.map(p => p.slice());
+    const move = ev => { const mp = pointerModel(ev); if (mp) { moveCorner(i, mp, base); render(); } };
     const up = () => { window.removeEventListener('pointermove', move); state.drag = null; state.focus = null; commit(null, true); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up, { once: true });
     move(e);
