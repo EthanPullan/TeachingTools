@@ -214,6 +214,9 @@
           </div>
           <div class="card" data-if="mode=free">
             <p class="hint">Drag any corner (the amber rings) on the figure, or tab to a ring and use the arrow keys. The sides, angles and type update as you move.</p>
+            <div><label class="lab">Side lengths <span class="hint" style="text-transform:none;letter-spacing:0">type to change one</span></label>
+              <div id="lenRows" style="display:grid;gap:6px"></div>
+              <p class="issue" id="lenMsg" hidden></p></div>
             <div><label class="lab" for="snap">Snap corners to</label>
               <select id="snap" data-bind="snap"><option value="0">Off (anywhere)</option><option value="0.1">0.1 units</option><option value="0.25">0.25 units</option><option value="0.5">0.5 units</option><option value="1">1 unit</option><option value="5">5 units</option></select>
               <p class="hint" style="margin-top:6px">Around a locked side the angle snaps to whole degrees instead.</p></div>
@@ -371,7 +374,7 @@ function defaultSpec() {
     tool: TOOL, v: SPEC_VERSION, name: '', caption: '', typeCaption: 'off', mode: 'build',
     build: { method: 'rightlegs', a: 3, b: 4, c: 5, A: 40, B: 60, C: 60, ssaCase: 0, orient: 'auto', rotate: 0, flip: false },
     free: { pts: [[0, 0], [4, 0], [0, 3]], view: null },
-    snap: '0.5', lock: [false, false, false], unit: 'cm', showUnit: true, decimals: 'auto',
+    snap: '0.5', lock: [false, false, false], moveEnd: [1, 1, 1], unit: 'cm', showUnit: true, decimals: 'auto',
     names: ['A', 'B', 'C'], showNames: true,
     sides: [side(), side(), side()], angles: [side(), side(), side()], unknown: '?',
     arcs: 'all', ticks: true, rightMark: true,
@@ -401,6 +404,7 @@ function normalize(raw) {
   pick('size', Object.keys(SIZES), 'medium'); pick('textSize', ['normal', 'large'], 'normal');
   pick('weight', ['normal', 'bold'], 'normal'); pick('fill', ['none', 'grey', 'tint'], 'none');
   s.build.ssaCase = s.build.ssaCase === 1 ? 1 : 0;
+  s.moveEnd = s.moveEnd.map(v => (v === 0 ? 0 : 1));
   s.build.rotate = Number.isFinite(s.build.rotate) ? Math.max(-360, Math.min(360, s.build.rotate)) : 0;
   if (!(parseFloat(s.snap) >= 0)) s.snap = '0.5';
   s.sides.forEach(x => { if (SIDE_MODES.indexOf(x.mode) < 0) x.mode = 'value'; });
@@ -612,6 +616,32 @@ function dragCorner(base, i, target, lock, o) {
   let note = null;
   if (win) { const cx = Math.min(Math.max(x, win[0]), win[2]), cy = Math.min(Math.max(y, win[1]), win[3]); if (cx !== x || cy !== y) note = 'edge'; x = cx; y = cy; }
   return place([x, y], note);
+}
+/* ---------- typing a side length ----------
+   Side s joins the other two corners. One end (`end` 0 = the next corner round, 1 = the one after) moves; the other stays.
+   The moving corner Q also touches one other side, the one opposite the staying corner P. If that side is locked, Q has to stay
+   that far from the third corner as well, so Q goes where the two circles meet (the nearer of the two places). Otherwise Q
+   just slides along the line it was already on. Returns { pts } or { error }. */
+function setSideLength(pts, s, L, end, lock) {
+  const name = i => 'abc'[i];
+  if (!Number.isFinite(L) || !(L > 0)) return { error: 'Enter a length above 0.' };
+  const q = end ? (s + 2) % 3 : (s + 1) % 3, p = end ? (s + 1) % 3 : (s + 2) % 3;
+  const P = pts.map(x => x.slice());
+  if (dist(P[p], P[q]) < 1e-12) return { error: 'Those two corners are on top of each other. Drag one away first.' };
+  let Q;
+  if (lock[p]) {                                                        // the other side at Q is side p, and it is locked
+    const R = P[s], r = dist(P[q], R), d = dist(P[p], R), lo = Math.abs(d - r), hi = d + r;
+    if (!(L > lo + 1e-9 * hi && L < hi - 1e-9 * hi)) return { error: 'With side ' + name(p) + ' locked, side ' + name(s) + ' has to be more than ' + fmtNum(lo, 'auto', 2) + ' and less than ' + fmtNum(hi, 'auto', 2) + '. Unlock side ' + name(p) + ' to go further.', lo, hi };
+    const a = (L * L - r * r + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L * L - a * a));
+    const m = [P[p][0] + (R[0] - P[p][0]) * a / d, P[p][1] + (R[1] - P[p][1]) * a / d], nx = -(R[1] - P[p][1]) / d, ny = (R[0] - P[p][0]) / d;
+    const c = [[m[0] + nx * h, m[1] + ny * h], [m[0] - nx * h, m[1] - ny * h]].sort((u, v) => dist(u, P[q]) - dist(v, P[q]));
+    Q = c[0];
+  } else {
+    const u = [(P[q][0] - P[p][0]) / dist(P[q], P[p]), (P[q][1] - P[p][1]) / dist(P[q], P[p])];
+    Q = [P[p][0] + u[0] * L, P[p][1] + u[1] * L];
+  }
+  P[q] = [clean(Q[0]), clean(Q[1])];
+  return { pts: P, moved: q };
 }
 function lockSummary(lock, names) {                                      // one plain sentence about what the locks do
   const n = lock.filter(Boolean).length, side = i => 'abc'[i];
@@ -977,6 +1007,7 @@ function pngWithDpi(u8, dpi) {
     const am = '<option value="value">Size</option><option value="letter">Letter (∠A)</option><option value="unknown">Unknown</option><option value="custom">My text</option><option value="hidden">None</option>';
     $('#sideRows').innerHTML = [0, 1, 2].map(i => rowHtml('sides', i, sm, 'Side ' + 'abc'[i])).join('');
     $('#angleRows').innerHTML = [0, 1, 2].map(i => rowHtml('angles', i, am, 'Angle at corner ' + (i + 1))).join('');
+    $('#lenRows').innerHTML = [0, 1, 2].map(i => '<div class="lrow"><span class="nm" data-lenname="' + i + '"></span><input type="number" step="any" min="0" data-len="' + i + '" aria-label="Length of side ' + 'abc'[i] + '"><select data-end="' + i + '" aria-label="Which end of side ' + 'abc'[i] + ' moves"><option value="0"></option><option value="1"></option></select></div>').join('');
     $('#lockRow').innerHTML = [0, 1, 2].map(i => '<label class="check" title="Keep side ' + 'abc'[i] + ' the same length"><input type="checkbox" data-bind="lock.' + i + '" aria-label="Lock side ' + 'abc'[i] + '"><span class="lockN" data-side="' + i + '"></span></label>').join('');
     const lineKinds = [['alt', 'Height (altitude)'], ['med', 'Median'], ['bis', 'Angle bisector'], ['perp', 'Perpendicular bisector']];
     $('#lineRows').innerHTML = lineKinds.map(([k, t]) => '<div class="lines3"><span class="t">' + t + '</span>' +
@@ -988,6 +1019,12 @@ function pngWithDpi(u8, dpi) {
       $('#sidesN' + i).textContent = 'abc'[i] + ' · ' + vname(spec, j) + vname(spec, k);
       $('#anglesN' + i).textContent = '∠' + n;
     }
+    $$('[data-lenname]').forEach(el => { const i = +el.dataset.lenname; el.textContent = 'abc'[i] + ' · ' + vname(spec, (i + 1) % 3) + vname(spec, (i + 2) % 3); });
+    $$('[data-end]').forEach(sel => {
+      const i = +sel.dataset.end;
+      [0, 1].forEach(e => { sel.options[e].textContent = 'moves ' + vname(spec, e ? (i + 2) % 3 : (i + 1) % 3); });
+      if (document.activeElement !== sel) sel.value = String(spec.moveEnd[i]);
+    });
     $$('.lockN').forEach(el => { const i = +el.dataset.side; el.textContent = 'abc'[i] + ' · ' + vname(spec, (i + 1) % 3) + vname(spec, (i + 2) % 3); });
     $('#lockHint').textContent = lockSummary(spec.lock, [0, 1, 2].map(i => vname(spec, i)));
     $$('.cn').forEach(el => { el.textContent = vname(spec, +el.dataset.corner); });
@@ -1003,7 +1040,7 @@ function pngWithDpi(u8, dpi) {
     });
     $$('[data-if]').forEach(el => { el.hidden = !cond(el.dataset.if); });
     $$('[data-off-if]').forEach(el => { const off = cond(el.dataset.offIf); el.style.opacity = off ? .45 : ''; el.querySelectorAll('input,select').forEach(i => { i.disabled = off; }); });
-    $$('.lrow').forEach(row => {                           // the text box is only for “My text”
+    $$('#sideRows .lrow, #angleRows .lrow').forEach(row => {   // the text box is only for “My text”
       const sel = row.querySelector('select'), inp = row.querySelector('input'); inp.disabled = sel.value !== 'custom';
     });
     const canReal = spec.unit === 'cm' || spec.unit === 'mm';
@@ -1031,6 +1068,8 @@ function pngWithDpi(u8, dpi) {
     paper.innerHTML = fig.svg;
     paper.setAttribute('aria-label', 'Triangle ' + [0, 1, 2].map(i => vname(spec, i)).join('') + ' (' + (state.view === 'key' ? 'answer key' : 'question') + ')');
     $('#viewHint').textContent = state.view === 'key' ? 'Answers show in bold.' : 'Unknown labels show as “' + (spec.unknown || '?') + '”.';
+    $('#lenMsg').hidden = true;
+    $$('[data-len]').forEach(inp => { if (document.activeElement !== inp) inp.value = fmtNum(R.m.sides[+inp.dataset.len], spec.decimals, 2); });
     const m = R.m, dot = '<span class="dotline"></span>', u = unitText(spec);
     const n = (v, d) => fmtNum(v, spec.decimals, d);
     $('#status').innerHTML = '<span><b>' + esc(R.cls.text) + '</b></span>' + (m.degenerate ? '' :
@@ -1086,6 +1125,7 @@ function pngWithDpi(u8, dpi) {
     const step = (parseFloat(spec.snap) || 0.1) * (e.shiftKey ? 5 : 1), p = spec.free.pts[i];
     state.focus = i; moveCorner(i, [p[0] + d[0] * step, p[1] + d[1] * step]); commit('nudge' + i, true);
   });
+  document.addEventListener('change', e => { const t = e.target; if (t.dataset && t.dataset.len !== undefined) { const R = resolve(spec); if (R.ok) t.value = fmtNum(R.m.sides[+t.dataset.len], spec.decimals, 2); } });   // tidy the box when you leave it
   document.addEventListener('focusin', e => { if (!(e.target.closest && e.target.closest('.vh'))) state.focus = null; });   // only keep the ring focused while a ring is
 
   /* ---------- files ---------- */
@@ -1131,8 +1171,20 @@ function pngWithDpi(u8, dpi) {
   }
 
   /* ---------- events ---------- */
+  function applyLength(i, v) {                              // type a side length (Dragging corners)
+    if (spec.mode !== 'free') return;
+    const r = setSideLength(spec.free.pts, i, v, spec.moveEnd[i], spec.lock);
+    if (r.error) { const m = $('#lenMsg'); m.textContent = r.error; m.hidden = false; return; }
+    spec.free.pts = r.pts;
+    const w = state.fig && state.fig.L.win;
+    if (w && !r.pts.every(p => p[0] >= w[0] && p[0] <= w[2] && p[1] >= w[1] && p[1] <= w[3])) spec.free.view = fitView(r.pts, 1.5);   // keep it on screen
+    commit('len' + i, false);
+  }
   document.addEventListener('input', e => {
-    const t = e.target, path = t.dataset && t.dataset.bind; if (!path || t.classList.contains('seg')) return;
+    const t = e.target;
+    if (t.dataset && t.dataset.len !== undefined) { if (t.value.trim() !== '' && Number.isFinite(Number(t.value))) applyLength(+t.dataset.len, Number(t.value)); return; }
+    if (t.dataset && t.dataset.end !== undefined) { spec.moveEnd[+t.dataset.end] = Number(t.value) ? 1 : 0; commit(null, false); return; }
+    const path = t.dataset && t.dataset.bind; if (!path || t.classList.contains('seg')) return;
     let v;
     if (t.type === 'checkbox') v = t.checked;
     else if (t.type === 'number') { v = t.value.trim() === '' ? null : Number(t.value); if (v !== null && !Number.isFinite(v)) return; }

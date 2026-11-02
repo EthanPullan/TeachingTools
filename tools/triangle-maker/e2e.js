@@ -157,6 +157,59 @@ function pngInfo(buf) {
   await page.uncheck('[data-bind="lock.1"]');
   await page.click('[data-bind="mode"] button[data-v="build"]');
 
+  /* typing side lengths */
+  await page.click('[data-preset="3"]');                         // right 3-4-5: A(4,0) B(0,3) C(0,0)
+  await page.click('[data-bind="mode"] button[data-v="free"]');
+  const lenBox = i => page.locator('[data-len="' + i + '"]');
+  check('the length boxes show the live lengths', (await lenBox(0).inputValue()) === '3' && (await lenBox(1).inputValue()) === '4' && (await lenBox(2).inputValue()) === '5');
+  check('each box says which corner is the one that moves', /moves C/.test(await page.locator('[data-end="0"] option:checked').innerText()) && /moves A/.test(await page.locator('[data-end="1"] option:checked').innerText()));
+  const pts0 = (await spec()).free.pts;
+  await lenBox(0).fill('6');                                     // side a = BC; default end moves C
+  let sd = await sides(), sp = (await spec()).free.pts;
+  check('typing 6 into a makes side a 6', Math.abs(sd[0] - 6) < 1e-9, sd);
+  check('only the chosen end moved (A and B stayed)', JSON.stringify(sp[0]) === JSON.stringify(pts0[0]) && JSON.stringify(sp[1]) === JSON.stringify(pts0[1]) && JSON.stringify(sp[2]) !== JSON.stringify(pts0[2]), sp);
+  check('the type and status followed', !/right/.test(await status()), await status());
+  await page.selectOption('[data-end="0"]', '0');                // now B moves instead
+  await lenBox(0).fill('2'); sd = await sides(); sp = (await spec()).free.pts;
+  check('choosing the other end moves the other corner', Math.abs(sd[0] - 2) < 1e-9 && JSON.stringify(sp[2]) === JSON.stringify((await spec()).free.pts[2]) && JSON.stringify(sp[1]) !== JSON.stringify(pts0[1]));
+  check('the end choice is saved in the file', JSON.stringify((await spec()).moveEnd) === '[0,1,1]');
+  await lenBox(1).fill('');                                      // clearing a box while typing is allowed and changes nothing
+  check('an empty box changes nothing', Math.abs((await sides())[1] - sd[1]) < 1e-12);
+  await lenBox(1).fill('0');
+  check('0 is refused with a reason and the triangle is untouched', /above 0/.test(await page.locator('#lenMsg').innerText()) && Math.abs((await sides())[1] - sd[1]) < 1e-12);
+  await lenBox(1).fill('2.5'); await page.keyboard.press('Tab');
+  check('a length typed with a decimal works and the box tidies on leaving', Math.abs((await sides())[1] - 2.5) < 1e-9 && (await lenBox(1).inputValue()) === '2.5');
+  check('the message clears once something works', await page.locator('#lenMsg').isHidden());
+  const afterTyping = JSON.stringify((await spec()).free.pts);
+  await page.locator('#paper').click({ position: { x: 5, y: 5 } }); await page.keyboard.press('Control+z');
+  check('typing is undoable (and one burst of typing is one step)', JSON.stringify((await spec()).free.pts) !== afterTyping);
+
+  /* typing with locks */
+  await page.click('[data-preset="3"]'); await page.click('[data-bind="mode"] button[data-v="free"]');
+  await page.check('[data-bind="lock.2"]');                      // side c = AB = 5 locked
+  await page.selectOption('[data-end="0"]', '0');                // typing a moves B, whose other side is c
+  await lenBox(0).fill('4'); sd = await sides();
+  check('typing keeps the other locked side at its length', Math.abs(sd[0] - 4) < 1e-9 && Math.abs(sd[2] - 5) < 1e-9, sd);
+  await lenBox(0).fill('50');
+  const msg = await page.locator('#lenMsg').innerText();
+  check('an impossible length names the lock and the range', /With side c locked, side a has to be more than/.test(msg), msg);
+  check('...and leaves the triangle as it was', Math.abs((await sides())[0] - 4) < 1e-9);
+  await lenBox(2).fill('7');                                     // typing into the locked side itself
+  check('typing into a locked side changes it and it stays locked', Math.abs((await sides())[2] - 7) < 1e-9 && JSON.stringify((await spec()).lock) === '[false,false,true]');
+  await dragRing(0, 30, -30);
+  check('the new length is the one that is now kept during dragging', Math.abs((await sides())[2] - 7) < 1e-6);
+  check('the boxes follow a drag', (await lenBox(0).inputValue()) === String(+(await sides())[0].toFixed(2)));
+  await page.uncheck('[data-bind="lock.2"]');
+
+  /* a long length pulls the view with it */
+  await page.click('[data-preset="3"]'); await page.click('[data-bind="mode"] button[data-v="free"]');
+  await lenBox(1).fill('40');
+  check('a length far beyond the view still shows, with the corner on screen', (await page.locator('#paper svg').count()) === 1 && (await page.locator('.vh').count()) === 3);
+  const box = await page.locator('#paper svg').boundingBox();
+  const inside = await Promise.all([0, 1, 2].map(async i => { const b = await ringBox(i); return b.x >= box.x - 1 && b.x + b.width <= box.x + box.width + 1 && b.y >= box.y - 1 && b.y + b.height <= box.y + box.height + 1; }));
+  check('every corner is inside the figure', inside.every(Boolean), inside);
+  await page.click('[data-bind="mode"] button[data-v="build"]');
+
   /* worksheet: unknowns hide on the question, show on the key */
   await page.click('[data-preset="6"]');
   await page.click('.tab[data-tab="labels"]');

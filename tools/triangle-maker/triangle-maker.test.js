@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const G = vm.runInNewContext(core + `;({ fmtNum, textW, defaultSpec, normalize, serialize, parseFile, solveTriangle, anglesFromSides, placeTriangle,
-  measure, classify, resolve, fitView, dragCorner, lockSummary, sideLabel, angleLabel, captionLines, drawFigure, renderSVG, mmToPx, PRESETS, crc32, pngWithDpi, footOn, SIZES })`, {});
+  measure, classify, resolve, fitView, dragCorner, lockSummary, setSideLength, sideLabel, angleLabel, captionLines, drawFigure, renderSVG, mmToPx, PRESETS, crc32, pngWithDpi, footOn, SIZES })`, {});
 const plain = v => JSON.parse(JSON.stringify(v));
 const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) <= e, a + ' vs ' + b);
 const spec = (patch = {}, build = {}) => { const s = G.normalize({}); Object.assign(s, patch); Object.assign(s.build, build); return s; };
@@ -362,4 +362,65 @@ test('locked sides get an amber highlight on screen only', () => {
   const s = spec({}); s.lock = [true, false, false];
   assert.match(G.drawFigure(s, { ui: true }).svg, /stroke="#e0982e" stroke-opacity="\.5"/);
   assert.ok(!/e0982e/.test(G.renderSVG(s, {})), 'never in exports');
+});
+
+/* ---------- typing a side length ---------- */
+test('typing a length: only the chosen end moves, along the line it was on', () => {
+  for (const [s, end] of [[0, 1], [0, 0], [1, 1], [1, 0], [2, 1], [2, 0]]) {
+    const q = end ? (s + 2) % 3 : (s + 1) % 3, p = end ? (s + 1) % 3 : (s + 2) % 3;
+    const r = G.setSideLength(T0(), s, 9, end, [false, false, false]); assert.ok(r.pts);
+    near(sidesOf(r.pts)[s], 9, 1e-9);
+    for (let c = 0; c < 3; c++) if (c !== q) assert.deepEqual(plain(r.pts[c]), plain(T0()[c]), 'only corner ' + q + ' moves');
+    const a = T0()[p], b = T0()[q], n = r.pts[q];                           // same direction from the staying end
+    near((b[0] - a[0]) * (n[1] - a[1]) - (b[1] - a[1]) * (n[0] - a[0]), 0, 1e-8);
+    assert.equal(r.moved, q);
+  }
+});
+test('typing a length shorter than the side also works, and keeps the direction', () => {
+  const r = G.setSideLength([[0, 0], [6, 0], [2, 4]], 2, 3, 1, [false, false, false]);   // side c = AB, end 1: A... the later corner moves
+  near(sidesOf(r.pts)[2], 3, 1e-9);
+});
+test('a locked side typed into changes and stays valid for the next lock check', () => {
+  const r = G.setSideLength(T0(), 0, 5, 1, [true, false, false]);               // side a is locked; typing is a deliberate change
+  assert.ok(r.pts); near(sidesOf(r.pts)[0], 5, 1e-9);
+});
+test('when the other side at the moving corner is locked, that side keeps its length too', () => {
+  const L = sidesOf(T0());
+  for (const s of [0, 1, 2]) for (const end of [0, 1]) {
+    const p = end ? (s + 1) % 3 : (s + 2) % 3, lock = [false, false, false]; lock[p] = true;
+    for (const v of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+      const r = G.setSideLength(T0(), s, v, end, lock);
+      if (r.pts) { const m = sidesOf(r.pts); near(m[s], v, 1e-8); near(m[p], L[p], 1e-8); assert.ok(!G.measure(r.pts).degenerate); }
+      else { assert.match(r.error, /has to be more than/); assert.ok(v <= r.lo + 1e-6 || v >= r.hi - 1e-6, 'refused only outside (' + r.lo + ', ' + r.hi + ') but got ' + v); }
+    }
+  }
+});
+test('the range in the message is exact: just inside works, just outside and on the edge do not', () => {
+  const lock = [false, false, true];                                           // side c locked; set side a with the end whose other side is c... (end 0 moves B)
+  const r0 = G.setSideLength(T0(), 0, 100, 0, lock); assert.ok(r0.error && r0.hi);
+  assert.ok(G.setSideLength(T0(), 0, r0.hi - 1e-3, 0, lock).pts);
+  assert.ok(G.setSideLength(T0(), 0, r0.lo + 1e-3, 0, lock).pts);
+  assert.ok(G.setSideLength(T0(), 0, r0.hi, 0, lock).error, 'exactly flat is refused');
+  assert.ok(G.setSideLength(T0(), 0, r0.lo, 0, lock).error);
+  assert.match(r0.error, /With side c locked, side a has to be more than/);
+});
+test('with a lock, the nearer of the two possible places is chosen (no jump across the base)', () => {
+  const lock = [false, false, true];                                           // B moves; it must stay |AB| from A and be L from C
+  for (const start of [T0(), [[0, 0], [6, 0], [2, -4]], [[0, 0], [6, 1], [-3, 2]]]) for (const v of [3, 5, 6.5]) {
+    const r = G.setSideLength(start, 0, v, 0, lock); if (!r.pts) continue;
+    const A = start[0], C = start[2], B = r.pts[1], ux = (C[0] - A[0]) / dist2(A, C), uy = (C[1] - A[1]) / dist2(A, C);
+    const t = (B[0] - A[0]) * ux + (B[1] - A[1]) * uy, foot = [A[0] + t * ux, A[1] + t * uy], mirror = [2 * foot[0] - B[0], 2 * foot[1] - B[1]];
+    near(dist2(mirror, C), v, 1e-8);                                           // the other solution is the mirror image across AC
+    assert.ok(dist2(start[1], B) <= dist2(start[1], mirror) + 1e-9, 'chose the nearer of the two');
+  }
+});
+test('bad input is reported, never thrown or NaN', () => {
+  for (const v of [0, -2, NaN, Infinity, null, undefined]) assert.ok(G.setSideLength(T0(), 0, v, 1, [false, false, false]).error);
+  assert.ok(G.setSideLength([[1, 1], [1, 1], [3, 4]], 2, 5, 1, [false, false, false]).error, 'two corners on top of each other');
+  sweep(t => { const r = G.setSideLength(T0(), 1, Math.hypot(t[0], t[1]) + 0.01, 0, [false, true, false]); noBad(JSON.stringify(r)); });
+});
+test('moveEnd defaults to the later corner and is repaired', () => {
+  assert.deepEqual(plain(G.normalize({}).moveEnd), [1, 1, 1]);
+  assert.deepEqual(plain(G.normalize({ moveEnd: [0, 5, 'x'] }).moveEnd), [0, 1, 1]);
+  assert.deepEqual(plain(G.parseFile(G.serialize(G.normalize({ moveEnd: [0, 1, 0] }))).moveEnd), [0, 1, 0]);
 });
