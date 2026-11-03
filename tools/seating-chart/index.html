@@ -131,6 +131,15 @@
     border-radius:8px;background:#fff;}
   .roster li .nm{flex:1;font-weight:500;}
   .roster li .seat-tag{font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+  /* drag a student onto a desk (or back onto this list to unseat) */
+  .roster li .grip{cursor:grab;color:var(--muted);font-size:14px;line-height:1;padding:2px 2px;margin-left:-4px;
+    user-select:none;touch-action:none;letter-spacing:-2px;}
+  .roster li .grip:hover{color:var(--ink);}
+  .roster li.seated .nm{color:var(--muted);}
+  .roster li.dragging{opacity:.45;}
+  body.dragging-student{cursor:grabbing;user-select:none;}
+  .desk.droptarget,.desk.empty.droptarget:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent);}
+  .panel.droptarget{box-shadow:inset 0 0 0 3px var(--accent);}
   .xbtn{border:none;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:2px 4px;border-radius:6px;}
   .xbtn:hover{color:var(--danger);background:var(--danger-soft);}
 
@@ -652,6 +661,73 @@ function removeStudent(name){
 }
 function seatOf(name){ for(const id in state.assignment){ if(state.assignment[id]===name) return id; } return null; }
 
+/* Seat one student: onto an empty desk, or onto an occupied one (the two swap if
+   the student was already seated, otherwise the old occupant becomes unseated).
+   Pass deskId=null to unseat. Like swap mode, it clears the conflict highlight
+   rather than re-checking keep-apart pairs. */
+function seatStudent(name, deskId){
+  const from = seatOf(name);
+  if(deskId===from) return;
+  if(deskId==null){ delete state.assignment[from]; }
+  else {
+    const displaced = state.assignment[deskId];
+    if(from!=null){ if(displaced!=null) state.assignment[from]=displaced; else delete state.assignment[from]; }
+    state.assignment[deskId]=name;
+  }
+  conflictDeskIds.clear();
+  renderRoom(); renderStudents(); renderStatus();
+}
+/* Drag a roster row (by its grip) onto the seat map. Pointer events, so it works
+   with mouse and touch. Dropping a seated student back on the side panel unseats them. */
+function attachStudentDrag(li, name){
+  const grip = li.querySelector('.grip');
+  grip.addEventListener('pointerdown', e=>{
+    if(e.button!=null && e.button!==0) return;
+    e.preventDefault();
+    const x0=e.clientX, y0=e.clientY;
+    let ghost=null, overDesk=null;
+    const panel=document.querySelector('.panel');
+    const clearHover=()=>{
+      $('room').querySelectorAll('.desk.droptarget').forEach(n=>n.classList.remove('droptarget'));
+      panel.classList.remove('droptarget');
+    };
+    grip.setPointerCapture(e.pointerId);
+    const move=ev=>{
+      if(!ghost){
+        if(Math.abs(ev.clientX-x0)+Math.abs(ev.clientY-y0) < 4) return;
+        ghost=document.createElement('div'); ghost.className='drag-ghost'; ghost.textContent=name;
+        document.body.appendChild(ghost); li.classList.add('dragging'); document.body.classList.add('dragging-student');
+      }
+      ghost.style.left=(ev.clientX+10)+'px'; ghost.style.top=(ev.clientY+10)+'px';
+      overDesk=deskAtPoint(ev.clientX,ev.clientY);
+      clearHover();
+      if(overDesk){ const n=$('room').querySelector('.desk[data-id="'+overDesk+'"]'); if(n) n.classList.add('droptarget'); }
+      else if(seatOf(name)!=null && panel.contains(document.elementFromPoint(ev.clientX,ev.clientY))) panel.classList.add('droptarget');
+    };
+    const end=()=>{
+      grip.releasePointerCapture(e.pointerId);
+      grip.removeEventListener('pointermove',move);
+      grip.removeEventListener('pointerup',up);
+      grip.removeEventListener('pointercancel',end);
+      const wasDragging=!!ghost;
+      if(ghost) ghost.remove();
+      li.classList.remove('dragging'); document.body.classList.remove('dragging-student');
+      const overPanel=panel.classList.contains('droptarget');
+      clearHover();
+      return {wasDragging, overPanel};
+    };
+    const up=()=>{
+      const {wasDragging, overPanel}=end();
+      if(!wasDragging) return;
+      if(overDesk) seatStudent(name, overDesk);
+      else if(overPanel) seatStudent(name, null);
+    };
+    grip.addEventListener('pointermove',move);
+    grip.addEventListener('pointerup',up);
+    grip.addEventListener('pointercancel',end);
+  });
+}
+
 function renderStudents(){
   const ul=$('roster'); ul.innerHTML='';
   $('studentCount').textContent = state.students.length;
@@ -663,9 +739,11 @@ function renderStudents(){
     const li=document.createElement('li');
     const seatId=seatByName[name];
     const tag = seatId!=null ? `<span class="seat-tag">desk ${deskNo[seatId]||'?'}</span>` : '';
-    li.innerHTML = `<span class="nm"></span>${tag}<button class="xbtn" title="Remove">×</button>`;
+    li.innerHTML = `<span class="grip" title="Drag onto a desk" aria-hidden="true">⋮⋮</span><span class="nm"></span>${tag}<button class="xbtn" title="Remove">×</button>`;
+    if(seatId!=null) li.classList.add('seated');
     li.querySelector('.nm').textContent=name;
     li.querySelector('.xbtn').addEventListener('click',()=>removeStudent(name));
+    attachStudentDrag(li, name);
     ul.appendChild(li);
   }
   publishRosters();
