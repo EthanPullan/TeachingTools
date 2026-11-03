@@ -306,6 +306,7 @@
       <input id="className" type="text" placeholder="Class name" title="Rename the current class" aria-label="Current class name">
     </div>
     <div class="spacer"></div>
+    <button class="btn" id="fillBtn" title="Keep students already at a desk; seat only the rest"><span class="ic">＋</span> Fill remaining</button>
     <button class="btn primary" id="genBtn"><span class="ic">⚄</span> Generate</button>
     <button class="btn" id="printBtn"><span class="ic">⎙</span> Print</button>
   </header>
@@ -1108,7 +1109,10 @@ function histScores(){
   return hs;
 }
 
-function generate(){
+/* generate(): re-seat everyone.  generate(true) ("Fill remaining"): keep everyone who is
+   already at a desk exactly where they are, and seat only the rest in the empty desks.
+   Same engine either way — the kept students are just fixed seats the hill-climb never swaps. */
+function generate(keepSeated){
   if(state.desks.length===0){ toast('Add some desks first (Layout tab).','warn'); return; }
   if(state.students.length===0){ toast('Add some students first (Students tab).','warn'); return; }
 
@@ -1122,9 +1126,15 @@ function generate(){
   const strength=state.settings.rotationStrength;
   const w=(x,y)=>(x!=null&&y!=null) ? (hs[pairKey(x,y)]||0) : 0;   // history weight of a seated pair
 
-  const pool=shuffle(state.students);
-  const seatNames=pool.slice(0,Math.min(N,M));   // who gets a desk
-  const unseated=pool.slice(N);                   // overflow, if any
+  // fixed[i] = name kept at desk i (only when filling remaining); freeIdx = desks the engine may fill
+  const fixed=new Array(N).fill(null);
+  if(keepSeated) state.desks.forEach((d,i)=>{ const nm=state.assignment[d.id]; if(nm!=null && state.students.includes(nm)) fixed[i]=nm; });
+  const freeIdx=[...Array(N).keys()].filter(i=>fixed[i]==null);
+  const fixedNames=new Set(fixed.filter(x=>x!=null));
+  const pool=shuffle(state.students.filter(n=>!fixedNames.has(n)));
+  if(keepSeated && pool.length===0){ toast('Everyone is already seated.','ok'); return; }
+  const seatNames=pool.slice(0,Math.min(freeIdx.length,pool.length));   // who gets a desk (besides the kept ones)
+  const unseated=pool.slice(freeIdx.length);                            // overflow, if any
 
   // Score = apart*1e6 + togetherMisses*1e3 + rotationCost*strength.
   // rotationCost sums the history weight over every neighbour pair; the hill-climb
@@ -1149,15 +1159,16 @@ function generate(){
   const RESTARTS=16, ITERS=Math.min(6000, 1200 + 70*N);
   let best=null;
   for(let r=0;r<RESTARTS;r++){
-    const seat=new Array(N).fill(null);
-    const slots=shuffle([...Array(N).keys()]);
+    const seat=fixed.slice();
+    const slots=shuffle(freeIdx);
     for(let k=0;k<seatNames.length;k++) seat[slots[k]]=seatNames[k];
     const pos={};                                  // name -> seat index, kept in sync with seat[]
     for(let i=0;i<N;i++) if(seat[i]!=null) pos[seat[i]]=i;
     let rot=rotationCost(seat);
     let sc=constraintCost(pos) + rot*strength;
     for(let it=0;it<ITERS;it++){
-      const a=Math.floor(Math.random()*N), b=Math.floor(Math.random()*N);
+      if(freeIdx.length<2) break;                   // nothing the engine is allowed to move
+      const a=freeIdx[Math.floor(Math.random()*freeIdx.length)], b=freeIdx[Math.floor(Math.random()*freeIdx.length)];
       if(a===b) continue;
       const na=seat[a], nb=seat[b];
       if(na===nb) continue;                         // two empty desks — nothing changes
@@ -1206,8 +1217,9 @@ function generate(){
   renderRoom(); renderStudents(); renderStatus(); renderHistory();
 
   // summary toast
-  const empties=N-seatNames.length;
-  let msg=`Seated ${seatNames.length}.`;
+  const placed=seatNames.length+fixedNames.size;
+  const empties=N-placed;
+  let msg=keepSeated ? `Seated ${seatNames.length} more (${fixedNames.size} kept).` : `Seated ${seatNames.length}.`;
   const bits=[];
   if(apartConf.length) bits.push(`⚠ ${apartConf.length} keep-apart conflict${apartConf.length>1?'s':''} (${apartConf.join(', ')}) — the room can’t separate them`);
   if(togMiss) bits.push(`${togMiss} keep-together pair${togMiss>1?'s':''} not adjacent`);
@@ -1400,7 +1412,8 @@ $('modeToggle').addEventListener('click',e=>{
 
 // toolbar
 $('className').addEventListener('input',e=>{ state.className=e.target.value; commitActiveClass(); renderClassBar(); publishRosters(); });
-$('genBtn').addEventListener('click',generate);
+$('genBtn').addEventListener('click',()=>generate());
+$('fillBtn').addEventListener('click',()=>generate(true));
 $('printBtn').addEventListener('click',()=>window.print());
 window.addEventListener('beforeprint',()=>{
   $('printTitle').textContent = state.className.trim() || 'Seating chart';
