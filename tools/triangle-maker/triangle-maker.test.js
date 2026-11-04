@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const G = vm.runInNewContext(core + `;({ fmtNum, textW, defaultSpec, normalize, serialize, parseFile, solveTriangle, anglesFromSides, placeTriangle,
-  measure, classify, resolve, fitView, dragCorner, lockSummary, setSideLength, sideLabel, angleLabel, captionLines, drawFigure, renderSVG, mmToPx, PRESETS, crc32, pngWithDpi, footOn, SIZES })`, {});
+  measure, classify, resolve, fitView, dragCorner, lockSummary, setSideLength, cutEnds, cutGeometry, cutFromPart, parseRatio, simpleFraction, ratioText, slideCut, cutSummary, pieceLabel, cutExample, CUT_PARTS, sideLabel, angleLabel, captionLines, drawFigure, renderSVG, mmToPx, PRESETS, crc32, pngWithDpi, footOn, SIZES })`, {});
 const plain = v => JSON.parse(JSON.stringify(v));
 const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) <= e, a + ' vs ' + b);
 const spec = (patch = {}, build = {}) => { const s = G.normalize({}); Object.assign(s, patch); Object.assign(s.build, build); return s; };
@@ -423,4 +423,125 @@ test('moveEnd defaults to the later corner and is repaired', () => {
   assert.deepEqual(plain(G.normalize({}).moveEnd), [1, 1, 1]);
   assert.deepEqual(plain(G.normalize({ moveEnd: [0, 5, 'x'] }).moveEnd), [0, 1, 1]);
   assert.deepEqual(plain(G.parseFile(G.serialize(G.normalize({ moveEnd: [0, 1, 0] }))).moveEnd), [0, 1, 0]);
+});
+
+/* ---------- the parallel cut ---------- */
+const withCut = (patch = {}, build = {}, cut = {}) => { const s = spec(patch, build); Object.assign(s.cut, { on: true }, cut); return s; };
+const cross = (a, b, c, d) => (b[0] - a[0]) * (d[1] - c[1]) - (b[1] - a[1]) * (d[0] - c[0]);
+
+test('the textbook example: DH 4, HG 6, DE 6, EF 9, HE 7 on a 17.5 base', () => {
+  const s = G.cutExample(), R = G.resolve(s), cg = G.cutGeometry(s, R);
+  assert.deepEqual(plain(s.names), ['D', 'G', 'F']); near(R.m.sides[0], 17.5); near(R.m.sides[2], 10); near(R.m.sides[1], 15);
+  near(cg.lens.dh, 4); near(cg.lens.hg, 6); near(cg.lens.de, 6); near(cg.lens.ef, 9); near(cg.lens.he, 7);
+  assert.deepEqual(plain(cg.names.ends), { dh: 'DH', hg: 'HG', de: 'DE', ef: 'EF', he: 'HE' });
+  assert.deepEqual(plain(cg.names.whole), ['DG', 'DF', 'GF']);
+  assert.equal(s.unit, 'none'); assert.equal(s.cut.parts[0].mode, 'value'); assert.equal(s.cut.parts[1].mode, 'hidden');
+});
+test('HE is parallel to the chosen side for every side, every position and every triangle', () => {
+  for (const b of [{ method: 'sss', a: 5, b: 6, c: 7 }, { method: 'sas', a: 5, b: 4, C: 110 }, { method: 'rightlegs', a: 3, b: 4 }, { method: 'equi', a: 6 }])
+    for (const par of [0, 1, 2]) for (const t of [0.05, 0.4, 0.5, 0.93]) {
+      const s = withCut({}, b, { parallel: par, pos: t }), R = G.resolve(s), cg = G.cutGeometry(s, R), n = G.cutEnds(s);
+      const side = [R.pts[n.j], R.pts[n.k]];
+      near(cross(cg.H, cg.E, side[0], side[1]), 0, 1e-9);                       // parallel
+      near(Math.hypot(cg.E[0] - cg.H[0], cg.E[1] - cg.H[1]), t * R.m.sides[par], 1e-9);   // HE = t x the side
+      near(Math.hypot(cg.H[0] - R.pts[par][0], cg.H[1] - R.pts[par][1]) / cg.lj, t, 1e-9);   // DH : DG = t
+      near(Math.hypot(cg.E[0] - R.pts[par][0], cg.E[1] - R.pts[par][1]) / cg.lk, t, 1e-9);   // DE : DF = t
+      near(cg.lens.dh + cg.lens.hg, cg.lj); near(cg.lens.de + cg.lens.ef, cg.lk);
+    }
+});
+test('H is on the side to the next corner round and E on the side to the one after; names follow the corners', () => {
+  const s = withCut({ names: ['P', 'Q', 'R'] }, {}, { parallel: 1, names: ['M', 'N'] }), n = G.cutEnds(s);
+  assert.deepEqual([n.i, n.j, n.k], [1, 2, 0]); assert.deepEqual(plain(n.whole), ['QR', 'QP', 'RP']);
+  assert.deepEqual(plain(n.ends), { dh: 'QM', hg: 'MR', de: 'QN', ef: 'NP', he: 'MN' });
+  assert.equal(G.cutEnds(withCut({}, {}, { names: ['', '  '] })).h, 'H');         // blank names fall back
+});
+test('no cut when it is off or the triangle is flat', () => {
+  assert.equal(G.cutGeometry(spec({}), G.resolve(spec({}))), null);
+  const s = spec({ mode: 'free' }); s.cut.on = true; s.free.pts = [[0, 0], [2, 2], [4, 4]]; s.free.view = [-1, -1, 5, 5];
+  assert.equal(G.cutGeometry(s, G.resolve(s)), null);
+});
+test('typing any part of the cut gives the position, and they agree with each other', () => {
+  const s = G.cutExample(), R = G.resolve(s);
+  const want = { dh: 4, hg: 6, de: 6, ef: 9, he: 7 };
+  for (const part of G.CUT_PARTS) near(G.cutFromPart(s, R, part, want[part]).t, 0.4, 1e-8);   // corners are placed to 1e-9
+  const t = G.cutFromPart(s, R, 'ef', 3).t; near(t, 1 - 3 / 15, 1e-8);
+  s.cut.pos = t; const cg = G.cutGeometry(s, R); near(cg.lens.ef, 3, 1e-9);        // typing EF = 3 really makes EF 3
+  for (const part of G.CUT_PARTS) for (const v of [0.5, 2, 3.3]) { s.cut.pos = G.cutFromPart(s, R, part, v).t; near(G.cutGeometry(s, R).lens[part], v, 1e-9); }
+});
+test('typing a part that is too long, zero or not a number is refused, naming the whole side', () => {
+  const s = G.cutExample(), R = G.resolve(s);
+  const long = G.cutFromPart(s, R, 'dh', 10); assert.match(long.error, /DH has to be less than DG, which is 10/);
+  assert.match(G.cutFromPart(s, R, 'he', 17.5).error, /HE has to be less than GF, which is 17.5/);
+  assert.match(G.cutFromPart(s, R, 'ef', 99).error, /EF has to be less than DF/);
+  for (const v of [0, -1, NaN, Infinity, null]) assert.match(G.cutFromPart(s, R, 'dh', v).error, /above 0/);
+  assert.match(G.cutFromPart(spec({}), G.resolve(spec({})), 'dh', 1).error, /Turn the parallel cut on/);
+});
+test('parseRatio reads decimals, fractions, ratios and percentages, and refuses the rest', () => {
+  near(G.parseRatio('0.4'), 0.4); near(G.parseRatio('.4'), 0.4); near(G.parseRatio('2/5'), 0.4); near(G.parseRatio('2:5'), 0.4);
+  near(G.parseRatio(' 2 / 5 '), 0.4); near(G.parseRatio('40%'), 0.4); near(G.parseRatio('12.5%'), 0.125); near(G.parseRatio('2 ÷ 5'), 0.4);
+  for (const bad of ['', 'abc', '2/0', '1/', '%', '1.2.3', '-1', '2//5', '4/5/6']) assert.equal(G.parseRatio(bad), null, bad);
+});
+test('simpleFraction and ratioText give plain fractions, or a decimal when there is none', () => {
+  assert.deepEqual(plain(G.simpleFraction(0.4)), [2, 5]); assert.deepEqual(plain(G.simpleFraction(0.5)), [1, 2]); assert.deepEqual(plain(G.simpleFraction(1 / 3)), [1, 3]);
+  assert.equal(G.simpleFraction(0.3719), null); assert.equal(G.ratioText(0.4), '2/5'); assert.equal(G.ratioText(0.3719), '0.3719');
+});
+test('cutSummary states the ratios in the names on the figure', () => {
+  assert.equal(G.cutSummary(G.cutExample(), G.resolve(G.cutExample())), 'DH : DG = 2 : 5, so DH : HG = 2 : 3. HE = 0.4 × GF.');
+  const s = G.cutExample(); s.cut.pos = 0.3719; assert.match(G.cutSummary(s, G.resolve(s)), /DH ÷ DG = 0\.3719\. HE = 0\.3719 × GF\./);
+  assert.equal(G.cutSummary(spec({}), G.resolve(spec({}))), '');
+});
+test('slideCut: projects the pointer onto the side, snaps in units along it, and stays off the ends', () => {
+  const A = [0, 0], B = [10, 0];
+  near(G.slideCut(A, B, [4, 7], 0), 0.4); near(G.slideCut(A, B, [4.2, -5], 0.5), 0.4); near(G.slideCut(A, B, [4.3, 0], 0.5), 0.45); near(G.slideCut(A, B, [4.3, 0], 1), 0.4);
+  near(G.slideCut(A, B, [-5, 0], 0), 0.02); near(G.slideCut(A, B, [50, 0], 0), 0.98);
+  near(G.slideCut([1, 1], [4, 5], [1 + 1.5, 1 + 2], 0), 0.5);                 // a slanted side
+});
+test('piece labels: values, ends, unknown (question vs key), custom and hidden', () => {
+  const s = G.cutExample(); s.unit = 'cm'; s.showUnit = true;
+  const R = G.resolve(s), cg = G.cutGeometry(s, R), set = (q, mode, text) => { s.cut.parts[q].mode = mode; s.cut.parts[q].text = text || ''; return G.pieceLabel(s, R, cg, q, false); };
+  assert.equal(set(0, 'value').t, '4 cm'); assert.equal(set(1, 'ends').t, 'HG'); assert.equal(set(2, 'custom', ' x + 1 ').t, 'x + 1'); assert.equal(set(2, 'custom', ''), null); assert.equal(set(3, 'hidden'), null);
+  s.cut.parts[4].mode = 'unknown'; s.unknown = 'x';
+  assert.equal(G.pieceLabel(s, R, cg, 4, false).t, 'x'); assert.equal(G.pieceLabel(s, R, cg, 4, true).t, '7 cm'); assert.equal(G.pieceLabel(s, R, cg, 4, true).ans, true);
+});
+test('the cut draws: one more line, the names, the labels; arrowheads add two chevrons; key-only extras do not hide it', () => {
+  const lines = svg => (svg.match(/<line /g) || []).length, polys = svg => (svg.match(/<polyline /g) || []).length;
+  const off = spec({}, { method: 'sss', a: 5, b: 6, c: 7 }), on = withCut({}, { method: 'sss', a: 5, b: 6, c: 7 });
+  assert.equal(lines(G.renderSVG(on, {})) - lines(G.renderSVG(off, {})), 1);
+  const arr = withCut({}, { method: 'sss', a: 5, b: 6, c: 7 }, { arrows: true });
+  assert.equal(polys(G.renderSVG(arr, {})) - polys(G.renderSVG(on, {})), 2);
+  const t = svg => [...svg.matchAll(/>([^<>]+)<\/text>/g)].map(m => m[1]);
+  const named = withCut({ names: ['D', 'G', 'F'] }, {}, {}); named.cut.parts.forEach(x => { x.mode = 'ends'; });
+  assert.ok(['H', 'E', 'DH', 'HG', 'DE', 'EF', 'HE'].every(x => t(G.renderSVG(named, {})).includes(x)), t(G.renderSVG(named, {})).join(','));
+  const keyOnly = withCut({ extrasKeyOnly: true }); assert.equal(lines(G.renderSVG(keyOnly, { version: 'question' })), lines(G.renderSVG(keyOnly, { version: 'key' })));
+});
+test('unknown parts hide on the question and show, bold, on the key', () => {
+  const s = G.cutExample(); s.cut.parts.forEach(x => { x.mode = 'unknown'; });
+  const q = G.renderSVG(s, { version: 'question' }), k = G.renderSVG(s, { version: 'key' });
+  assert.equal((q.match(/>\?<\/text>/g) || []).length, 5); assert.ok(!/>\?</.test(k));
+  for (const v of ['4', '6', '9', '7']) assert.ok(new RegExp('font-weight="700"[^>]*>' + v + '</text>').test(k), v + ' is bold on the key');
+  const a = G.drawFigure(s, { version: 'question' }), b = G.drawFigure(s, { version: 'key' }); assert.equal(a.W, b.W); assert.equal(a.H, b.H);
+});
+test('every triangle, every parallel side, every position: valid SVG with all labels on, and labels stay inside the figure', () => {
+  for (const p of G.PRESETS) for (const par of [0, 1, 2]) for (const t of [0.05, 0.5, 0.95]) {
+    const s = withCut({ caption: 'Q', typeCaption: 'blank' }, p.b, { parallel: par, pos: t, arrows: true }); s.cut.parts.forEach(x => { x.mode = 'ends'; });
+    for (const version of ['question', 'key']) {
+      const f = G.drawFigure(s, { version }); noBad(f.svg);
+      for (const m of f.svg.matchAll(/<text x="([\d.-]+)" y="([\d.-]+)"/g)) assert.ok(+m[1] > 0 && +m[1] < f.W && +m[2] > 0 && +m[2] < f.H, p.name + ' ' + par + ' ' + t + ': ' + m[0]);
+    }
+  }
+});
+test('screen only: two blue rings on the cut, never in an export', () => {
+  const s = G.cutExample();
+  const ui = G.drawFigure(s, { ui: true }).svg, plainSvg = G.renderSVG(s, {});
+  assert.equal((ui.match(/class="ch"/g) || []).length, 2); assert.match(ui, /aria-label="Slide point H along DG"/); assert.match(ui, /aria-label="Slide point E along DF"/);
+  assert.ok(!/class="ch"|2f6f9f/.test(plainSvg));
+  assert.equal((G.drawFigure(spec({}), { ui: true }).svg.match(/class="ch"/g) || []).length, 0);
+});
+test('the cut survives save and open, and junk in the file is repaired', () => {
+  const s = G.cutExample(); s.cut.names = ['M', 'N']; s.cut.arrows = true; s.cut.parts[1].mode = 'custom'; s.cut.parts[1].text = 'x';
+  assert.deepEqual(plain(G.parseFile(G.serialize(s))), plain(s));
+  const d = G.normalize({}); assert.equal(d.cut.on, false); assert.equal(d.cut.pos, 0.4); assert.ok(d.cut.parts.every(x => x.mode === 'hidden') && d.cut.parts.length === 5);
+  const j = G.normalize({ cut: { on: 'yes', parallel: 9, pos: 5, parts: [{ mode: 'zzz' }, { mode: 'value' }], names: 'HE' } });
+  assert.equal(j.cut.on, false); assert.equal(j.cut.parallel, 0); assert.equal(j.cut.pos, 0.99); assert.equal(j.cut.parts[0].mode, 'hidden'); assert.equal(j.cut.parts[1].mode, 'value'); assert.deepEqual(plain(j.cut.names), ['H', 'E']);
+  assert.equal(G.normalize({ cut: { pos: -1 } }).cut.pos, 0.01); assert.equal(G.normalize({ cut: { pos: 'a' } }).cut.pos, 0.4);
 });

@@ -106,7 +106,10 @@
   .paper{background:#fff;box-shadow:var(--shadow);border:1px solid var(--line);max-width:100%;line-height:0;flex:none;}
   .paper svg{display:block;max-width:100%;height:auto;}
   .paper .vh{cursor:grab;touch-action:none;}
-  .paper .vh:focus{outline:none;}
+  .paper .ch{cursor:grab;touch-action:none;}
+  .paper .vh:focus,.paper .ch:focus{outline:none;}
+  .paper .ch:focus-visible circle,.paper .ch:hover circle{stroke-width:.9;fill:rgba(47,111,159,.3);}
+  .stack{display:grid;gap:16px;}
   .paper .vh:focus-visible circle,.paper .vh:hover circle{stroke-width:.9;fill:rgba(224,152,46,.32);}
   .empty{padding:44px 30px;line-height:1.5;font-size:14px;color:var(--danger);max-width:420px;text-align:center;}
   .caption{margin:0;font-size:12px;color:var(--muted);text-align:center;max-width:620px;}
@@ -178,6 +181,7 @@
         <button class="tab active" data-tab="triangle" role="tab" type="button">Triangle</button>
         <button class="tab" data-tab="labels" role="tab" type="button">Labels</button>
         <button class="tab" data-tab="marks" role="tab" type="button">Marks &amp; lines</button>
+        <button class="tab" data-tab="cut" role="tab" type="button">Parallel cut</button>
         <button class="tab" data-tab="page" role="tab" type="button">Page</button>
       </nav>
       <div class="tabbody">
@@ -277,6 +281,29 @@
             <p class="hint" style="margin-top:6px">Good for “find the height” questions: the question shows the bare triangle and the key adds the height.</p></div>
         </div>
 
+        <!-- PARALLEL CUT -->
+        <div class="pane" data-pane="cut" hidden>
+          <div><label class="check"><input type="checkbox" data-bind="cut.on"> Draw a segment parallel to a side</label>
+            <p class="hint" style="margin-top:6px">For similar triangles and proportional sides: the segment cuts the other two sides in the same ratio.</p>
+            <button class="btn small" type="button" data-act="cutExample" style="margin-top:8px" title="Replaces the current triangle with D, G, F and a segment HE parallel to GF">Textbook example (D, H, E)</button></div>
+          <div class="stack" data-if="cut.on=true">
+            <div><label class="lab" for="cutParallel">Parallel to</label>
+              <select id="cutParallel" data-bind="cut.parallel"><option value="0"></option><option value="1"></option><option value="2"></option></select></div>
+            <div><label class="lab" for="cutPos" id="cutPosLab">Where it cuts</label>
+              <div class="row"><input type="text" id="cutPos" autocomplete="off" aria-describedby="cutSummary" placeholder="2/5, 0.4 or 40%"><input type="range" id="cutRange" min="1" max="99" step="1" aria-label="Where it cuts, as a percentage of the way from the apex" style="padding:0"></div>
+              <p class="hint" id="cutSummary" style="margin-top:6px"></p><p class="issue" id="cutMsg" hidden></p></div>
+            <div><h3 class="section-title">Parts: type a length to move the cut</h3>
+              <div id="partRows" style="display:grid;gap:6px"></div>
+              <div class="row" style="margin-top:8px"><button class="btn small" type="button" data-act="setParts:value">All lengths</button><button class="btn small" type="button" data-act="setParts:unknown">All unknown</button><button class="btn small" type="button" data-act="setParts:hidden">None</button></div>
+              <p class="hint" style="margin-top:8px">Whole sides are labelled on the Labels tab. “Unknown” shows the mark on the question and the length, in bold, on the key.</p></div>
+            <div><h3 class="section-title">Point names</h3>
+              <div class="row"><input type="text" maxlength="3" data-bind="cut.names.0" aria-label="Name of the first point"><input type="text" maxlength="3" data-bind="cut.names.1" aria-label="Name of the second point"></div>
+              <p class="hint" style="margin-top:6px" id="cutNameHint"></p></div>
+            <label class="check"><input type="checkbox" data-bind="cut.arrows"> Arrowheads on the two parallel lines</label>
+            <p class="hint">Drag the blue rings on the figure to slide the cut. Arrow keys work on a focused ring.</p>
+          </div>
+        </div>
+
         <!-- PAGE -->
         <div class="pane" data-pane="page" hidden>
           <div class="fields">
@@ -352,6 +379,7 @@ const METHODS = ['sss', 'sas', 'asa', 'aas', 'ssa', 'rightlegs', 'righthyp', 'is
 const SIDE_MODES = ['value', 'letter', 'ends', 'unknown', 'custom', 'hidden'];
 const ANGLE_MODES = ['value', 'letter', 'unknown', 'custom', 'hidden'];
 const UNITS = ['cm', 'mm', 'm', 'km', 'in', 'ft', 'none'];
+const CUT_PARTS = ['dh', 'hg', 'de', 'ef', 'he'], PIECE_MODES = ['value', 'ends', 'unknown', 'custom', 'hidden'];
 
 /* ---------- numbers ---------- */
 function fmtNum(v, dec, autoMax) {                       // dec: 'auto' or a number of places
@@ -369,7 +397,7 @@ function textW(s, fs, bold) {                            // good-enough text wid
 
 /* ---------- the default spec, and making any input into a valid one ---------- */
 function defaultSpec() {
-  const side = () => ({ mode: 'value', text: '' }), tri = () => [false, false, false];
+  const side = () => ({ mode: 'value', text: '' }), piece = () => ({ mode: 'hidden', text: '' }), tri = () => [false, false, false];
   return {
     tool: TOOL, v: SPEC_VERSION, name: '', caption: '', typeCaption: 'off', mode: 'build',
     build: { method: 'rightlegs', a: 3, b: 4, c: 5, A: 40, B: 60, C: 60, ssaCase: 0, orient: 'auto', rotate: 0, flip: false },
@@ -380,6 +408,7 @@ function defaultSpec() {
     arcs: 'all', ticks: true, rightMark: true,
     lines: { alt: tri(), med: tri(), bis: tri(), perp: tri(), midseg: false },
     points: { mid: false, G: false, I: false, O: false, H: false }, circles: { inc: false, circ: false },
+    cut: { on: false, parallel: 0, pos: 0.4, names: ['H', 'E'], arrows: false, parts: [piece(), piece(), piece(), piece(), piece()] },
     altLabel: 'off', extrasKeyOnly: false,
     size: 'medium', trueSize: false, textSize: 'normal', weight: 'normal', fill: 'none', colour: false
   };
@@ -405,6 +434,9 @@ function normalize(raw) {
   pick('weight', ['normal', 'bold'], 'normal'); pick('fill', ['none', 'grey', 'tint'], 'none');
   s.build.ssaCase = s.build.ssaCase === 1 ? 1 : 0;
   s.moveEnd = s.moveEnd.map(v => (v === 0 ? 0 : 1));
+  s.cut.parallel = [0, 1, 2].indexOf(s.cut.parallel) < 0 ? 0 : s.cut.parallel;
+  s.cut.pos = Number.isFinite(s.cut.pos) ? Math.min(0.99, Math.max(0.01, s.cut.pos)) : 0.4;
+  s.cut.parts.forEach(x => { if (PIECE_MODES.indexOf(x.mode) < 0) x.mode = 'hidden'; });
   s.build.rotate = Number.isFinite(s.build.rotate) ? Math.max(-360, Math.min(360, s.build.rotate)) : 0;
   if (!(parseFloat(s.snap) >= 0)) s.snap = '0.5';
   s.sides.forEach(x => { if (SIDE_MODES.indexOf(x.mode) < 0) x.mode = 'value'; });
@@ -617,6 +649,72 @@ function dragCorner(base, i, target, lock, o) {
   if (win) { const cx = Math.min(Math.max(x, win[0]), win[2]), cy = Math.min(Math.max(y, win[1]), win[3]); if (cx !== x || cy !== y) note = 'edge'; x = cx; y = cy; }
   return place([x, y], note);
 }
+/* ---------- the parallel cut ----------
+   A segment HE parallel to side `parallel`. The corner opposite that side is the apex; H is on the side from the apex to the
+   next corner round, E on the side to the one after, both a fraction t of the way from the apex. So DH:DG = DE:DF = HE:GF = t. */
+function cutEnds(spec) {
+  const i = spec.cut.parallel, j = (i + 1) % 3, k = (i + 2) % 3, nm = c => vname(spec, c);
+  const h = (spec.cut.names[0] || '').trim() || 'H', e = (spec.cut.names[1] || '').trim() || 'E';
+  return { i, j, k, h, e, whole: [nm(i) + nm(j), nm(i) + nm(k), nm(j) + nm(k)], ends: { dh: nm(i) + h, hg: h + nm(j), de: nm(i) + e, ef: e + nm(k), he: h + e } };
+}
+function cutGeometry(spec, R) {
+  if (!spec.cut.on || !R || !R.ok || R.m.degenerate) return null;
+  const n = cutEnds(spec), P = R.pts, t = spec.cut.pos, at = c => [P[n.i][0] + t * (P[c][0] - P[n.i][0]), P[n.i][1] + t * (P[c][1] - P[n.i][1])];
+  const lj = dist(P[n.i], P[n.j]), lk = dist(P[n.i], P[n.k]), base = R.m.sides[n.i];
+  return { i: n.i, j: n.j, k: n.k, t, H: at(n.j), E: at(n.k), lj, lk, base, names: n,
+    lens: { dh: t * lj, hg: (1 - t) * lj, de: t * lk, ef: (1 - t) * lk, he: t * base } };
+}
+function simpleFraction(t, maxDen) {                                    // the smallest n/d (d up to maxDen) equal to t, or null
+  for (let d = 2; d <= (maxDen || 20); d++) { const n = Math.round(t * d); if (n >= 1 && n < d && Math.abs(t - n / d) < 1e-6) return [n, d]; }
+  return null;
+}
+function parseRatio(src) {                                              // "0.4", ".4", "2/5", "2:5", "40%" -> a number, or null
+  const s = String(src).trim().replace(/\s+/g, '').replace('÷', '/'); let m;
+  if ((m = /^(\d*\.?\d+)%$/.exec(s))) return +m[1] / 100;
+  if ((m = /^(\d*\.?\d+)[\/:](\d*\.?\d+)$/.exec(s))) return +m[2] === 0 ? null : +m[1] / +m[2];
+  if (/^\d*\.?\d+$/.test(s)) return +s;
+  return null;
+}
+function ratioText(t) { const f = simpleFraction(t); return f ? f[0] + '/' + f[1] : fmtNum(t, 'auto', 4); }
+function cutFromPart(spec, R, part, L) {                                // typing the length of one part tells us where the cut is
+  const cg = cutGeometry(spec, R); if (!cg) return { error: 'Turn the parallel cut on first.' };
+  if (!Number.isFinite(L) || !(L > 0)) return { error: 'Enter a length above 0.' };
+  const side = part === 'he' ? 2 : (part === 'dh' || part === 'hg') ? 0 : 1, whole = [cg.lj, cg.lk, cg.base][side];
+  const x = L / whole;
+  if (!(x < 1 - 1e-9)) return { error: cg.names.ends[part] + ' has to be less than ' + cg.names.whole[side] + ', which is ' + fmtNum(whole, 'auto', 2) + '.', whole };
+  return { t: part === 'hg' || part === 'ef' ? 1 - x : x };
+}
+function slideCut(A, B, mp, step) {                                     // where along A->B (0..1) the pointer is, snapped to `step` units
+  const dx = B[0] - A[0], dy = B[1] - A[1], len = Math.hypot(dx, dy);
+  let t = ((mp[0] - A[0]) * dx + (mp[1] - A[1]) * dy) / (len * len);
+  if (step > 0) t = Math.round(t * len / step) * step / len;
+  return Math.min(0.98, Math.max(0.02, t));
+}
+function cutSummary(spec, R) {
+  const cg = cutGeometry(spec, R); if (!cg) return '';
+  const f = simpleFraction(cg.t), w = cg.names.whole, e = cg.names.ends;
+  return (f ? e.dh + ' : ' + w[0] + ' = ' + f[0] + ' : ' + f[1] + ', so ' + e.dh + ' : ' + e.hg + ' = ' + f[0] + ' : ' + (f[1] - f[0]) + '.' : e.dh + ' ÷ ' + w[0] + ' = ' + fmtNum(cg.t, 'auto', 4) + '.') +
+    ' ' + e.he + ' = ' + fmtNum(cg.t, 'auto', 4) + ' × ' + w[2] + '.';
+}
+function pieceLabel(spec, R, cg, q, key) {
+  const L = spec.cut.parts[q], part = CUT_PARTS[q], v = fmtNum(cg.lens[part], spec.decimals, 2) + unitText(spec);
+  switch (L.mode) {
+    case 'value': return { t: v };
+    case 'ends': return { t: cg.names.ends[part] };
+    case 'unknown': return key ? { t: v, ans: true } : { t: spec.unknown || '?' };
+    case 'custom': return L.text.trim() ? { t: L.text.trim() } : null;
+    default: return null;
+  }
+}
+function cutExample() {                                                 // the textbook figure: D at the top, H on DG, E on DF, HE parallel to GF
+  const s = defaultSpec();
+  Object.assign(s.build, { method: 'sss', a: 17.5, b: 15, c: 10, orient: 'a' });
+  s.names = ['D', 'G', 'F']; s.unit = 'none'; s.showUnit = false; s.arcs = 'off'; s.ticks = false;
+  s.sides[1].mode = s.sides[2].mode = 'hidden'; s.angles.forEach(a => { a.mode = 'hidden'; });
+  Object.assign(s.cut, { on: true, parallel: 0, pos: 0.4 }); s.cut.parts[0].mode = 'value'; s.cut.parts[4].mode = 'value';
+  return normalize(s);
+}
+
 /* ---------- typing a side length ----------
    Side s joins the other two corners. One end (`end` 0 = the next corner round, 1 = the one after) moves; the other stays.
    The moving corner Q also touches one other side, the one opposite the staying corner P. If that side is locked, Q has to stay
@@ -848,6 +946,28 @@ function compose(spec, R, o, mg, fs) {
     }
   }
 
+  /* the parallel cut */
+  const cg = cutGeometry(spec, R);
+  if (cg) {
+    const Hm = T(cg.H), Em = T(cg.E), ci = cg.i, cj = cg.j, ck = cg.k;
+    const outN = (a, b, away) => { const d = unit(sub(b, a)); let n = [-d[1], d[0]]; const md = mul(add(a, b), .5); if (n[0] * (md[0] - away[0]) + n[1] * (md[1] - away[1]) < 0) n = [-n[0], -n[1]]; return n; };
+    const nJ = outN(P[ci], P[cj], P[ck]), nK = outN(P[ci], P[ck], P[cj]);          // outward from the sides it cuts
+    line(Hm, Em, INK, sw);
+    if (spec.cut.arrows) {                                                          // the little arrowheads that say "parallel"
+      const d = unit(sub(P[ck], P[cj])), n = [-d[1], d[0]];
+      const chev = p => { const tip = add(p, mul(d, 1.3 * k)), back = add(tip, mul(d, -2.6 * k)); poly([add(back, mul(n, 1.5 * k)), tip, add(back, mul(n, -1.5 * k))], INK, thin * 1.3); };
+      chev(add(Hm, mul(sub(Em, Hm), .35))); chev(add(P[cj], mul(sub(P[ck], P[cj]), .35)));
+    }
+    placeText(Hm, nJ, cg.names.h, 2.6, { italic: true, bold: true, size: fs * 1.1 });
+    placeText(Em, nK, cg.names.e, 2.6, { italic: true, bold: true, size: fs * 1.1 });
+    [[P[ci], Hm, nJ], [Hm, P[cj], nJ], [P[ci], Em, nK], [Em, P[ck], nK], [Hm, Em, null]].forEach(([a, b, n], q) => {
+      const lab = pieceLabel(spec, R, cg, q, key); if (!lab) return;
+      const md = mul(add(a, b), .5); let dir = n;
+      if (!dir) { const d = unit(sub(Em, Hm)); dir = [-d[1], d[0]]; if (dir[0] * (P[ci][0] - md[0]) + dir[1] * (P[ci][1] - md[1]) < 0) dir = [-dir[0], -dir[1]]; }   // HE's label sits on the apex side
+      placeText(md, dir, lab.t, 1.3, { ans: lab.ans });
+    });
+  }
+
   /* corner names */
   if (spec.showNames) for (let i = 0; i < 3; i++) {
     const j = (i + 1) % 3, kk = (i + 2) % 3;
@@ -896,6 +1016,11 @@ function uiLayer(spec, R, L) {                            // screen-only extras:
     if (!on) return;
     const a = L.toMM(R.pts[(i + 1) % 3][0], R.pts[(i + 1) % 3][1]), b = L.toMM(R.pts[(i + 2) % 3][0], R.pts[(i + 2) % 3][1]);
     g += '<line x1="' + a[0].toFixed(2) + '" y1="' + a[1].toFixed(2) + '" x2="' + b[0].toFixed(2) + '" y2="' + b[1].toFixed(2) + '" stroke="#e0982e" stroke-opacity=".5" stroke-width="1.8" stroke-linecap="round" pointer-events="none"/>';
+  });
+  const cgu = cutGeometry(spec, R);
+  if (cgu) [cgu.H, cgu.E].forEach((p, c) => {                // blue rings on the cut's ends: drag to slide the cut
+    const q = L.toMM(p[0], p[1]), nm = c ? cgu.names.e : cgu.names.h;
+    g += '<g class="ch" data-c="' + c + '" tabindex="0" role="slider" aria-label="Slide point ' + esc(nm) + ' along ' + esc(cgu.names.whole[c]) + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(cgu.t * 100) + '"><circle cx="' + q[0].toFixed(2) + '" cy="' + q[1].toFixed(2) + '" r="2.4" fill="rgba(47,111,159,.12)" stroke="#2f6f9f" stroke-width=".6"/></g>';
   });
   R.pts.forEach((p, i) => {
     const q = L.toMM(p[0], p[1]);
@@ -1007,6 +1132,7 @@ function pngWithDpi(u8, dpi) {
     const am = '<option value="value">Size</option><option value="letter">Letter (∠A)</option><option value="unknown">Unknown</option><option value="custom">My text</option><option value="hidden">None</option>';
     $('#sideRows').innerHTML = [0, 1, 2].map(i => rowHtml('sides', i, sm, 'Side ' + 'abc'[i])).join('');
     $('#angleRows').innerHTML = [0, 1, 2].map(i => rowHtml('angles', i, am, 'Angle at corner ' + (i + 1))).join('');
+    $('#partRows').innerHTML = [0, 1, 2, 3, 4].map(q => '<div class="stack" style="gap:4px"><div class="lrow"><span class="nm" data-partname="' + q + '"></span><input type="number" step="any" min="0" data-part="' + q + '" aria-label="Length of part ' + (q + 1) + '"><select data-bind="cut.parts.' + q + '.mode" aria-label="Label for part ' + (q + 1) + '"><option value="value">Length</option><option value="ends">Ends (DH)</option><option value="unknown">Unknown</option><option value="custom">My text</option><option value="hidden">None</option></select></div><input type="text" maxlength="10" placeholder="text" data-bind="cut.parts.' + q + '.text" data-if="cut.parts.' + q + '.mode=custom" aria-label="Custom text for part ' + (q + 1) + '"></div>').join('');
     $('#lenRows').innerHTML = [0, 1, 2].map(i => '<div class="lrow"><span class="nm" data-lenname="' + i + '"></span><input type="number" step="any" min="0" data-len="' + i + '" aria-label="Length of side ' + 'abc'[i] + '"><select data-end="' + i + '" aria-label="Which end of side ' + 'abc'[i] + ' moves"><option value="0"></option><option value="1"></option></select></div>').join('');
     $('#lockRow').innerHTML = [0, 1, 2].map(i => '<label class="check" title="Keep side ' + 'abc'[i] + ' the same length"><input type="checkbox" data-bind="lock.' + i + '" aria-label="Lock side ' + 'abc'[i] + '"><span class="lockN" data-side="' + i + '"></span></label>').join('');
     const lineKinds = [['alt', 'Height (altitude)'], ['med', 'Median'], ['bis', 'Angle bisector'], ['perp', 'Perpendicular bisector']];
@@ -1019,6 +1145,11 @@ function pngWithDpi(u8, dpi) {
       $('#sidesN' + i).textContent = 'abc'[i] + ' · ' + vname(spec, j) + vname(spec, k);
       $('#anglesN' + i).textContent = '∠' + n;
     }
+    const ce = cutEnds(spec);
+    $$('[data-partname]').forEach(el => { el.textContent = ce.ends[CUT_PARTS[+el.dataset.partname]]; });
+    [0, 1, 2].forEach(i => { $('#cutParallel').options[i].textContent = 'Side ' + 'abc'[i] + ' · ' + vname(spec, (i + 1) % 3) + vname(spec, (i + 2) % 3) + '  (apex ' + vname(spec, i) + ')'; });
+    $('#cutPosLab').textContent = 'Where it cuts · ' + ce.ends.dh + ' ÷ ' + ce.whole[0];
+    $('#cutNameHint').textContent = ce.h + ' is on ' + ce.whole[0] + ', ' + ce.e + ' is on ' + ce.whole[1] + '. Swap the names to swap them.';
     $$('[data-lenname]').forEach(el => { const i = +el.dataset.lenname; el.textContent = 'abc'[i] + ' · ' + vname(spec, (i + 1) % 3) + vname(spec, (i + 2) % 3); });
     $$('[data-end]').forEach(sel => {
       const i = +sel.dataset.end;
@@ -1068,7 +1199,11 @@ function pngWithDpi(u8, dpi) {
     paper.innerHTML = fig.svg;
     paper.setAttribute('aria-label', 'Triangle ' + [0, 1, 2].map(i => vname(spec, i)).join('') + ' (' + (state.view === 'key' ? 'answer key' : 'question') + ')');
     $('#viewHint').textContent = state.view === 'key' ? 'Answers show in bold.' : 'Unknown labels show as “' + (spec.unknown || '?') + '”.';
-    $('#lenMsg').hidden = true;
+    $('#lenMsg').hidden = true; $('#cutMsg').hidden = true;
+    const cgr = cutGeometry(spec, R);
+    $$('[data-part]').forEach(inp => { if (document.activeElement !== inp) inp.value = cgr ? fmtNum(cgr.lens[CUT_PARTS[+inp.dataset.part]], spec.decimals, 2) : ''; });
+    if (document.activeElement !== $('#cutPos')) $('#cutPos').value = cgr ? ratioText(cgr.t) : '';
+    $('#cutRange').value = String(Math.round(spec.cut.pos * 100)); $('#cutSummary').textContent = cutSummary(spec, R);
     $$('[data-len]').forEach(inp => { if (document.activeElement !== inp) inp.value = fmtNum(R.m.sides[+inp.dataset.len], spec.decimals, 2); });
     const m = R.m, dot = '<span class="dotline"></span>', u = unitText(spec);
     const n = (v, d) => fmtNum(v, spec.decimals, d);
@@ -1080,6 +1215,7 @@ function pngWithDpi(u8, dpi) {
       dot + '<span><b>' + +fig.W.toFixed(1) + ' × ' + +fig.H.toFixed(1) + '</b> mm · ' + mmToPx(fig.W, 300) + ' × ' + mmToPx(fig.H, 300) + ' px</span>' +
       (fig.L.real ? dot + '<span>real size</span>' : '');
     $('#caption2').textContent = '';
+    if (state.focusCut !== undefined && state.focusCut !== null) { const c = paper.querySelector('.ch[data-c="' + state.focusCut + '"]'); if (c) c.focus(); }
     if (state.focus !== undefined && state.focus !== null) { const h = paper.querySelector('.vh[data-i="' + state.focus + '"]'); if (h) h.focus(); }
   }
 
@@ -1095,7 +1231,7 @@ function pngWithDpi(u8, dpi) {
     const step = parseFloat(spec.snap) || 0, before = JSON.stringify(spec.free.pts);
     const r = dragCorner(base || spec.free.pts, i, mp, spec.lock, { step, win: state.fig.L.win, snapAngle: step > 0 });
     if (r.pts) spec.free.pts = r.pts;
-    if (!state.drag) {
+    if (state.drag === null) {
       if (r.note) toast(NOTES[r.note]);
       else if (spec.lock.some(Boolean) && JSON.stringify(spec.free.pts) === before) toast('That corner is held by a locked side, so it can only swing round it. Try another arrow key.');
     }
@@ -1105,7 +1241,17 @@ function pngWithDpi(u8, dpi) {
     const p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(ctm.inverse());
     return state.fig.L.toModel(p.x, p.y);
   }
+  function cutAnchor(c) { const R = resolve(spec), cg = cutGeometry(spec, R); return cg ? { cg, A: R.pts[cg.i], B: R.pts[c ? cg.k : cg.j] } : null; }
   $('#paper').addEventListener('pointerdown', e => {
+    const ring = e.target.closest('.ch');
+    if (ring && e.button <= 0) {                                         // slide the cut along its side
+      e.preventDefault(); const c = +ring.dataset.c, a = cutAnchor(c); if (!a) return;
+      state.drag = 'cut'; state.focusCut = c;
+      const move = ev => { const mp = pointerModel(ev); if (mp) { spec.cut.pos = slideCut(a.A, a.B, mp, parseFloat(spec.snap) || 0); render(); } };
+      const up = () => { window.removeEventListener('pointermove', move); state.drag = null; state.focusCut = null; commit(null, true); };
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up, { once: true });
+      move(e); return;
+    }
     const h = e.target.closest('.vh'); if (!h || e.button > 0) return;
     e.preventDefault();
     const i = +h.dataset.i;
@@ -1118,6 +1264,14 @@ function pngWithDpi(u8, dpi) {
     move(e);
   });
   $('#paper').addEventListener('keydown', e => {
+    const ring = e.target.closest('.ch');
+    if (ring) {                                                          // arrow keys slide the cut
+      const sgn = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key]; if (!sgn) return;
+      e.preventDefault(); const c = +ring.dataset.c, a = cutAnchor(c); if (!a) return;
+      const len = dist(a.A, a.B), snap = parseFloat(spec.snap) || 0, step = (snap || 0.1) * (e.shiftKey ? 5 : 1);
+      const now = spec.cut.pos * len, next = snap ? (Math.round(now / snap) + sgn * (e.shiftKey ? 5 : 1)) * snap : now + sgn * step;
+      state.focusCut = c; spec.cut.pos = Math.min(0.98, Math.max(0.02, next / len)); commit('cutnudge', false); return;
+    }
     const h = e.target.closest('.vh'); if (!h) return;
     const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key]; if (!d) return;
     e.preventDefault();
@@ -1125,8 +1279,13 @@ function pngWithDpi(u8, dpi) {
     const step = (parseFloat(spec.snap) || 0.1) * (e.shiftKey ? 5 : 1), p = spec.free.pts[i];
     state.focus = i; moveCorner(i, [p[0] + d[0] * step, p[1] + d[1] * step]); commit('nudge' + i, true);
   });
-  document.addEventListener('change', e => { const t = e.target; if (t.dataset && t.dataset.len !== undefined) { const R = resolve(spec); if (R.ok) t.value = fmtNum(R.m.sides[+t.dataset.len], spec.decimals, 2); } });   // tidy the box when you leave it
-  document.addEventListener('focusin', e => { if (!(e.target.closest && e.target.closest('.vh'))) state.focus = null; });   // only keep the ring focused while a ring is
+  document.addEventListener('change', e => {
+    const t = e.target, cg = cutGeometry(spec, resolve(spec));                              // tidy a typed box when you leave it (no redraw: that would drop focus)
+    if (cg && t.dataset && t.dataset.part !== undefined) t.value = fmtNum(cg.lens[CUT_PARTS[+t.dataset.part]], spec.decimals, 2);
+    if (cg && t.id === 'cutPos') t.value = ratioText(cg.t);
+    if (t.dataset && t.dataset.len !== undefined) { const R = resolve(spec); if (R.ok) t.value = fmtNum(R.m.sides[+t.dataset.len], spec.decimals, 2); }
+  });
+  document.addEventListener('focusin', e => { const c = e.target.closest ? e.target : null; if (!(c && c.closest('.vh'))) state.focus = null; if (!(c && c.closest('.ch'))) state.focusCut = null; });   // only keep the ring focused while a ring is
 
   /* ---------- files ---------- */
   const slug = () => ((spec.name || 'triangle').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'triangle');
@@ -1171,6 +1330,18 @@ function pngWithDpi(u8, dpi) {
   }
 
   /* ---------- events ---------- */
+  function cutError(msg) { const m = $('#cutMsg'); m.textContent = msg; m.hidden = false; }
+  function applyPart(q, v) {                                // type the length of a part: the cut moves to match
+    const r = cutFromPart(spec, resolve(spec), CUT_PARTS[q], v);
+    if (r.error) return cutError(r.error);
+    spec.cut.pos = r.t; commit('cutpart', false);
+  }
+  function applyPos(text) {                                 // type a ratio: 2/5, 2:5, 0.4 or 40%
+    if (text.trim() === '') return;
+    const t = parseRatio(text);
+    if (t === null || !(t > 0 && t < 1)) return cutError('Type a fraction like 2/5, a decimal like 0.4 or a percentage like 40%, more than 0 and less than 1 (100%).');
+    spec.cut.pos = t; commit('cutpos', false);
+  }
   function applyLength(i, v) {                              // type a side length (Dragging corners)
     if (spec.mode !== 'free') return;
     const r = setSideLength(spec.free.pts, i, v, spec.moveEnd[i], spec.lock);
@@ -1182,6 +1353,9 @@ function pngWithDpi(u8, dpi) {
   }
   document.addEventListener('input', e => {
     const t = e.target;
+    if (t.dataset && t.dataset.part !== undefined) { if (t.value.trim() !== '' && Number.isFinite(Number(t.value))) applyPart(+t.dataset.part, Number(t.value)); return; }
+    if (t.id === 'cutPos') { applyPos(t.value); return; }
+    if (t.id === 'cutRange') { spec.cut.pos = Number(t.value) / 100; commit('cutrange', false); return; }
     if (t.dataset && t.dataset.len !== undefined) { if (t.value.trim() !== '' && Number.isFinite(Number(t.value))) applyLength(+t.dataset.len, Number(t.value)); return; }
     if (t.dataset && t.dataset.end !== undefined) { spec.moveEnd[+t.dataset.end] = Number(t.value) ? 1 : 0; commit(null, false); return; }
     const path = t.dataset && t.dataset.bind; if (!path || t.classList.contains('seg')) return;
@@ -1231,6 +1405,8 @@ function pngWithDpi(u8, dpi) {
       spec.mode = 'build'; commit(null, true); toast('Now Measurements, with these three sides (rounded to 2 decimals).', 'ok');
     }
     else if (a === 'setSides') { spec.sides.forEach(s => { s.mode = arg; }); commit(null, true); }
+    else if (a === 'setParts') { spec.cut.parts.forEach(s => { s.mode = arg; }); commit(null, true); }
+    else if (a === 'cutExample') { spec = cutExample(); commit(null, true); toast('Textbook example. Undo brings back what you had.', 'ok'); }
     else if (a === 'setAngles') { spec.angles.forEach(s => { s.mode = arg; }); commit(null, true); }
   }
   $('#newBtn').addEventListener('click', () => { spec = normalize({}); commit(null, true); toast('New triangle. Undo brings back the old one.', 'ok'); });

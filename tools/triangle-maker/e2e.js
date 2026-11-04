@@ -210,6 +210,125 @@ function pngInfo(buf) {
   check('every corner is inside the figure', inside.every(Boolean), inside);
   await page.click('[data-bind="mode"] button[data-v="build"]');
 
+  /* the parallel cut */
+  await page.click('[data-preset="3"]');
+  await page.click('.tab[data-tab="cut"]');
+  check('the cut is off to begin with: tab shows only the switch, no rings on the figure', (await page.locator('#cutPos').isHidden()) && (await page.locator('.ch').count()) === 0);
+  await page.click('[data-act="cutExample"]');
+  const ctexts = async () => page.locator('#paper svg text').evaluateAll(els => els.map(e => e.textContent));
+  let ct = await ctexts();
+  check('the textbook example has D, G, F, H, E and the figures 4, 7 and 17.5', ['D', 'G', 'F', 'H', 'E', '4', '7', '17.5'].every(x => ct.includes(x)) && ct.length === 8, ct);
+  check('the position reads 2/5 with the ratio spelled out', (await page.inputValue('#cutPos')) === '2/5' && /DH : DG = 2 : 5, so DH : HG = 2 : 3\. HE = 0\.4 × GF\./.test(await page.locator('#cutSummary').innerText()));
+  check('the five part boxes show the live lengths', JSON.stringify(await page.locator('[data-part]').evaluateAll(e => e.map(x => x.value))) === '["4","6","6","9","7"]');
+  check('two blue rings on H and E', (await page.locator('.ch').count()) === 2);
+  await page.screenshot({ path: shots ? path.join(shots, 'textbook-example.png') : os.tmpdir() + '/x.png' });
+  const cutPos = async () => (await spec()).cut.pos;
+
+  /* typing a part */
+  await page.locator('[data-part="0"]').fill('2.5');                // DH = 2.5 of DG = 10
+  check('typing DH = 2.5 puts the cut a quarter of the way', Math.abs((await cutPos()) - 0.25) < 1e-9 && /^[0-9.]+$/.test(await page.locator('[data-part="4"]').inputValue()) && (await page.locator('[data-part="4"]').inputValue()) === '4.38');
+  await page.locator('[data-part="3"]').fill('3');                  // EF = 3 of DF = 15
+  check('typing EF = 3 moves it too (the others follow)', Math.abs((await cutPos()) - 0.8) < 1e-9 && (await page.locator('[data-part="0"]').inputValue()) === '8');
+  await page.locator('[data-part="0"]').fill('10');
+  check('a part as long as the whole side is refused with the reason', /DH has to be less than DG, which is 10/.test(await page.locator('#cutMsg').innerText()) && Math.abs((await cutPos()) - 0.8) < 1e-9);
+  await page.locator('[data-part="4"]').fill('7');
+  check('...and a good value clears the message and works', (await page.locator('#cutMsg').isHidden()) && Math.abs((await cutPos()) - 0.4) < 1e-9);
+
+  /* typing a ratio, and the slider */
+  await page.fill('#cutPos', '3:5');
+  check('3:5 puts the cut at 3/5', Math.abs((await cutPos()) - 0.6) < 1e-9);
+  await page.fill('#cutPos', '25%');
+  check('25% works', Math.abs((await cutPos()) - 0.25) < 1e-9);
+  await page.fill('#cutPos', '0.7');
+  check('0.7 works', Math.abs((await cutPos()) - 0.7) < 1e-9);
+  await page.fill('#cutPos', 'banana');
+  check('nonsense is explained, and changes nothing', /fraction like 2\/5/.test(await page.locator('#cutMsg').innerText()) && Math.abs((await cutPos()) - 0.7) < 1e-9);
+  await page.fill('#cutPos', '1.5');
+  check('a ratio of 1 or more is refused', !(await page.locator('#cutMsg').isHidden()) && Math.abs((await cutPos()) - 0.7) < 1e-9);
+  await page.fill('#cutPos', '');
+  check('an empty box is left alone while typing', Math.abs((await cutPos()) - 0.7) < 1e-9);
+  await page.locator('#cutRange').fill('40');
+  check('the slider sets 40%', Math.abs((await cutPos()) - 0.4) < 1e-9 && (await page.inputValue('#cutPos')) === '2/5');
+
+  /* dragging the rings */
+  const cring = async c => page.locator('.ch[data-c="' + c + '"] circle').boundingBox();
+  const dragCut = async (c, dx, dy) => { const b = await cring(c), x = b.x + b.width / 2, y = b.y + b.height / 2; await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + dx / 2, y + dy / 2, { steps: 4 }); await page.mouse.move(x + dx, y + dy, { steps: 4 }); await page.mouse.up(); };
+  const p0 = await cutPos();
+  await dragCut(0, -25, 60);                                        // H slides down DG
+  const p1 = await cutPos();
+  check('dragging H down its side moves the cut further from D', p1 > p0 + 0.05, [p0, p1]);
+  check('snap: DH is a whole number of half-units', Math.abs(p1 * 10 * 2 - Math.round(p1 * 10 * 2)) < 1e-6, p1 * 10);
+  check('E followed, so HE is still parallel to GF', await page.evaluate(() => { const T = window.TriangleMaker, R = T.core.resolve(T.spec); const t = T.spec.cut.pos, P = R.pts, H = [P[0][0] + t * (P[1][0] - P[0][0]), P[0][1] + t * (P[1][1] - P[0][1])], E = [P[0][0] + t * (P[2][0] - P[0][0]), P[0][1] + t * (P[2][1] - P[0][1])]; return Math.abs((E[0] - H[0]) * (P[2][1] - P[1][1]) - (E[1] - H[1]) * (P[2][0] - P[1][0])) < 1e-9; }));
+  await dragCut(1, 10, -50);                                        // E back up its side
+  check('dragging E slides the same cut', (await cutPos()) < p1);
+  await dragCut(0, 0, 900);
+  check('dragging far past the end stops short of the base (never a flat triangle)', (await cutPos()) <= 0.98 + 1e-9 && (await cutPos()) > 0.5);
+  await page.fill('#cutPos', '2/5');
+  await page.focus('.ch[data-c="0"]');
+  await page.keyboard.press('ArrowRight');
+  check('arrow keys nudge a focused ring by the snap step (0.5 of 10 = 0.05)', Math.abs((await cutPos()) - 0.45) < 1e-9, await cutPos());
+  check('...and keep the focus', await page.evaluate(() => document.activeElement && document.activeElement.classList.contains('ch')));
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
+  check('left goes the other way', Math.abs((await cutPos()) - 0.35) < 1e-9);
+  await page.keyboard.press('Shift+ArrowRight');
+  check('shift takes bigger steps', Math.abs((await cutPos()) - 0.6) < 1e-9, await cutPos());
+  await page.fill('#cutPos', '2/5');
+
+  /* the figure around it keeps working */
+  const cornerBefore = JSON.stringify((await spec()).build);
+  await dragRing(0, 0, 0);
+  check('grabbing a corner ring still works and the cut rings stay', (await page.locator('.ch').count()) === 2);
+  await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+
+  /* which side, names, arrowheads */
+  await page.selectOption('#cutParallel', '1');
+  check('parallel to side b (apex G): the labels use the new names', /where it cuts · GH ÷ GF/i.test(await page.locator('#cutPosLab').innerText()), await page.locator('#cutPosLab').innerText());
+  check('the figure changed apex', (await spec()).cut.parallel === 1 && (await page.locator('.ch').count()) === 2);
+  await page.selectOption('#cutParallel', '0');
+  await page.locator('[data-bind="cut.names.0"]').fill('M'); await page.locator('[data-bind="cut.names.1"]').fill('N');
+  ct = await ctexts();
+  check('renaming the points renames them on the figure and in the part rows', ct.includes('M') && ct.includes('N') && !ct.includes('H') && (await page.locator('[data-partname="0"]').innerText()) === 'DM' && /M is on DG, N is on DF/.test(await page.locator('#cutNameHint').innerText()), ct);
+  await page.locator('[data-bind="cut.names.0"]').fill('H'); await page.locator('[data-bind="cut.names.1"]').fill('E');
+  const polys = async () => page.locator('#paper svg polyline').count();
+  const polys0 = await polys(); await page.check('[data-bind="cut.arrows"]');
+  check('arrowheads add two chevrons', (await polys()) === polys0 + 2);
+  await page.uncheck('[data-bind="cut.arrows"]');
+
+  /* worksheet: question and key */
+  await page.fill('#cutPos', '2/5');
+  await page.click('[data-act="setParts:unknown"]');
+  ct = await ctexts();
+  check('question: every part is hidden behind the unknown mark', ct.filter(x => x === '?').length === 5 && !ct.includes('4'), ct);
+  await page.click('[data-view="key"]');
+  ct = await ctexts();
+  check('key: every part is shown', ['4', '6', '9', '7'].every(x => ct.includes(x)) && !ct.includes('?'), ct);
+  await page.click('[data-view="question"]');
+  await page.selectOption('[data-bind="cut.parts.2.mode"]', 'custom');
+  check('a custom-text box appears only for My text', await page.locator('[data-bind="cut.parts.2.text"]').isVisible() && await page.locator('[data-bind="cut.parts.3.text"]').isHidden());
+  await page.fill('[data-bind="cut.parts.2.text"]', 'x + 1');
+  check('and its text is drawn', (await ctexts()).includes('x + 1'));
+
+  /* exports and saving */
+  const cutSvg = await download(() => page.click('#svgBtn'));
+  const svgT = fs.readFileSync(cutSvg.file, 'utf8');
+  check('the exported SVG has the cut and none of the screen rings', /x \+ 1/.test(svgT) && !svgT.includes('class="ch"') && !svgT.includes('2f6f9f'));
+  const saved2 = await download(() => page.click('#saveBtn'));
+  await page.click('#newBtn');
+  check('New switches the cut off', (await spec()).cut.on === false && (await page.locator('.ch').count()) === 0);
+  await page.setInputFiles('#fileIn', saved2.file); await page.waitForTimeout(150);
+  s = await spec();
+  check('Open brings the cut back exactly', s.cut.on === true && Math.abs(s.cut.pos - 0.4) < 1e-9 && s.names.join('') === 'DGF' && s.cut.parts[2].text === 'x + 1');
+  await page.reload(); await page.waitForSelector('#paper svg');
+  check('and it is still there after a reload', (await spec()).cut.on === true && (await page.locator('.ch').count()) === 2);
+
+  /* the corner-0 drag no longer fires "edge of the view" toasts */
+  await page.click('[data-preset="3"]'); await page.click('[data-bind="mode"] button[data-v="free"]');
+  await page.evaluate(() => { document.querySelector('#toasts').innerHTML = ''; });
+  await dragRing(0, 900, 0);
+  check('dragging corner A to the edge of the view is silent while dragging', (await page.locator('.toast').count()) === 0, await page.locator('.toast').allInnerTexts());
+  await page.click('[data-bind="mode"] button[data-v="build"]');
+  await page.click('#newBtn'); await page.click('.tab[data-tab="triangle"]');       // back to a clean slate for the rest
+
   /* worksheet: unknowns hide on the question, show on the key */
   await page.click('[data-preset="6"]');
   await page.click('.tab[data-tab="labels"]');
