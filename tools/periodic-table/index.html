@@ -100,9 +100,10 @@
   .list li.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);}
   .list li .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .list li.done .nm{color:var(--muted);}
-  .sym-badge{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--board);background:var(--panel-2);
-    border:1px solid var(--line);border-radius:6px;padding:1px 7px;min-width:30px;text-align:center;}
-  .sym-badge.none{color:var(--muted);font-weight:400;border-style:dashed;}
+  .sym-in{width:62px;flex:none;border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:var(--panel-2);
+    font-family:var(--mono);font-size:12px;font-weight:600;color:var(--board);text-align:center;}
+  .sym-in::placeholder{color:var(--muted);font-weight:400;}
+  .sym-in:focus{background:#fff;}
   .xbtn{border:none;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:2px 4px;border-radius:6px;}
   .xbtn:hover{color:var(--danger);background:var(--danger-soft);}
   .xbtn[hidden]{display:none;}
@@ -227,6 +228,7 @@
       <button class="btn small" id="openBtn" title="Open a PDF saved from here, or a saved data file"><span class="ic">📂</span>Open…</button>
       <button class="btn small" id="jsonBtn" title="Save the data as a small file you can re-open here"><span class="ic">💾</span>Save data</button>
     </div>
+    <datalist id="symList"></datalist>
     <input type="file" id="openFile" accept=".pdf,.json,application/pdf,application/json" hidden>
   </header>
   <div class="subbar">
@@ -250,7 +252,7 @@
           <h3 class="section-title" style="margin:0">Students</h3>
           <label class="check"><input type="checkbox" id="onlyUn"> Unassigned only</label>
         </div>
-        <p class="hint" style="margin:8px 0">Pick a student, then click an element. Clicking an assigned element selects that student so you can move them; click the same element again to unassign.</p>
+        <p class="hint" style="margin:8px 0">Pick a student, then click an element — or type a symbol in the small box beside their name and choose from the list. Clicking an assigned element selects that student so you can move them; click the same element again to unassign.</p>
         <ul class="list" id="stuList"></ul>
         <div class="row wrap stack" style="margin-top:12px">
           <button class="btn small" id="randBtn"><span class="ic">🎲</span>Assign randomly</button>
@@ -663,6 +665,7 @@ function renderTableSel(){
   $('pdfScope').hidden = names.length < 2;
 }
 
+let pendingFocus = null;   // after typing a symbol, jump to the next student's box
 function renderPanel(){
   $('panel').hidden = state.mode!=='assign';
   if(state.mode!=='assign') return;
@@ -673,6 +676,9 @@ function renderPanel(){
   $('hand').open = $('hand').open || noClasses;
   $('rmClass').hidden = !(cur && cur.local);
   $('panelCls').textContent = name || '—';
+  const dl = $('symList'); dl.textContent = '';
+  const taken = tbl();
+  EL.forEach(e=>{ const o = document.createElement('option'); o.value = e.sym; o.label = e.name + (taken[e.sym] ? ' · taken by ' + taken[e.sym] : ''); dl.appendChild(o); });
   const list = $('stuList'); list.textContent='';
   $('staleNote').hidden = !(name && !cur);
   if(!cur){ $('clsCount').textContent = '0 / 0'; return; }
@@ -684,7 +690,12 @@ function renderPanel(){
     const li = document.createElement('li');
     li.className = (sym?'done ':'') + (state.sel===n?'sel':'');
     const nm = document.createElement('span'); nm.className='nm'; nm.textContent=n; nm.title=n;
-    const bd = document.createElement('span'); bd.className='sym-badge' + (sym?'':' none'); bd.textContent = sym || '—';
+    const bd = document.createElement('input'); bd.type = 'text'; bd.className = 'sym-in'; bd.value = sym || ''; bd.placeholder = '—';
+    bd.setAttribute('list','symList'); bd.autocomplete = 'off'; bd.spellcheck = false; bd.maxLength = 14; bd.dataset.name = n;
+    bd.setAttribute('aria-label', 'Element symbol for ' + n);
+    ['click','mousedown'].forEach(ev=>bd.addEventListener(ev, e=>e.stopPropagation()));   // don't select the row when typing
+    bd.addEventListener('change', ()=>setByTyping(n, bd.value));
+    bd.addEventListener('input', e=>{ if(e.inputType==='insertReplacementText') setByTyping(n, bd.value); });   // picked from the drop-down
     const x = document.createElement('button'); x.className='xbtn'; x.type='button'; x.textContent='×'; x.title='Unassign'; x.setAttribute('aria-label','Unassign '+n); x.hidden=!sym;
     x.addEventListener('click', ev=>{ ev.stopPropagation(); unassign(sym); });
     li.append(nm, bd, x);
@@ -692,6 +703,7 @@ function renderPanel(){
     list.appendChild(li);
   });
   $('clsCount').textContent = placed + ' / ' + cur.students.length;
+  if(pendingFocus){ const f = [...list.querySelectorAll('.sym-in')].find(i=>i.dataset.name===pendingFocus); pendingFocus = null; if(f){ f.focus(); f.select(); } }
 }
 
 function renderStatus(){
@@ -756,11 +768,29 @@ function onElement(sym){
   }
   const n = state.sel;
   if(occ===n){ delCell(sym); state.sel = null; save(); render(); return; }   // same element again → unassign
-  const prev = studentSym(n);
-  if(prev) delCell(prev);                                                    // moving
-  if(occ) toast(occ + ' was on ' + e.name + ' — replaced by ' + n + '.');
-  setCell(sym, n);
+  place(n, sym);
   state.sel = nextUnassigned(cur, n);
+  save(); render();
+}
+// Put student n on an element in the active table (moving them if they were elsewhere, replacing anyone already there).
+function place(n, sym){
+  const e = BY_SYM[sym], occ = tbl()[sym], prev = studentSym(n);
+  if(prev) delCell(prev);
+  if(occ && occ!==n) toast(occ + ' was on ' + e.name + ' — replaced by ' + n + '.');
+  setCell(sym, n);
+}
+// The small box beside a student's name: a symbol (or element name), or empty to unassign.
+function setByTyping(n, raw){
+  const v = raw.trim(), cur = curClass();
+  if(!v){ const s = studentSym(n); if(s) unassign(s); return; }
+  const lc = v.toLowerCase();
+  const e = EL.find(x=>x.sym.toLowerCase()===lc) || EL.find(x=>x.name.toLowerCase()===lc);
+  if(!e){ toast('“' + v + '” isn’t an element symbol.', 'err'); render(); return; }
+  if(tbl()[e.sym]===n){ render(); return; }                                  // already there
+  place(n, e.sym);
+  const nx = nextUnassigned(cur, n);
+  state.sel = nx; pendingFocus = nx;
+  state.detailZ = e.z;
   save(); render();
 }
 function assignRandomly(){
