@@ -148,6 +148,8 @@
   .pt.hide-mass .mass{display:none;}
   .pt.hide-mass .mid{padding-bottom:4%;}
   .el.dim{opacity:.22;}
+  .el.grey:not(.mine){opacity:.3;filter:grayscale(1);}                 /* Assign mode "grey out" (taken / untaken) */
+  .el.grey:not(.mine):hover{opacity:.7;}
   .el.focus{box-shadow:0 0 0 2px var(--board);}
   .el.mine{box-shadow:0 0 0 3px var(--accent);z-index:3;}
   .assigning .el:not(.has-who):hover{box-shadow:0 0 0 2px var(--accent),0 8px 16px rgba(20,40,33,.08);}
@@ -172,7 +174,10 @@
 
   .detail sup{font-size:.7em;}
   .sources{max-width:1000px;margin:12px auto 0;text-align:center;font-size:11px;}
-  .subbar{padding:5px 16px;background:var(--panel);border-bottom:1px solid var(--line);}
+  .subbar{display:flex;align-items:center;gap:22px;flex-wrap:wrap;padding:5px 16px;background:var(--panel);border-bottom:1px solid var(--line);}
+  .greyctl{display:flex;align-items:center;gap:8px;} .greyctl[hidden]{display:none;}
+  .greyctl .lab{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);}
+  .greyctl .seg button{padding:4px 11px;font-size:12px;}
   .tsel{display:flex;align-items:center;gap:8px;} .tsel .lab{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);}
   .tsel select{width:auto;min-width:150px;max-width:280px;font-weight:600;}
   .filebtns{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
@@ -207,7 +212,7 @@
     .app,.main,.stage,.canvas-scroll{display:block;height:auto;overflow:visible;padding:0;background:#fff;}
     .pt-wrap{width:100%;min-width:0;}
     .el{box-shadow:none;transition:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .el.dim{opacity:1;} .el.mine,.el.focus{box-shadow:none;}
+    .el.dim,.el.grey:not(.mine){opacity:1;filter:none;} .el.mine,.el.focus{box-shadow:none;}
     .detail{display:none;}
     .print-title{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border:1px solid var(--line);border-radius:var(--radius);}
     .print-title h2{margin:0;font-size:24px;letter-spacing:.12em;text-transform:uppercase;}
@@ -246,6 +251,14 @@
       <label class="check"><input type="checkbox" id="showMass"> Atomic mass</label>
       <label class="check"><input type="checkbox" id="showIons"> Common ions</label>
       <label class="check" id="namesWrap"><input type="checkbox" id="showNames" checked> Student names</label>
+    </div>
+    <div class="greyctl" id="greyCtl" role="group" aria-label="Grey out elements (Assign mode)" hidden>
+      <span class="lab">Grey out</span>
+      <div class="seg">
+        <button type="button" data-g="none" class="active" aria-pressed="true">Nothing</button>
+        <button type="button" data-g="taken" aria-pressed="false" title="Fade the elements that already have a student, so what's left stands out">Taken</button>
+        <button type="button" data-g="untaken" aria-pressed="false" title="Fade the elements that are still free, so the assigned ones stand out">Untaken</button>
+      </div>
     </div>
   </div>
 
@@ -475,7 +488,8 @@ const state = {
   detailZ:null,       // element clicked (pinned in the detail card)
   hoverZ:null,
   filter:null,        // category being highlighted
-  onlyUn:false
+  onlyUn:false,
+  grey:'none'         // Assign mode only: 'taken' or 'untaken' elements are greyed out
 };
 let shared = [];      // classes from the home page's shared store
 
@@ -604,7 +618,7 @@ function renderTable(){
   const eff = effShow();
   const pt = $('pt');
   pt.classList.toggle('hide-num', !eff.num); pt.classList.toggle('hide-mass', !eff.mass); pt.classList.toggle('hide-ion', !eff.ions);
-  const t = tbl(), avail = eff.mass ? 36 : 48;   // room under the symbol, in % of cell width
+  const grey = asg ? state.grey : 'none', t = tbl(), avail = eff.mass ? 36 : 48;   // room under the symbol, in % of cell width
   const selSym = state.sel ? studentSym(state.sel) : null;
   EL.forEach(e=>{
     const { btn, who } = cells[e.sym];
@@ -612,6 +626,7 @@ function renderTable(){
     const has = !!n && showWho;
     btn.classList.toggle('has-who', has);
     btn.classList.toggle('dim', !!state.filter && state.filter!==e.cat);
+    btn.classList.toggle('grey', grey==='taken' ? !!n : grey==='untaken' ? !n : false);
     btn.classList.toggle('mine', e.sym===selSym);
     btn.classList.toggle('focus', state.detailZ===e.z && e.sym!==selSym);
     who.hidden = !has;
@@ -757,6 +772,8 @@ function renderMode(){
   ['showNames','showNum','showMass','showIons'].forEach(id=>{ $(id).disabled = asg; $(id).parentNode.classList.toggle('off', asg); });
   $('toggles').title = asg ? 'These options apply in View mode. Assign mode always shows names.' : '';
   $('clearAll').hidden = !asg;
+  $('greyCtl').hidden = !asg;
+  document.querySelectorAll('#greyCtl button').forEach(b=>{ const on = b.dataset.g===state.grey; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); });
 }
 function render(){ renderMode(); renderTableSel(); renderTable(); renderDetail(); renderPanel(); renderStatus(); }
 
@@ -1124,6 +1141,7 @@ $('modeAssign').addEventListener('click', ()=>setMode('assign'));
 $('showNames').addEventListener('change', e=>{ state.showNames = e.target.checked; save(); render(); });
 [['showNum','num'],['showMass','mass'],['showIons','ions']].forEach(([id,k])=>$(id).addEventListener('change', e=>{ state.show[k] = e.target.checked; save(); render(); }));
 $('tableSel').addEventListener('change', e=>switchClass(e.target.value));
+document.querySelectorAll('#greyCtl button').forEach(b=>b.addEventListener('click', ()=>{ state.grey = b.dataset.g; render(); }));
 $('onlyUn').addEventListener('change', e=>{ state.onlyUn = e.target.checked; render(); });
 $('randBtn').addEventListener('click', assignRandomly);
 $('clearClass').addEventListener('click', clearClass);
