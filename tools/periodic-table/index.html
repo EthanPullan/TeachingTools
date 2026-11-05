@@ -104,6 +104,15 @@
     font-family:var(--mono);font-size:12px;font-weight:600;color:var(--board);text-align:center;}
   .sym-in::placeholder{color:var(--muted);font-weight:400;}
   .sym-in:focus{background:#fff;}
+  .sympop{position:fixed;z-index:900;width:236px;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;
+    box-shadow:0 8px 24px rgba(20,40,33,.18);padding:4px;}
+  .sympop[hidden]{display:none;}
+  .sympop .opt{display:flex;align-items:baseline;gap:8px;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:13px;}
+  .sympop .opt b{font-family:var(--mono);width:26px;flex:none;color:var(--board);}
+  .sympop .opt span{flex:1;min-width:0;}
+  .sympop .opt i{font-style:normal;font-size:11px;color:var(--muted);white-space:nowrap;}
+  .sympop .opt.hl,.sympop .opt:hover{background:var(--accent-soft);}
+  .sympop .opt.taken span{color:var(--muted);}
   .xbtn{border:none;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:2px 4px;border-radius:6px;}
   .xbtn:hover{color:var(--danger);background:var(--danger-soft);}
   .xbtn[hidden]{display:none;}
@@ -228,7 +237,6 @@
       <button class="btn small" id="openBtn" title="Open a PDF saved from here, or a saved data file"><span class="ic">📂</span>Open…</button>
       <button class="btn small" id="jsonBtn" title="Save the data as a small file you can re-open here"><span class="ic">💾</span>Save data</button>
     </div>
-    <datalist id="symList"></datalist>
     <input type="file" id="openFile" accept=".pdf,.json,application/pdf,application/json" hidden>
   </header>
   <div class="subbar">
@@ -290,6 +298,7 @@
     </section>
   </div>
 </div>
+<div class="sympop" id="symPop" role="listbox" aria-label="Element symbols" hidden></div>
 <div class="toast-wrap" id="toasts" aria-live="polite"></div>
 
 <script>
@@ -667,6 +676,7 @@ function renderTableSel(){
 
 let pendingFocus = null;   // after typing a symbol, jump to the next student's box
 function renderPanel(){
+  hidePop();
   $('panel').hidden = state.mode!=='assign';
   if(state.mode!=='assign') return;
   const name = curName(), cur = curClass();
@@ -676,10 +686,9 @@ function renderPanel(){
   $('hand').open = $('hand').open || noClasses;
   $('rmClass').hidden = !(cur && cur.local);
   $('panelCls').textContent = name || '—';
-  const dl = $('symList'); dl.textContent = '';
-  const taken = tbl();
-  EL.forEach(e=>{ const o = document.createElement('option'); o.value = e.sym; o.label = e.name + (taken[e.sym] ? ' · taken by ' + taken[e.sym] : ''); dl.appendChild(o); });
-  const list = $('stuList'); list.textContent='';
+  const list = $('stuList');
+  list.querySelectorAll('.sym-in').forEach(i=>{ i._skipChange = true; });   // removing a focused box makes the browser fire a late "change" — never commit that
+  list.textContent='';
   $('staleNote').hidden = !(name && !cur);
   if(!cur){ $('clsCount').textContent = '0 / 0'; return; }
   let placed = 0;
@@ -691,14 +700,25 @@ function renderPanel(){
     li.className = (sym?'done ':'') + (state.sel===n?'sel':'');
     const nm = document.createElement('span'); nm.className='nm'; nm.textContent=n; nm.title=n;
     const bd = document.createElement('input'); bd.type = 'text'; bd.className = 'sym-in'; bd.value = sym || ''; bd.placeholder = '—';
-    bd.setAttribute('list','symList'); bd.autocomplete = 'off'; bd.spellcheck = false; bd.maxLength = 14; bd.dataset.name = n;
-    bd.setAttribute('aria-label', 'Element symbol for ' + n);
+    bd.autocomplete = 'off'; bd.spellcheck = false; bd.maxLength = 14; bd.dataset.name = n;
+    bd.setAttribute('aria-label', 'Element symbol for ' + n); bd.setAttribute('aria-autocomplete', 'list'); bd.setAttribute('aria-controls', 'symPop');
     ['click','mousedown'].forEach(ev=>bd.addEventListener(ev, e=>e.stopPropagation()));   // don't select the row when typing
-    bd.addEventListener('change', ()=>setByTyping(n, bd.value));
-    bd.addEventListener('input', e=>{
-      // a number means "atomic number": drop the symbol list while the first character is a digit so it doesn't mislead
-      if(/^\s*\d/.test(bd.value)) bd.removeAttribute('list'); else bd.setAttribute('list','symList');
-      if(e.inputType==='insertReplacementText') setByTyping(n, bd.value);   // picked from the drop-down
+    bd.addEventListener('focus', ()=>showPop(bd, n));
+    bd.addEventListener('input', ()=>{ bd._skipChange = false; showPop(bd, n); });
+    bd.addEventListener('blur', ()=>{ if(pop.input===bd) hidePop(); });
+    bd.addEventListener('change', ()=>{                       // leaving the box (Tab / click away) commits what was typed
+      if(bd._skipChange){ bd._skipChange = false; return; }
+      if(bd.isConnected) setByTyping(n, bd.value, false);
+    });
+    bd.addEventListener('keydown', e=>{
+      const open = !$('symPop').hidden && pop.input===bd;
+      if(e.key==='ArrowDown' || e.key==='ArrowUp'){
+        e.preventDefault();
+        if(!open) showPop(bd, n);
+        if(pop.items.length){ pop.idx = e.key==='ArrowDown' ? Math.min(pop.items.length-1, pop.idx+1) : Math.max(0, pop.idx-1); markHl(); }
+      }else if(e.key==='Enter'){
+        e.preventDefault(); bd._skipChange = true; enterInBox(bd, n, open);
+      }else if(e.key==='Escape' && open){ hidePop(); e.stopPropagation(); }
     });
     const x = document.createElement('button'); x.className='xbtn'; x.type='button'; x.textContent='×'; x.title='Unassign'; x.setAttribute('aria-label','Unassign '+n); x.hidden=!sym;
     x.addEventListener('click', ev=>{ ev.stopPropagation(); unassign(sym); });
@@ -783,14 +803,66 @@ function place(n, sym){
   if(occ && occ!==n) toast(occ + ' was on ' + e.name + ' — replaced by ' + n + '.');
   setCell(sym, n);
 }
+/* ---------- symbol drop-down: matches the FIRST letters of the symbol (typing "m" lists only Mg, Mn, Mo…) ----------
+   A list is only shown for letters (or an empty box); a leading digit means "atomic number", so it hides.
+   One or two letters match symbols only (A–Z). A symbol is never longer than two letters, so from the third letter
+   on the list switches to the spelling of the element NAME, still A–Z ("iro" → Iron, "cal" → Calcium, Californium). */
+const pop = { input:null, name:null, items:[], idx:-1 };
+const byAlpha = key => (a,b) => a[key].localeCompare(b[key]);
+function popMatches(raw){
+  const v = raw.trim().toLowerCase();
+  if(/^\d/.test(v)) return [];                                                  // a number: no list
+  if(v.length >= 3) return EL.filter(e=>e.name.toLowerCase().startsWith(v)).sort(byAlpha('name'));   // 3rd letter → spelling of the name, A–Z
+  return EL.filter(e=>e.sym.toLowerCase().startsWith(v)).sort(byAlpha('sym'));                      // 0–2 letters → symbols only, A–Z
+}
+function hidePop(){ $('symPop').hidden = true; pop.input = null; pop.items = []; pop.idx = -1; }
+function markHl(){
+  [...$('symPop').children].forEach((c,i)=>{ c.classList.toggle('hl', i===pop.idx); c.setAttribute('aria-selected', String(i===pop.idx)); if(i===pop.idx) c.scrollIntoView({ block:'nearest' }); });
+}
+function showPop(input, name){
+  const items = popMatches(input.value);
+  if(!items.length){ hidePop(); return; }
+  Object.assign(pop, { input, name, items });
+  const v = input.value.trim().toLowerCase();
+  pop.idx = v ? items.findIndex(e=>(v.length>=3 ? e.name : e.sym).toLowerCase()===v) : -1;   // an exact symbol / name is pre-highlighted
+  const box = $('symPop'), t = tbl(); box.textContent = '';
+  items.forEach(e=>{
+    const o = document.createElement('div'); o.className = 'opt' + (t[e.sym] && t[e.sym]!==name ? ' taken' : ''); o.setAttribute('role','option'); o.dataset.sym = e.sym;
+    const b = document.createElement('b'); b.textContent = e.sym;
+    const sp = document.createElement('span'); sp.textContent = e.name;
+    o.append(b, sp);
+    if(t[e.sym]){ const i = document.createElement('i'); i.textContent = t[e.sym]===name ? 'current' : t[e.sym]; i.title = t[e.sym]===name ? '' : 'Already on this element — choosing it replaces them'; o.appendChild(i); }
+    o.addEventListener('mousedown', ev=>ev.preventDefault());           // keep focus in the box
+    o.addEventListener('click', ()=>pickSym(e.sym));
+    box.appendChild(o);
+  });
+  box.hidden = false; box.scrollTop = 0; placePop(); markHl();
+}
+function placePop(){            // below the box, or above it when there's no room
+  if(!pop.input) return;
+  const box = $('symPop'), r = pop.input.getBoundingClientRect(), below = innerHeight - r.bottom - 10, above = r.top - 10, up = below < 190 && above > below;
+  box.style.maxHeight = Math.max(120, Math.min(280, up ? above : below)) + 'px';
+  box.style.left = Math.max(8, Math.min(r.left, innerWidth - 246)) + 'px';
+  if(up){ box.style.top = 'auto'; box.style.bottom = (innerHeight - r.top + 2) + 'px'; } else { box.style.bottom = 'auto'; box.style.top = (r.bottom + 2) + 'px'; }
+}
+function pickSym(sym){ const n = pop.name; hidePop(); setByTyping(n, sym); }
+function enterInBox(box, n, open){
+  const v = box.value.trim();
+  if(open && pop.idx>=0){ pickSym(pop.items[pop.idx].sym); return; }
+  if(open && v && pop.items.length===1){ pickSym(pop.items[0].sym); return; }
+  if(open && v && pop.items.length>1){ toast('Several elements start with “' + v + '” — pick one from the list (arrow keys, or click).'); return; }
+  hidePop(); setByTyping(n, v);
+}
+$('panel').addEventListener('scroll', placePop); window.addEventListener('resize', placePop);
+
 // The small box beside a student's name: a symbol (or element name), or empty to unassign.
-function setByTyping(n, raw){
+function setByTyping(n, raw, loud = true){
   const v = raw.trim(), cur = curClass();
   if(!v){ const s = studentSym(n); if(s) unassign(s); return; }
   const lc = v.toLowerCase();
   const e = /^\d+$/.test(v) ? EL[+v-1]                                       // atomic number (undefined if 0 or > 118)
           : EL.find(x=>x.sym.toLowerCase()===lc) || EL.find(x=>x.name.toLowerCase()===lc);
-  if(!e){ toast('“' + v + '” isn’t an element symbol' + (/^\d+$/.test(v) ? ' — atomic numbers run from 1 to 118.' : ' or atomic number.'), 'err'); render(); return; }
+  if(!e){ if(loud) toast('“' + v + '” isn’t an element symbol' + (/^\d+$/.test(v) ? ' — atomic numbers run from 1 to 118.' : ' or atomic number.'), 'err'); render(); return; }
   if(tbl()[e.sym]===n){ render(); return; }                                  // already there
   place(n, e.sym);
   const nx = nextUnassigned(cur, n);
