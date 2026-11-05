@@ -169,7 +169,8 @@
 
   /* large preview: the page big, every page as a small strip underneath */
   .viewer{position:fixed;inset:0;z-index:1500;display:flex;flex-direction:column;
-    background:#0e1c17;color:#eaf2ef;}
+    background:#0e1c17;color:#eaf2ef;
+    user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;}  /* a selected <img> paints blue */
   .viewer[hidden]{display:none;}
   .vbar{display:flex;align-items:center;gap:14px;padding:10px 16px;}
   .vtitle{flex:1;min-width:0;font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -1063,6 +1064,7 @@
   function openView(id){
     if (view.on || !state.pages.some(p => p.id === id)) return;
     view.on = true;
+    const sel = getSelection(); if (sel) sel.removeAllRanges();   // a double-click can leave a selection behind
     document.querySelector('.app').inert = true;
     $('viewer').hidden = false;
     buildStrip(); showView(id);
