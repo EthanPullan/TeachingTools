@@ -63,7 +63,7 @@
   .field-label{display:block;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
     color:var(--muted);margin-bottom:5px;}
   .hint{font-size:12px;color:var(--muted);line-height:1.5;margin:8px 0 0;}
-  input[type=text]{border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--panel-2);
+  input[type=text],select{border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--panel-2);
     width:100%;font-family:var(--mono);font-size:13px;}
 
   /* PDF drop zone */
@@ -193,19 +193,19 @@
 <body>
 <div class="app">
   <header class="toolbar">
-    <div class="brand"><span class="mark"></span>PDF Arranger <small>merge &amp; arrange PDF pages</small></div>
+    <div class="brand"><span class="mark"></span>PDF Arranger <small>merge PDFs &amp; images, arrange pages</small></div>
     <div class="spacer"></div>
-    <button class="btn" id="addBtn"><span class="ic">📄</span>Add PDFs…</button>
+    <button class="btn" id="addBtn"><span class="ic">📄</span>Add PDFs or images…</button>
     <button class="btn primary" id="dlBtn" disabled><span class="ic">⬇</span>Download PDF</button>
   </header>
 
   <div class="main">
     <aside class="panel">
       <section class="section">
-        <h2 class="section-title">1 · Your PDFs</h2>
+        <h2 class="section-title">1 · Your files</h2>
         <label class="drop" id="drop" for="file">
-          <input type="file" id="file" accept=".pdf,application/pdf" multiple>
-          <span id="dropText">Drop PDFs here, or click to choose them. Add as many as you like.</span>
+          <input type="file" id="file" accept=".pdf,application/pdf,image/*" multiple>
+          <span id="dropText">Drop PDFs or images here, or click to choose them. Add as many as you like.</span>
         </label>
         <ul class="files" id="files"></ul>
         <p class="hint" id="fileHint" hidden></p>
@@ -227,7 +227,16 @@
         <h2 class="section-title">3 · Download</h2>
         <label class="field-label" for="outName">File name</label>
         <input type="text" id="outName" placeholder="merged.pdf" autocomplete="off" spellcheck="false">
-        <p class="hint">Pages keep their own size, so a mix of Letter and A4 stays as it is.</p>
+        <p class="hint">PDF pages keep their own size, so a mix of Letter and A4 stays as it is.</p>
+        <div id="imgOpts" hidden style="margin-top:12px;">
+          <label class="field-label" for="imgSize">Page size for images</label>
+          <select id="imgSize">
+            <option value="letter">Letter (8.5 × 11 in)</option>
+            <option value="a4">A4 (210 × 297 mm)</option>
+            <option value="fit">Same shape as the image</option>
+          </select>
+          <p class="hint">Each image gets its own page, turned sideways for wide images. Letter and A4 leave a margin.</p>
+        </div>
       </section>
 
       <section class="section">
@@ -260,7 +269,7 @@
       </div>
       <div class="scroller" id="scroller">
         <div class="grid" id="grid" role="listbox" aria-multiselectable="true" aria-label="Pages in the new PDF"></div>
-        <div class="empty" id="empty"><div>Add one or more PDFs and their pages appear here. Drag to put them in order, rotate or remove any you don’t want, then download the result. Everything happens in this browser tab: your files are never uploaded.</div></div>
+        <div class="empty" id="empty"><div>Add PDFs or images and their pages appear here (one page per image). Drag to put them in order, rotate or remove any you don’t want, then download the result. Everything happens in this browser tab: your files are never uploaded.</div></div>
         <div class="dropbar" id="dropBar"></div>
       </div>
       <div class="statusbar" aria-live="polite">
@@ -278,7 +287,7 @@
 /* PDF Arranger. Merge PDFs and arrange their pages.
    Model: `files` are the PDFs you added; `pages` is the ordered list of page tiles (each one points at
    a page of a file, an extra rotation and optionally a bookmark title). The grid is that list; Download copies the listed
-   pages, in order, into a new PDF.
+   pages, in order, into a new PDF. An image is a one-page "file" (f.img): Download draws it onto a fresh page.
    Reading/writing PDFs is done by the vendored pdf-lib (MIT, https://github.com/Hopding/pdf-lib).
    Page thumbnails are drawn by the vendored pdf.js (Apache-2.0, https://github.com/mozilla/pdf.js),
    whose worker is the text/plain block at the very end of this file. Both are vendored in the
@@ -291,6 +300,13 @@
   const BOX = { w:148, h:190 };            // the thumbnail area of a tile, in CSS px
   const THUMB_PX = 2;                      // render thumbnails at 2x for sharpness
   const UNDO_MAX = 60;
+  const IMG_MAX = 4096;                    // longest edge kept for an image, in px (keeps phone photos and the PDF a sane size)
+  const IMG_MARGIN = 36;                   // 0.5 in around an image on a Letter / A4 page, in pt
+  const PAPER = { letter:[612, 792], a4:[595.28, 841.89] };
+  const DROP_TEXT = 'Drop PDFs or images here, or click to choose them. Add as many as you like.';
+  const isPdf = f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf';
+  const isImage = f => /^image\//.test(f.type) || /\.(jpe?g|png|gif|webp|bmp|avif)$/i.test(f.name);
+  const baseName = n => n.replace(/\.[^.]+$/, '');
 
   const state = { files:[], pages:[], sel:new Set(), anchor:null, undo:[], nextId:1, busy:false, nameTouched:false,
                   moved:false, toc:false };               // true once an individual page has been moved: files can no longer be reordered
@@ -337,14 +353,57 @@
     out.catalog.set(PDFName.of('PageMode'), PDFName.of('UseOutlines'));
   }
 
+  // The page an image lands on, in pt: Letter or A4 (turned sideways for a wide image), or the image's own shape
+  // with its long edge at 11 in.
+  function imgPageSize(f){
+    const mode = $('imgSize').value;
+    if (mode === 'fit'){ const k = 792 / Math.max(f.w, f.h); return { w:f.w * k, h:f.h * k }; }
+    const [w, h] = PAPER[mode];
+    return f.w > f.h ? { w:h, h:w } : { w, h };
+  }
+  const sizeOf = (f, i) => f.img ? imgPageSize(f) : f.sizes[i];
+
+  // Decode an image (the browser applies the camera's rotation) and re-encode it for the PDF: PNG stays PNG,
+  // everything else becomes JPEG on white. That makes phone photos upright and lets WebP, GIF, BMP and
+  // AVIF in, which pdf-lib can't embed directly. Also makes the small thumbnail.
+  async function readImage(file){
+    let bmp;
+    try { bmp = await createImageBitmap(file); } catch(e){ throw new UserError('could not be read as an image.'); }
+    const png = file.type === 'image/png' || /\.png$/i.test(file.name);
+    const encode = async (scale, type, quality) => {
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
+      const ctx = c.getContext('2d');
+      if (type !== 'image/png'){ ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); }
+      ctx.drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise(r => c.toBlob(r, type, quality));
+      if (!blob) throw new UserError('could not be read as an image.');
+      return { blob, w:c.width, h:c.height };
+    };
+    try {
+      const big = await encode(Math.min(1, IMG_MAX / Math.max(bmp.width, bmp.height)), png ? 'image/png' : 'image/jpeg', 0.92);
+      const small = await encode(Math.min(1, BOX.w * THUMB_PX / bmp.width, BOX.h * THUMB_PX / bmp.height), 'image/jpeg', 0.82);
+      return { bytes:new Uint8Array(await big.blob.arrayBuffer()), png, w:big.w, h:big.h, thumb:URL.createObjectURL(small.blob) };
+    } finally { bmp.close(); }
+  }
+
+  function imagePage(out, f, emb){
+    const s = imgPageSize(f), pg = out.addPage([s.w, s.h]);
+    const m = $('imgSize').value === 'fit' ? 0 : IMG_MARGIN;
+    const k = Math.min((s.w - 2 * m) / f.w, (s.h - 2 * m) / f.h), w = f.w * k, h = f.h * k;
+    pg.drawImage(emb, { x:(s.w - w) / 2, y:(s.h - h) / 2, width:w, height:h });
+    return pg;
+  }
+
   // The new PDF: pages copied in grid order. Pages of one file are copied in one batch so shared fonts
   // and images are stored once; a page used twice goes in a later batch (a fresh copy, so rotating one
   // doesn't turn the other).
   async function buildPdf(pages, withBookmarks){
     const { PDFDocument, degrees } = PDFLib;
     const out = await PDFDocument.create();
-    const seen = new Map(), jobs = new Map(), copied = new Array(pages.length);
+    const seen = new Map(), jobs = new Map(), copied = new Array(pages.length), embedded = new Map();
     pages.forEach((p, pos) => {
+      if (fileById(p.file).img) return;                  // images are drawn onto new pages below
       const key = p.file + ':' + p.src, k = seen.get(key) || 0;
       seen.set(key, k + 1);
       const jk = p.file + '#' + k;
@@ -355,10 +414,16 @@
       const got = await out.copyPages(job.lib, job.items.map(i => i.src));
       job.items.forEach((it, j) => { copied[it.pos] = got[j]; });
     }
+    for (const p of pages){                              // an image used twice is stored once
+      const f = fileById(p.file);
+      if (f.img && !embedded.has(f.id)) embedded.set(f.id, await (f.png ? out.embedPng(f.bytes) : out.embedJpg(f.bytes)));
+    }
     pages.forEach((p, pos) => {
+      const f = fileById(p.file);
+      if (f.img) copied[pos] = imagePage(out, f, embedded.get(f.id));
       const pg = copied[pos];
       if (p.rot) pg.setRotation(degrees((pg.getRotation().angle + p.rot) % 360));
-      out.addPage(pg);
+      if (!f.img) out.addPage(pg);
     });
     if (withBookmarks) addBookmarks(out, pages.map((p, pos) => ({ p, pos })).filter(x => x.p.bm != null)
       .map(x => ({ title:bmTitle(x.p, x.pos), page:copied[x.pos] })));
@@ -381,6 +446,7 @@
     }
   }
   async function drawThumb(f, idx){
+    if (f.img) return f.thumb;
     if (f.gone || !f.js) throw new Error('no preview');
     const page = await f.js.getPage(idx + 1);
     const v1 = page.getViewport({ scale:1 });
@@ -434,7 +500,7 @@
       '<button class="ib del" data-act="del" title="Remove page" aria-label="Remove page">✕</button></div>' +
       '<div class="bmrow" hidden>🔖<span></span></div>' +
       '<div class="src"><i class="dot"></i><span class="sname"></span><span class="grip" title="Drag to move"></span></div>';
-    const label = f.name.replace(/\.pdf$/i, '') + ' · p.' + (p.src + 1);
+    const label = f.img ? baseName(f.name) : baseName(f.name) + ' · p.' + (p.src + 1);
     el.querySelector('.sname').textContent = label; el.querySelector('.sname').title = label;
     el.querySelector('.dot').style.background = f.color;
     seenObs.observe(el);
@@ -442,7 +508,7 @@
   }
 
   function updateTile(el, p, i){
-    const f = fileById(p.file), s = f.sizes[p.src], swap = p.rot % 180 !== 0;
+    const f = fileById(p.file), s = sizeOf(f, p.src), swap = p.rot % 180 !== 0;
     el.querySelector('.num').textContent = i + 1;
     const bm = state.toc && p.bm != null;
     el.querySelector('.bmrow').hidden = !bm;
@@ -450,7 +516,7 @@
     el.querySelector('[data-act=bm]').classList.toggle('on', p.bm != null);
     el.classList.toggle('sel', state.sel.has(p.id));
     el.setAttribute('aria-selected', state.sel.has(p.id));
-    el.setAttribute('aria-label', 'Page ' + (i + 1) + ', ' + f.name + ' page ' + (p.src + 1) + (p.rot ? ', turned ' + p.rot + ' degrees' : ''));
+    el.setAttribute('aria-label', 'Page ' + (i + 1) + ', ' + f.name + (f.img ? '' : ' page ' + (p.src + 1)) + (p.rot ? ', turned ' + p.rot + ' degrees' : ''));
     // Fit the page as it appears after the rotation, then size the unrotated box to match.
     const vw0 = swap ? s.h : s.w, vh0 = swap ? s.w : s.h, k = Math.min(BOX.w / vw0, BOX.h / vh0);
     const vw = vw0 * k, vh = vh0 * k, pg = el.querySelector('.pg');
@@ -488,7 +554,8 @@
                              '<button class="xbtn mv" data-d="1" aria-label="Move this file later">▼</button>' : '') +
                      '<button class="xbtn" data-rm aria-label="Remove this file">✕</button>';
       li.querySelector('.fn').textContent = f.name; li.querySelector('.fn').title = f.name;
-      li.querySelector('.fm').textContent = f.count + (f.count === 1 ? ' page' : ' pages') + ' · ' + used + ' used';
+      li.querySelector('.fm').textContent = f.img ? 'image · ' + used + ' used'
+                                                   : f.count + (f.count === 1 ? ' page' : ' pages') + ' · ' + used + ' used';
       li.querySelector('[data-rm]').onclick = () => removeFile(f);
       li.querySelectorAll('.mv').forEach(b => {
         const to = i + +b.dataset.d;
@@ -511,6 +578,7 @@
     $('selAll').disabled = !n || s === n; $('selNone').disabled = !s;
     $('undoBtn').disabled = !state.undo.length;
     $('dlBtn').disabled = !n || state.busy;
+    $('imgOpts').hidden = !state.files.some(f => f.img);
     renderFiles(); renderBookmarks();
   }
 
@@ -588,7 +656,7 @@
   /* ---------- bookmarks ---------- */
 
   const bmDefault = p => {
-    const base = fileById(p.file).name.replace(/\.pdf$/i, '');
+    const base = baseName(fileById(p.file).name);
     return p.src === 0 ? base : base + ' · p.' + (p.src + 1);
   };
   const bmTitle = (p, i) => p.bm.trim() || 'Page ' + (i + 1);
@@ -685,13 +753,13 @@
   function defaultName(){
     if (state.nameTouched) return;
     const n = state.files.length;
-    $('outName').value = n === 0 ? '' : n === 1 ? state.files[0].name.replace(/\.pdf$/i, '') + ' (arranged).pdf' : 'merged.pdf';
+    $('outName').value = n === 0 ? '' : n === 1 ? baseName(state.files[0].name) + ' (arranged).pdf' : 'merged.pdf';
   }
 
   async function addFiles(list){
-    const all = [...list], files = all.filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+    const all = [...list], files = all.filter(f => isPdf(f) || isImage(f));
     const skipped = all.length - files.length;
-    if (skipped) toast(skipped === 1 ? 'Skipped a file that isn’t a PDF.' : 'Skipped ' + skipped + ' files that aren’t PDFs.', 'err');
+    if (skipped) toast(skipped === 1 ? 'Skipped a file that isn’t a PDF or an image.' : 'Skipped ' + skipped + ' files that aren’t PDFs or images.', 'err');
     if (!files.length) return;
     initPdfJs();
     showError('');
@@ -699,6 +767,15 @@
     const problems = [];
     for (const file of files){
       try {
+        if (!isPdf(file)){                               // an image: one page
+          let im;
+          try { im = await readImage(file); }
+          catch(e){ throw new UserError('“' + file.name + '” ' + (e instanceof UserError ? e.message : 'could not be read as an image.')); }
+          const f = { id:state.nextId++, name:file.name, img:true, ...im, count:1, gone:false, color:COLORS[state.files.length % COLORS.length] };
+          state.files.push(f);
+          state.pages.push({ id:state.nextId++, file:f.id, src:0, rot:0 });
+          continue;
+        }
         const bytes = new Uint8Array(await file.arrayBuffer());
         let lib;
         try { lib = await openLib(bytes); }
@@ -717,7 +794,7 @@
         problems.push(e instanceof UserError ? e.message : '“' + file.name + '” could not be read as a PDF.');
       }
     }
-    $('dropText').textContent = 'Drop PDFs here, or click to choose them. Add as many as you like.';
+    $('dropText').textContent = DROP_TEXT;
     if (problems.length) showError(problems.join(' '));
     state.undo.length = 0;                               // history would point at a different set of files
     defaultName(); render();
@@ -727,6 +804,7 @@
     const used = state.pages.filter(p => p.file === f.id).length;
     if (used && !confirm('Remove “' + f.name + '” and its ' + used + (used === 1 ? ' page' : ' pages') + ' from the new PDF?')) return;
     f.gone = true; dropThumbs(f);
+    if (f.thumb) URL.revokeObjectURL(f.thumb);
     if (f.js) f.js.destroy();
     state.files = state.files.filter(x => x !== f);
     state.pages = state.pages.filter(p => p.file !== f.id);
@@ -902,6 +980,7 @@
   $('undoBtn').onclick = undo;
   $('tocOn').onchange = e => { state.toc = e.target.checked; render(); };
   $('bmEach').onclick = bookmarkEachFile;
+  $('imgSize').onchange = render;                        // image pages change shape
   $('outName').oninput = () => { state.nameTouched = true; };
 
   const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
