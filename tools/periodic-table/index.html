@@ -252,7 +252,7 @@
           <h3 class="section-title" style="margin:0">Students</h3>
           <label class="check"><input type="checkbox" id="onlyUn"> Unassigned only</label>
         </div>
-        <p class="hint" style="margin:8px 0">Pick a student, then click an element — or type a symbol in the small box beside their name and choose from the list. Clicking an assigned element selects that student so you can move them; click the same element again to unassign.</p>
+        <p class="hint" style="margin:8px 0">Pick a student, then click an element — or type a symbol or atomic number in the small box beside their name. Clicking an assigned element selects that student so you can move them; click the same element again to unassign.</p>
         <ul class="list" id="stuList"></ul>
         <div class="row wrap stack" style="margin-top:12px">
           <button class="btn small" id="randBtn"><span class="ic">🎲</span>Assign randomly</button>
@@ -695,7 +695,11 @@ function renderPanel(){
     bd.setAttribute('aria-label', 'Element symbol for ' + n);
     ['click','mousedown'].forEach(ev=>bd.addEventListener(ev, e=>e.stopPropagation()));   // don't select the row when typing
     bd.addEventListener('change', ()=>setByTyping(n, bd.value));
-    bd.addEventListener('input', e=>{ if(e.inputType==='insertReplacementText') setByTyping(n, bd.value); });   // picked from the drop-down
+    bd.addEventListener('input', e=>{
+      // a number means "atomic number": drop the symbol list while the first character is a digit so it doesn't mislead
+      if(/^\s*\d/.test(bd.value)) bd.removeAttribute('list'); else bd.setAttribute('list','symList');
+      if(e.inputType==='insertReplacementText') setByTyping(n, bd.value);   // picked from the drop-down
+    });
     const x = document.createElement('button'); x.className='xbtn'; x.type='button'; x.textContent='×'; x.title='Unassign'; x.setAttribute('aria-label','Unassign '+n); x.hidden=!sym;
     x.addEventListener('click', ev=>{ ev.stopPropagation(); unassign(sym); });
     li.append(nm, bd, x);
@@ -784,8 +788,9 @@ function setByTyping(n, raw){
   const v = raw.trim(), cur = curClass();
   if(!v){ const s = studentSym(n); if(s) unassign(s); return; }
   const lc = v.toLowerCase();
-  const e = EL.find(x=>x.sym.toLowerCase()===lc) || EL.find(x=>x.name.toLowerCase()===lc);
-  if(!e){ toast('“' + v + '” isn’t an element symbol.', 'err'); render(); return; }
+  const e = /^\d+$/.test(v) ? EL[+v-1]                                       // atomic number (undefined if 0 or > 118)
+          : EL.find(x=>x.sym.toLowerCase()===lc) || EL.find(x=>x.name.toLowerCase()===lc);
+  if(!e){ toast('“' + v + '” isn’t an element symbol' + (/^\d+$/.test(v) ? ' — atomic numbers run from 1 to 118.' : ' or atomic number.'), 'err'); render(); return; }
   if(tbl()[e.sym]===n){ render(); return; }                                  // already there
   place(n, e.sym);
   const nx = nextUnassigned(cur, n);
