@@ -119,6 +119,7 @@
   .tile::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:var(--fc);}
   .tile:hover{border-color:var(--board-line);}
   .tile.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);}
+  .tile{touch-action:manipulation;}                      /* lets a double-tap open the preview instead of zooming */
   .tile.moving{opacity:.35;}
   .thumb{position:relative;height:190px;}
   .pg{position:absolute;left:50%;top:50%;background:#fff;box-shadow:0 1px 3px rgba(20,40,33,.3);
@@ -165,6 +166,32 @@
   .ghost img{display:block;width:100%;height:auto;}
   .ghost .n{position:absolute;right:-8px;top:-8px;background:var(--accent);color:#fff;font-family:var(--mono);
     font-size:11px;font-weight:700;border-radius:20px;padding:1px 7px;}
+
+  /* large preview: the page big, every page as a small strip underneath */
+  .viewer{position:fixed;inset:0;z-index:1500;display:flex;flex-direction:column;
+    background:#0e1c17;color:#eaf2ef;}
+  .viewer[hidden]{display:none;}
+  .vbar{display:flex;align-items:center;gap:14px;padding:10px 16px;}
+  .vtitle{flex:1;min-width:0;font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .vhint{font-size:12px;opacity:.6;white-space:nowrap;}
+  .vmain{flex:1;min-height:0;display:flex;gap:8px;padding:0 10px;}
+  .vstage{position:relative;flex:1;min-width:0;}
+  .vstage .pg{transition:none;box-shadow:0 4px 24px rgba(0,0,0,.5);}
+  .vnav{align-self:center;flex:none;width:44px;height:64px;border-radius:10px;cursor:pointer;font-size:18px;
+    border:1px solid var(--board-line);background:rgba(255,255,255,.08);color:#fff;}
+  .vnav:hover:not(:disabled){background:rgba(255,255,255,.18);}
+  .vnav:disabled{opacity:.25;cursor:default;}
+  .vstrip{display:flex;gap:8px;overflow-x:auto;padding:10px 16px 14px;
+    border-top:1px solid var(--board-line);background:rgba(0,0,0,.28);}
+  .vthumb{position:relative;flex:none;width:68px;height:88px;padding:0;cursor:pointer;border-radius:7px;
+    border:2px solid transparent;background:rgba(255,255,255,.07);}
+  .vthumb::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--fc);border-radius:5px 5px 0 0;}
+  .vthumb:hover{background:rgba(255,255,255,.16);}
+  .vthumb.cur{border-color:var(--accent);background:rgba(224,152,46,.18);}
+  .vthumb .vt{position:absolute;inset:6px 0 0 0;}
+  .vthumb .pg{transition:none;}
+  .vthumb .vn{position:absolute;left:3px;bottom:2px;z-index:2;font-family:var(--mono);font-size:10px;font-weight:700;
+    background:var(--board);color:#fff;border-radius:20px;padding:0 5px;}
 
   .statusbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:0 16px;height:42px;
     border-top:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--muted);}
@@ -242,7 +269,7 @@
       <section class="section">
         <h2 class="section-title">Arranging tips</h2>
         <ul class="tips">
-          <li><b>Click</b> pages to select them, <kbd>Shift</kbd>-click for a range.</li>
+          <li><b>Click</b> pages to select them, <kbd>Shift</kbd>-click for a range. <b>Double-click</b> one to see it larger.</li>
           <li><b>Drag</b> a page to move it. Selected pages move together. On a touchscreen, drag the dotted handle.</li>
           <li><kbd>Delete</kbd> removes, <kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd> nudges, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes.</li>
           <li>The coloured strip shows which file a page came from.</li>
@@ -279,6 +306,19 @@
       </div>
     </section>
   </div>
+</div>
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Page preview" hidden>
+  <div class="vbar">
+    <span class="vtitle" id="vTitle"></span>
+    <span class="vhint">← → browse · Esc closes</span>
+    <button class="btn small" id="vClose"><span class="ic">✕</span>Close</button>
+  </div>
+  <div class="vmain" id="vMain">
+    <button class="vnav" id="vPrev" aria-label="Previous page">◀</button>
+    <div class="vstage" id="vStage"><div class="pg" id="vPg"><img alt=""><span class="miss">No preview</span></div></div>
+    <button class="vnav" id="vNext" aria-label="Next page">▶</button>
+  </div>
+  <div class="vstrip" id="vStrip" aria-label="All pages"></div>
 </div>
 <div class="ghost" id="ghost"><img alt=""><span class="n"></span></div>
 <div class="toast-wrap" id="toasts"></div>
@@ -508,7 +548,7 @@
   }
 
   function updateTile(el, p, i){
-    const f = fileById(p.file), s = sizeOf(f, p.src), swap = p.rot % 180 !== 0;
+    const f = fileById(p.file), s = sizeOf(f, p.src);
     el.querySelector('.num').textContent = i + 1;
     const bm = state.toc && p.bm != null;
     el.querySelector('.bmrow').hidden = !bm;
@@ -517,11 +557,15 @@
     el.classList.toggle('sel', state.sel.has(p.id));
     el.setAttribute('aria-selected', state.sel.has(p.id));
     el.setAttribute('aria-label', 'Page ' + (i + 1) + ', ' + f.name + (f.img ? '' : ' page ' + (p.src + 1)) + (p.rot ? ', turned ' + p.rot + ' degrees' : ''));
-    // Fit the page as it appears after the rotation, then size the unrotated box to match.
-    const vw0 = swap ? s.h : s.w, vh0 = swap ? s.w : s.h, k = Math.min(BOX.w / vw0, BOX.h / vh0);
-    const vw = vw0 * k, vh = vh0 * k, pg = el.querySelector('.pg');
+    fitPage(el.querySelector('.pg'), s, p.rot, BOX.w, BOX.h);
+  }
+
+  // Fit a page as it appears after the rotation into a bw × bh box, then size the unrotated .pg to match.
+  function fitPage(pg, s, rot, bw, bh){
+    const swap = rot % 180 !== 0, vw0 = swap ? s.h : s.w, vh0 = swap ? s.w : s.h, k = Math.min(bw / vw0, bh / vh0);
+    const vw = vw0 * k, vh = vh0 * k;
     pg.style.width = (swap ? vh : vw) + 'px'; pg.style.height = (swap ? vw : vh) + 'px';
-    pg.style.transform = 'translate(-50%,-50%) rotate(' + p.rot + 'deg)';
+    pg.style.transform = 'translate(-50%,-50%) rotate(' + rot + 'deg)';
   }
 
   function render(){
@@ -803,7 +847,7 @@
   function removeFile(f){
     const used = state.pages.filter(p => p.file === f.id).length;
     if (used && !confirm('Remove “' + f.name + '” and its ' + used + (used === 1 ? ' page' : ' pages') + ' from the new PDF?')) return;
-    f.gone = true; dropThumbs(f);
+    f.gone = true; dropThumbs(f); dropBigs(f);
     if (f.thumb) URL.revokeObjectURL(f.thumb);
     if (f.js) f.js.destroy();
     state.files = state.files.filter(x => x !== f);
@@ -919,6 +963,142 @@
     window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onCancel);
   });
 
+  /* ---------- large preview ---------- */
+  // Double-click a page: it opens big, re-drawn at screen resolution, with every page as a small strip below.
+  // The rest of the app is made inert while it is open, so keys and tabbing stay inside it.
+
+  const BIG_PX = 2800, BIG_KEEP = 6, VBOX = { w:56, h:72 };
+  const view = { on:false, id:null, token:0 };
+  const bigs = new Map();                  // "fileId:pageIndex" → Promise<object URL>, oldest first
+
+  async function drawBig(f, idx){
+    if (f.img){
+      if (!f.full) f.full = URL.createObjectURL(new Blob([f.bytes], { type:f.png ? 'image/png' : 'image/jpeg' }));
+      return f.full;
+    }
+    if (f.gone || !f.js) throw new Error('no preview');
+    const page = await f.js.getPage(idx + 1), v1 = page.getViewport({ scale:1 });
+    const long = Math.min(BIG_PX, Math.max(innerWidth, innerHeight) * (devicePixelRatio || 1));
+    const vp = page.getViewport({ scale:long / Math.max(v1.width, v1.height) });
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.ceil(vp.width)); c.height = Math.max(1, Math.ceil(vp.height));
+    await page.render({ canvasContext:c.getContext('2d'), viewport:vp, background:'#ffffff' }).promise;
+    page.cleanup();
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+    if (!blob) throw new Error('no preview');
+    return URL.createObjectURL(blob);
+  }
+  function getBig(f, idx){
+    if (f.img) return drawBig(f, idx);
+    const key = f.id + ':' + idx, have = bigs.get(key);
+    if (have){ bigs.delete(key); bigs.set(key, have); return have; }
+    const pr = drawBig(f, idx); bigs.set(key, pr);
+    while (bigs.size > BIG_KEEP){
+      const [k, old] = bigs.entries().next().value; bigs.delete(k);
+      old.then(u => URL.revokeObjectURL(u), () => {});
+    }
+    return pr;
+  }
+  function dropBigs(f){
+    if (f.full) URL.revokeObjectURL(f.full);
+    for (const [key, p] of bigs) if (key.startsWith(f.id + ':')){ p.then(u => URL.revokeObjectURL(u), () => {}); bigs.delete(key); }
+  }
+
+  const stripObs = new IntersectionObserver(entries => {
+    for (const en of entries){
+      if (!en.isIntersecting) continue;
+      stripObs.unobserve(en.target);
+      const el = en.target, f = fileById(el._file), pg = el.querySelector('.pg'), img = pg.querySelector('img');
+      if (!f) continue;
+      getThumb(f, el._src).then(url => { img.onload = () => pg.classList.add('ready'); img.src = url; }, () => {});
+    }
+  }, { root:$('vStrip'), rootMargin:'200px' });
+
+  function buildStrip(){
+    const strip = $('vStrip'); strip.innerHTML = '';
+    state.pages.forEach((p, i) => {
+      const f = fileById(p.file), b = document.createElement('button');
+      b.className = 'vthumb'; b.dataset.id = p.id; b._file = p.file; b._src = p.src;
+      b.style.setProperty('--fc', f.color);
+      b.setAttribute('aria-label', 'Page ' + (i + 1));
+      b.innerHTML = '<div class="vt"><div class="pg"><img alt="" draggable="false"></div></div><span class="vn">' + (i + 1) + '</span>';
+      fitPage(b.querySelector('.pg'), sizeOf(f, p.src), p.rot, VBOX.w, VBOX.h);
+      strip.appendChild(b); stripObs.observe(b);
+    });
+  }
+
+  function layoutView(){
+    const p = state.pages.find(x => x.id === view.id); if (!p) return;
+    const st = $('vStage');
+    fitPage($('vPg'), sizeOf(fileById(p.file), p.src), p.rot, Math.max(40, st.clientWidth - 16), Math.max(40, st.clientHeight - 16));
+  }
+
+  function showView(id){
+    const i = state.pages.findIndex(p => p.id === id); if (i < 0) return;
+    const p = state.pages[i], f = fileById(p.file), n = state.pages.length;
+    view.id = id;
+    $('vTitle').textContent = 'Page ' + (i + 1) + ' of ' + n + ' · ' + f.name + (f.img ? '' : ' · p.' + (p.src + 1));
+    $('vPrev').disabled = i === 0; $('vNext').disabled = i === n - 1;
+    for (const b of $('vStrip').children){
+      const cur = +b.dataset.id === id;
+      b.classList.toggle('cur', cur); b.setAttribute('aria-current', cur);
+      if (cur) b.scrollIntoView({ inline:'center', block:'nearest' });
+    }
+    layoutView();
+    const pg = $('vPg'), img = pg.querySelector('img'), tok = ++view.token;
+    pg.classList.remove('ready', 'fail'); img.removeAttribute('src');
+    let sharp = false;
+    const early = thumbs.get(f.id + ':' + p.src);        // the tile's thumbnail, if it has one, fills in while the big one draws
+    if (early) early.then(url => { if (tok === view.token && !sharp){ img.onload = () => pg.classList.add('ready'); img.src = url; } }, () => {});
+    getBig(f, p.src).then(url => {
+      if (tok !== view.token) return;
+      sharp = true; img.onload = () => pg.classList.add('ready'); img.src = url;
+    }, () => { if (tok === view.token && !sharp) pg.classList.add('fail'); });
+  }
+  const stepView = d => {
+    const i = state.pages.findIndex(p => p.id === view.id), to = state.pages[Math.max(0, Math.min(state.pages.length - 1, i + d))];
+    if (to) showView(to.id);
+  };
+
+  function openView(id){
+    if (view.on || !state.pages.some(p => p.id === id)) return;
+    view.on = true;
+    document.querySelector('.app').inert = true;
+    $('viewer').hidden = false;
+    buildStrip(); showView(id);
+    $('vClose').focus();
+  }
+  function closeView(){
+    if (!view.on) return;
+    view.on = false; view.token++;
+    $('viewer').hidden = true; document.querySelector('.app').inert = false;
+    $('vStrip').innerHTML = ''; $('vPg').querySelector('img').removeAttribute('src');
+    const el = tiles.get(view.id);                       // leave the grid at the page you were last looking at
+    if (el){ el.scrollIntoView({ block:'nearest', inline:'nearest' }); el.focus({ preventScroll:true }); }
+  }
+
+  $('grid').addEventListener('dblclick', e => {
+    const tile = e.target.closest('.tile');
+    if (tile && !e.target.closest('.ib')) openView(+tile.dataset.id);
+  });
+  $('vClose').onclick = closeView;
+  $('vPrev').onclick = () => stepView(-1);
+  $('vNext').onclick = () => stepView(1);
+  $('vStrip').addEventListener('click', e => { const b = e.target.closest('.vthumb'); if (b) showView(+b.dataset.id); });
+  $('vMain').addEventListener('click', e => { if (e.target === $('vMain') || e.target === $('vStage')) closeView(); });
+  document.addEventListener('keydown', e => {
+    if (!view.on) return;
+    const k = e.key;
+    if (k === 'Escape') closeView();
+    else if (k === 'ArrowLeft' || k === 'PageUp') stepView(-1);
+    else if (k === 'ArrowRight' || k === 'PageDown') stepView(1);
+    else if (k === 'Home') stepView(-Infinity);
+    else if (k === 'End') stepView(Infinity);
+    else return;
+    e.preventDefault(); e.stopPropagation();
+  }, true);
+  addEventListener('resize', () => { if (view.on) layoutView(); });
+
   /* ---------- wiring ---------- */
 
   $('scroller').addEventListener('click', e => {
@@ -959,7 +1139,7 @@
     }
   });
   document.addEventListener('keydown', e => {
-    if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''))) return;
+    if (view.on || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''))) return;
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z'){ e.preventDefault(); undo(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a'){
       e.preventDefault(); state.sel = new Set(state.pages.map(p => p.id)); render();
