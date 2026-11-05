@@ -111,28 +111,32 @@
   details.hand .body{margin-top:10px;display:flex;flex-direction:column;gap:8px;}
 
   /* ---- the table ---- */
-  .pt-wrap{width:min(100%, calc((100dvh - 215px) / .585));min-width:760px;margin:0 auto;}
+  .pt-wrap{width:min(100%, calc((100dvh - 262px) / .585));min-width:760px;margin:0 auto;}
   .pt{display:grid;grid-template-columns:repeat(18,1fr);gap:3px;}
   .pt .gap{grid-row:8;grid-column:1/-1;height:10px;}
   .pt .flabel{align-self:center;justify-self:end;padding-right:6px;font-size:10px;font-weight:700;letter-spacing:.09em;
     text-transform:uppercase;color:var(--muted);text-align:right;grid-column:1/3;}
   .el{position:relative;container-type:inline-size;aspect-ratio:1/1.1;border:1px solid rgba(20,40,33,.14);
     border-radius:5px;padding:0;cursor:pointer;color:var(--ink);text-align:center;overflow:hidden;
-    background:var(--cat,#eee);box-shadow:var(--shadow-sm);
+    background:var(--cat,#eee);box-shadow:var(--shadow-sm);display:flex;flex-direction:column;
     transition:transform .08s,box-shadow .12s,opacity .15s;}
   .el:hover{transform:translateY(-1px) scale(1.06);z-index:2;box-shadow:0 2px 4px rgba(20,40,33,.14),0 8px 16px rgba(20,40,33,.08);}
-  .el .num{position:absolute;left:5%;top:4%;font-family:var(--mono);font-size:10px;font-size:15cqw;font-weight:600;color:rgba(22,36,31,.68);}
-  .el .sym{position:absolute;left:0;right:0;top:20%;font-size:20px;font-size:35cqw;font-weight:700;line-height:1.1;}
-  .el .nm{position:absolute;left:0;right:0;bottom:5%;font-size:8px;font-size:12.5cqw;color:rgba(22,36,31,.75);
-    white-space:nowrap;overflow:hidden;text-overflow:clip;padding:0 2px;}
-  /* assigned student: greyed name laid over the symbol */
-  .el .who{position:absolute;left:4%;right:4%;top:19%;height:46%;display:flex;align-items:center;justify-content:center;
-    text-align:center;font-size:9px;font-size:17cqw;font-weight:700;line-height:1.05;color:#66716d;
-    overflow-wrap:anywhere;overflow:hidden;pointer-events:none;
-    text-shadow:0 0 2px #fff,0 0 3px #fff,0 0 5px rgba(255,255,255,.95);}
-  .el .who.md{font-size:14cqw;} .el .who.lg{font-size:11.5cqw;}
+  .el .top{display:flex;justify-content:space-between;align-items:flex-start;gap:2px;padding:4% 5% 0;flex:none;}
+  .el .num{font-family:var(--mono);font-size:9px;font-size:max(7px,15cqw);font-weight:600;line-height:1.1;color:rgba(22,36,31,.68);}
+  .el .ion{font-family:var(--mono);font-size:8px;font-size:max(6px,11.5cqw);font-weight:600;line-height:1.35;color:rgba(22,36,31,.8);white-space:nowrap;}
+  .el .sym{flex:none;font-size:18px;font-size:max(12px,33cqw);font-weight:700;line-height:1.05;}
+  .el .mid{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 4%;overflow:hidden;}
+  .el .nm{font-size:8px;font-size:max(6px,12.5cqw);color:rgba(22,36,31,.75);white-space:nowrap;}
+  /* assigned student: greyed name, below the symbol */
+  .el .who{font-size:10px;font-weight:700;line-height:1.05;color:#5b6763;   /* size is set per name in JS (fitWho) */
+    overflow-wrap:anywhere;overflow:hidden;max-height:100%;}
   .el .who[hidden]{display:none;}
-  .el.has-who .sym{opacity:.28;}
+  .el.has-who .nm{display:none;}
+  .el .mass{flex:none;font-family:var(--mono);font-size:7px;font-size:max(6px,11cqw);color:rgba(22,36,31,.75);padding:0 2px 4%;line-height:1.2;white-space:nowrap;}
+  .pt.hide-num .num{visibility:hidden;}
+  .pt.hide-ion .ion{display:none;}
+  .pt.hide-mass .mass{display:none;}
+  .pt.hide-mass .mid{padding-bottom:4%;}
   .el.dim{opacity:.22;}
   .el.focus{box-shadow:0 0 0 2px var(--board);}
   .el.mine{box-shadow:0 0 0 3px var(--accent);z-index:3;}
@@ -156,6 +160,16 @@
   .detail .who-line b{color:var(--ink);}
   .detail .placeholder{color:var(--muted);font-size:13px;}
 
+  .detail sup{font-size:.7em;}
+  .sources{max-width:1000px;margin:12px auto 0;text-align:center;font-size:11px;}
+  .subbar{padding:5px 16px;background:var(--panel);border-bottom:1px solid var(--line);}
+  .tsel{display:flex;align-items:center;gap:8px;} .tsel .lab{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);}
+  .tsel select{width:auto;min-width:150px;max-width:280px;font-weight:600;}
+  .filebtns{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .filebtns select{width:auto;padding:5px 8px;font-size:12px;}
+  .print-title{display:none;grid-column:3/13;grid-row:1/4;}
+  .toggles{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .toggles .lab{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);}
   .legend{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:14px auto 0;max-width:1000px;}
   .chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);border-radius:20px;
     padding:3px 11px 3px 6px;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;}
@@ -169,7 +183,6 @@
   .toast.err{border-left-color:var(--danger);} .toast.ok{border-left-color:var(--ok);}
   @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 
-  #printHeader{display:none;}
 
   @media (max-width:880px){
     .main{flex-direction:column;}
@@ -180,14 +193,19 @@
   @media print{
     @page{size:landscape;margin:10mm;}
     html,body{height:auto;background:#fff;}
-    .toolbar,.panel,.statusbar,.toast-wrap,.legend{display:none !important;}
+    .toolbar,.subbar,.panel,.statusbar,.toast-wrap{display:none !important;}
     .app,.main,.stage,.canvas-scroll{display:block;height:auto;overflow:visible;padding:0;background:#fff;}
     .pt-wrap{width:100%;min-width:0;}
-    .el{box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .el{box-shadow:none;transition:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .el.dim{opacity:1;} .el.mine,.el.focus{box-shadow:none;}
-    .detail{box-shadow:none;}
-    #printHeader{display:block;margin:0 0 6px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:13px;}
-    #printHeader span{font-family:var(--mono);font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted);margin-left:10px;font-size:11px;}
+    .detail{display:none;}
+    .print-title{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border:1px solid var(--line);border-radius:var(--radius);}
+    .print-title h2{margin:0;font-size:24px;letter-spacing:.12em;text-transform:uppercase;}
+    .print-title .pc{font-size:17px;font-weight:700;color:var(--board);}
+    .print-title .pm{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px;}
+    .legend{margin-top:10px;} .chip{border:none;background:none;padding:2px 6px 2px 0;cursor:default;box-shadow:none !important;}
+    .chip i{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .sources{margin-top:6px;font-size:9px;}
   }
 </style>
 </head>
@@ -199,16 +217,33 @@
       <button id="modeView" class="active" aria-pressed="true">View</button>
       <button id="modeAssign" aria-pressed="false">Assign</button>
     </div>
-    <label class="check" id="namesWrap"><input type="checkbox" id="showNames" checked> Show student names</label>
+    <label class="tsel"><span class="lab">Class</span><select id="tableSel" aria-label="Class (each class has its own table)"></select></label>
     <div class="spacer"></div>
     <button class="btn danger small" id="clearAll"><span class="ic">🗑</span>Clear all</button>
-    <button class="btn small" id="printBtn"><span class="ic">⎙</span>Print</button>
+    <div class="filebtns" role="group" aria-label="Save, print and open">
+      <select id="pdfScope" aria-label="PDF pages" hidden><option value="one">This class</option><option value="all">All classes</option></select>
+      <button class="btn small primary" id="pdfBtn" title="Save a PDF of the table. The data is embedded so you can re-open it here later."><span class="ic">⭳</span>Save PDF</button>
+      <button class="btn small" id="printBtn"><span class="ic">⎙</span>Print</button>
+      <button class="btn small" id="openBtn" title="Open a PDF saved from here, or a saved data file"><span class="ic">📂</span>Open…</button>
+      <button class="btn small" id="jsonBtn" title="Save the data as a small file you can re-open here"><span class="ic">💾</span>Save data</button>
+    </div>
+    <input type="file" id="openFile" accept=".pdf,.json,application/pdf,application/json" hidden>
   </header>
+  <div class="subbar">
+    <div class="toggles" id="toggles" role="group" aria-label="Show on each element">
+      <span class="lab">Show</span>
+      <label class="check"><input type="checkbox" id="showNum"> Atomic #</label>
+      <label class="check"><input type="checkbox" id="showMass"> Atomic mass</label>
+      <label class="check"><input type="checkbox" id="showIons"> Common ions</label>
+      <label class="check" id="namesWrap"><input type="checkbox" id="showNames" checked> Student names</label>
+    </div>
+  </div>
 
   <div class="main">
     <aside class="panel" id="panel" hidden aria-label="Assign students">
-      <h3 class="section-title">Class</h3>
-      <div class="row"><select id="clsSel" aria-label="Class"></select><span class="count-pill" id="clsCount">0</span></div>
+      <div class="row" style="justify-content:space-between"><h3 class="section-title" style="margin:0">Class</h3><span class="count-pill" id="clsCount">0</span></div>
+      <p class="hint" style="margin:6px 0 0">Assigning on the table for <b id="panelCls"></b>. Use the <b>Class</b> selector at the top to switch to another class’s table.</p>
+      <div class="empty" id="staleNote" hidden style="margin-top:10px">This class is no longer on your class lists, so its students can’t be edited here. You can still view, print or clear its table.</div>
 
       <div id="stuBlock">
         <div class="stack row" style="justify-content:space-between">
@@ -240,11 +275,13 @@
     <section class="stage">
       <div class="canvas-scroll">
         <div class="pt-wrap" id="wrap">
-          <div id="printHeader">Periodic Table <span id="printMeta"></span></div>
           <div class="pt" id="pt">
             <div class="detail" id="detail"></div>
+            <div class="print-title" id="printTitle"><h2>Periodic Table</h2><div class="pc" id="printClass"></div><div class="pm" id="printMeta"></div></div>
           </div>
           <div class="legend" id="legend" role="group" aria-label="Filter by element type"></div>
+          <p class="hint sources">Names and element types: PubChem (NIH). Atomic masses: Periodic-Table-JSON, cross-checked with PubChem; [brackets] = mass number of the longest-lived isotope.
+            Common ions: the most common oxidation states in Greenwood &amp; Earnshaw (via Wikipedia), limited to simple ions. Details in DATA.md.</p>
         </div>
       </div>
       <div class="statusbar" id="status"></div>
@@ -263,136 +300,139 @@
 const $ = id => document.getElementById(id);
 const LS = 'teachingtools:periodic-table';
 const ROSTER_LS = 'teachingtools:rosters';
-const SEP = '\u0001';
 
-/* ---------- element data: atomic number, symbol, name, standard atomic weight, category ----------
+/* ---------- element data ----------
+   Generated from published sources by build-data.py (see DATA.md) — not typed by hand.
+   Columns: atomic number, symbol, name, atomic mass, category, common ions ('.' = none).
    Bracketed masses are the mass number of the longest-lived isotope (no stable isotopes). */
+/* DATA-BEGIN (generated by build-data.py — see DATA.md; do not edit by hand) */
 const RAW = `
-1 H Hydrogen 1.008 nonmetal
-2 He Helium 4.0026 noble
-3 Li Lithium 6.94 alkali
-4 Be Beryllium 9.0122 alkaline
-5 B Boron 10.81 metalloid
-6 C Carbon 12.011 nonmetal
-7 N Nitrogen 14.007 nonmetal
-8 O Oxygen 15.999 nonmetal
-9 F Fluorine 18.998 halogen
-10 Ne Neon 20.180 noble
-11 Na Sodium 22.990 alkali
-12 Mg Magnesium 24.305 alkaline
-13 Al Aluminum 26.982 post
-14 Si Silicon 28.085 metalloid
-15 P Phosphorus 30.974 nonmetal
-16 S Sulfur 32.06 nonmetal
-17 Cl Chlorine 35.45 halogen
-18 Ar Argon 39.95 noble
-19 K Potassium 39.098 alkali
-20 Ca Calcium 40.078 alkaline
-21 Sc Scandium 44.956 transition
-22 Ti Titanium 47.867 transition
-23 V Vanadium 50.942 transition
-24 Cr Chromium 51.996 transition
-25 Mn Manganese 54.938 transition
-26 Fe Iron 55.845 transition
-27 Co Cobalt 58.933 transition
-28 Ni Nickel 58.693 transition
-29 Cu Copper 63.546 transition
-30 Zn Zinc 65.38 transition
-31 Ga Gallium 69.723 post
-32 Ge Germanium 72.630 metalloid
-33 As Arsenic 74.922 metalloid
-34 Se Selenium 78.971 nonmetal
-35 Br Bromine 79.904 halogen
-36 Kr Krypton 83.798 noble
-37 Rb Rubidium 85.468 alkali
-38 Sr Strontium 87.62 alkaline
-39 Y Yttrium 88.906 transition
-40 Zr Zirconium 91.224 transition
-41 Nb Niobium 92.906 transition
-42 Mo Molybdenum 95.95 transition
-43 Tc Technetium [98] transition
-44 Ru Ruthenium 101.07 transition
-45 Rh Rhodium 102.91 transition
-46 Pd Palladium 106.42 transition
-47 Ag Silver 107.87 transition
-48 Cd Cadmium 112.41 transition
-49 In Indium 114.82 post
-50 Sn Tin 118.71 post
-51 Sb Antimony 121.76 metalloid
-52 Te Tellurium 127.60 metalloid
-53 I Iodine 126.90 halogen
-54 Xe Xenon 131.29 noble
-55 Cs Cesium 132.91 alkali
-56 Ba Barium 137.33 alkaline
-57 La Lanthanum 138.91 lanthanide
-58 Ce Cerium 140.12 lanthanide
-59 Pr Praseodymium 140.91 lanthanide
-60 Nd Neodymium 144.24 lanthanide
-61 Pm Promethium [145] lanthanide
-62 Sm Samarium 150.36 lanthanide
-63 Eu Europium 151.96 lanthanide
-64 Gd Gadolinium 157.25 lanthanide
-65 Tb Terbium 158.93 lanthanide
-66 Dy Dysprosium 162.50 lanthanide
-67 Ho Holmium 164.93 lanthanide
-68 Er Erbium 167.26 lanthanide
-69 Tm Thulium 168.93 lanthanide
-70 Yb Ytterbium 173.05 lanthanide
-71 Lu Lutetium 174.97 lanthanide
-72 Hf Hafnium 178.49 transition
-73 Ta Tantalum 180.95 transition
-74 W Tungsten 183.84 transition
-75 Re Rhenium 186.21 transition
-76 Os Osmium 190.23 transition
-77 Ir Iridium 192.22 transition
-78 Pt Platinum 195.08 transition
-79 Au Gold 196.97 transition
-80 Hg Mercury 200.59 transition
-81 Tl Thallium 204.38 post
-82 Pb Lead 207.2 post
-83 Bi Bismuth 208.98 post
-84 Po Polonium [209] post
-85 At Astatine [210] halogen
-86 Rn Radon [222] noble
-87 Fr Francium [223] alkali
-88 Ra Radium [226] alkaline
-89 Ac Actinium [227] actinide
-90 Th Thorium 232.04 actinide
-91 Pa Protactinium 231.04 actinide
-92 U Uranium 238.03 actinide
-93 Np Neptunium [237] actinide
-94 Pu Plutonium [244] actinide
-95 Am Americium [243] actinide
-96 Cm Curium [247] actinide
-97 Bk Berkelium [247] actinide
-98 Cf Californium [251] actinide
-99 Es Einsteinium [252] actinide
-100 Fm Fermium [257] actinide
-101 Md Mendelevium [258] actinide
-102 No Nobelium [259] actinide
-103 Lr Lawrencium [266] actinide
-104 Rf Rutherfordium [267] transition
-105 Db Dubnium [268] transition
-106 Sg Seaborgium [269] transition
-107 Bh Bohrium [270] transition
-108 Hs Hassium [269] transition
-109 Mt Meitnerium [278] transition
-110 Ds Darmstadtium [281] transition
-111 Rg Roentgenium [282] transition
-112 Cn Copernicium [285] transition
-113 Nh Nihonium [286] post
-114 Fl Flerovium [289] post
-115 Mc Moscovium [290] post
-116 Lv Livermorium [293] post
-117 Ts Tennessine [294] halogen
-118 Og Oganesson [294] noble`;
+1 H Hydrogen 1.008 nonmetal 1+,1-
+2 He Helium 4.003 noble .
+3 Li Lithium 6.94 alkali 1+
+4 Be Beryllium 9.012 alkaline 2+
+5 B Boron 10.81 metalloid .
+6 C Carbon 12.011 nonmetal .
+7 N Nitrogen 14.007 nonmetal 3-
+8 O Oxygen 15.999 nonmetal 2-
+9 F Fluorine 18.998 halogen 1-
+10 Ne Neon 20.18 noble .
+11 Na Sodium 22.99 alkali 1+
+12 Mg Magnesium 24.305 alkaline 2+
+13 Al Aluminum 26.982 post 3+
+14 Si Silicon 28.085 metalloid .
+15 P Phosphorus 30.974 nonmetal 3-
+16 S Sulfur 32.06 nonmetal 2-
+17 Cl Chlorine 35.45 halogen 1-
+18 Ar Argon 39.948 noble .
+19 K Potassium 39.098 alkali 1+
+20 Ca Calcium 40.078 alkaline 2+
+21 Sc Scandium 44.956 transition 3+
+22 Ti Titanium 47.867 transition 4+
+23 V Vanadium 50.942 transition .
+24 Cr Chromium 51.996 transition 3+
+25 Mn Manganese 54.938 transition 2+,4+
+26 Fe Iron 55.845 transition 2+,3+
+27 Co Cobalt 58.933 transition 2+,3+
+28 Ni Nickel 58.693 transition 2+
+29 Cu Copper 63.546 transition 2+
+30 Zn Zinc 65.382 transition 2+
+31 Ga Gallium 69.723 post 3+
+32 Ge Germanium 72.631 metalloid .
+33 As Arsenic 74.922 metalloid .
+34 Se Selenium 78.972 nonmetal 2-
+35 Br Bromine 79.904 halogen 1-
+36 Kr Krypton 83.798 noble .
+37 Rb Rubidium 85.468 alkali 1+
+38 Sr Strontium 87.621 alkaline 2+
+39 Y Yttrium 88.906 transition 3+
+40 Zr Zirconium 91.224 transition 4+
+41 Nb Niobium 92.906 transition .
+42 Mo Molybdenum 95.951 transition 4+
+43 Tc Technetium [98] transition 4+
+44 Ru Ruthenium 101.072 transition 3+,4+
+45 Rh Rhodium 102.906 transition 3+
+46 Pd Palladium 106.421 transition 2+,4+
+47 Ag Silver 107.868 transition 1+
+48 Cd Cadmium 112.414 transition 2+
+49 In Indium 114.818 post 3+
+50 Sn Tin 118.711 post 2+,4+
+51 Sb Antimony 121.76 metalloid .
+52 Te Tellurium 127.603 metalloid .
+53 I Iodine 126.904 halogen 1-
+54 Xe Xenon 131.294 noble .
+55 Cs Cesium 132.905 alkali 1+
+56 Ba Barium 137.328 alkaline 2+
+57 La Lanthanum 138.905 lanthanide 3+
+58 Ce Cerium 140.116 lanthanide 3+,4+
+59 Pr Praseodymium 140.908 lanthanide 3+
+60 Nd Neodymium 144.242 lanthanide 3+
+61 Pm Promethium [145] lanthanide 3+
+62 Sm Samarium 150.362 lanthanide 3+
+63 Eu Europium 151.964 lanthanide 2+,3+
+64 Gd Gadolinium 157.253 lanthanide 3+
+65 Tb Terbium 158.925 lanthanide 3+
+66 Dy Dysprosium 162.5 lanthanide 3+
+67 Ho Holmium 164.93 lanthanide 3+
+68 Er Erbium 167.259 lanthanide 3+
+69 Tm Thulium 168.934 lanthanide 3+
+70 Yb Ytterbium 173.045 lanthanide 3+
+71 Lu Lutetium 174.967 lanthanide 3+
+72 Hf Hafnium 178.492 transition 4+
+73 Ta Tantalum 180.948 transition .
+74 W Tungsten 183.841 transition 4+
+75 Re Rhenium 186.207 transition 4+
+76 Os Osmium 190.233 transition 4+
+77 Ir Iridium 192.217 transition 3+,4+
+78 Pt Platinum 195.085 transition 2+,4+
+79 Au Gold 196.967 transition 3+
+80 Hg Mercury 200.592 transition 1+,2+
+81 Tl Thallium 204.38 post 1+,3+
+82 Pb Lead 207.21 post 2+,4+
+83 Bi Bismuth 208.98 post 3+
+84 Po Polonium [209] metalloid .
+85 At Astatine [210] halogen 1-
+86 Rn Radon [222] noble .
+87 Fr Francium [223] alkali 1+
+88 Ra Radium [226] alkaline 2+
+89 Ac Actinium [227] actinide 3+
+90 Th Thorium 232.038 actinide 4+
+91 Pa Protactinium 231.036 actinide .
+92 U Uranium 238.029 actinide .
+93 Np Neptunium [237] actinide .
+94 Pu Plutonium [244] actinide 4+
+95 Am Americium [243] actinide 3+
+96 Cm Curium [247] actinide 3+
+97 Bk Berkelium [247] actinide 3+
+98 Cf Californium [251] actinide 3+
+99 Es Einsteinium [252] actinide 3+
+100 Fm Fermium [257] actinide 3+
+101 Md Mendelevium [258] actinide 3+
+102 No Nobelium [259] actinide 3+
+103 Lr Lawrencium [266] actinide 3+
+104 Rf Rutherfordium [267] transition 4+
+105 Db Dubnium [268] transition .
+106 Sg Seaborgium [269] transition .
+107 Bh Bohrium [270] transition .
+108 Hs Hassium [269] transition .
+109 Mt Meitnerium [278] transition .
+110 Ds Darmstadtium [281] transition .
+111 Rg Roentgenium [282] transition .
+112 Cn Copernicium [285] transition .
+113 Nh Nihonium [286] post .
+114 Fl Flerovium [289] post .
+115 Mc Moscovium [289] post .
+116 Lv Livermorium [293] post .
+117 Ts Tennessine [294] halogen .
+118 Og Oganesson [294] noble .`;
+/* DATA-END */
 const EL = RAW.trim().split('\n').map(l=>{
-  const [z,sym,name,mass,cat] = l.trim().split(' ');
-  return { z:+z, sym, name, mass, cat };
+  const [z,sym,name,mass,cat,ion] = l.trim().split(' ');
+  return { z:+z, sym, name, mass, cat, ions: ion==='.' ? [] : ion.split(',').map(t=>t.replace('-','\u2212')) };
 });
 const CATS = [
   ['alkali','Alkali metal'],['alkaline','Alkaline earth metal'],['transition','Transition metal'],
-  ['post','Post-transition metal'],['metalloid','Metalloid'],['nonmetal','Reactive nonmetal'],
+  ['post','Post-transition metal'],['metalloid','Metalloid'],['nonmetal','Nonmetal'],
   ['halogen','Halogen'],['noble','Noble gas'],['lanthanide','Lanthanide'],['actinide','Actinide']
 ];
 const CAT_NAME = Object.fromEntries(CATS);
@@ -412,37 +452,46 @@ function pos(z){
 }
 
 /* ---------- state ---------- */
+// Each class has its OWN table: state.tables[className][symbol] = studentName
 const state = {
   mode:'view',
-  assign:{},          // symbol -> { c:className, n:studentName }
+  tables:{},
   local:[],           // classes added by hand: [{name, students[]}]
-  cls:'',             // active class name in the panel
+  cls:'',             // active class (= which table is showing)
   showNames:true,
-  sel:null,           // selected student key
+  show:{ num:true, mass:false, ions:false },   // View-mode extras on each element (Assign mode ignores these)
+  sel:null,           // selected student (name) in the active class
   detailZ:null,       // element clicked (pinned in the detail card)
   hoverZ:null,
   filter:null,        // category being highlighted
   onlyUn:false
 };
 let shared = [];      // classes from the home page's shared store
-const skey = (c,n) => c + SEP + n;
 
 function save(){
-  try{ localStorage.setItem(LS, JSON.stringify({ v:1, assign:state.assign, local:state.local, cls:state.cls, showNames:state.showNames })); }catch(e){}
+  try{ localStorage.setItem(LS, JSON.stringify({ v:2, tables:state.tables, local:state.local, cls:state.cls, showNames:state.showNames, show:state.show })); }catch(e){}
+}
+function cleanTable(t){
+  const out = {};
+  if(t && typeof t==='object') for(const sym of Object.keys(t)) if(BY_SYM[sym] && typeof t[sym]==='string' && t[sym]) out[sym] = t[sym];
+  return out;
 }
 function load(){
   try{
     const d = JSON.parse(localStorage.getItem(LS)||'null');
     if(!d) return;
-    if(d.assign && typeof d.assign==='object'){
+    if(d.tables && typeof d.tables==='object'){
+      for(const c of Object.keys(d.tables)){ const t = cleanTable(d.tables[c]); if(Object.keys(t).length) state.tables[c] = t; }
+    }else if(d.assign && typeof d.assign==='object'){          // v1 (one shared table) → one table per class
       for(const sym of Object.keys(d.assign)){
         const a = d.assign[sym];
-        if(BY_SYM[sym] && a && typeof a.n==='string') state.assign[sym] = { c:String(a.c||''), n:a.n };
+        if(BY_SYM[sym] && a && typeof a.n==='string'){ const c = String(a.c||''); (state.tables[c] = state.tables[c] || {})[sym] = a.n; }
       }
     }
     if(Array.isArray(d.local)) state.local = d.local.filter(c=>c && Array.isArray(c.students)).map(c=>({ name:String(c.name||''), students:c.students.map(String) }));
     if(typeof d.cls==='string') state.cls = d.cls;
     if(typeof d.showNames==='boolean') state.showNames = d.showNames;
+    if(d.show && typeof d.show==='object'){ for(const k of ['num','mass','ions']) if(typeof d.show[k]==='boolean') state.show[k] = d.show[k]; }
   }catch(e){}
 }
 function loadRosters(){
@@ -455,16 +504,24 @@ function loadRosters(){
   }catch(e){ shared = []; }
 }
 const classes = () => shared.concat(state.local.map(c=>({ name:c.name, students:c.students, local:true })));
-const activeClass = () => classes().find(c=>c.name===state.cls) || classes()[0] || null;
-function studentSym(c,n){
-  for(const sym of Object.keys(state.assign)){ const a=state.assign[sym]; if(a.c===c && a.n===n) return sym; }
-  return null;
+// Every class that can show a table: the class lists, plus any class that still has saved assignments.
+function allNames(){
+  const n = classes().map(c=>c.name);
+  Object.keys(state.tables).forEach(k=>{ if(!n.includes(k)) n.push(k); });
+  return n;
 }
+const curName = () => { const n = allNames(); return n.includes(state.cls) ? state.cls : (n[0] || ''); };
+const curClass = () => classes().find(c=>c.name===curName()) || null;   // null when the class is no longer on any list
+const tbl = () => state.tables[curName()] || {};
+const countOf = name => Object.keys(state.tables[name] || {}).length;
+function studentSym(name){ const t = tbl(); for(const s of Object.keys(t)) if(t[s]===name) return s; return null; }
+function setCell(sym, name){ const c = curName(); (state.tables[c] = state.tables[c] || {})[sym] = name; }
+function delCell(sym){ const c = curName(), t = state.tables[c]; if(!t) return; delete t[sym]; if(!Object.keys(t).length) delete state.tables[c]; }
 
 /* ---------- toast ---------- */
 function toast(msg, kind){
   const t = document.createElement('div'); t.className = 'toast' + (kind?' '+kind:''); t.textContent = msg;
-  $('toasts').appendChild(t); setTimeout(()=>t.remove(), 3600);
+  $('toasts').appendChild(t); setTimeout(()=>t.remove(), kind==='err' ? 6000 : 3600);
 }
 
 /* ---------- build the table once ---------- */
@@ -477,11 +534,16 @@ function buildTable(){
     b.className = 'el'; b.type = 'button';
     b.style.gridRow = r; b.style.gridColumn = c; b.style.setProperty('--cat', 'var(--c-'+e.cat+')');
     b.dataset.sym = e.sym;
+    const top = document.createElement('div'); top.className='top';
     const num = document.createElement('span'); num.className='num'; num.textContent = e.z;
+    const ion = document.createElement('span'); ion.className='ion'; ion.textContent = e.ions.join(',');
+    top.append(num, ion);
     const sym = document.createElement('span'); sym.className='sym'; sym.textContent = e.sym;
     const nm  = document.createElement('span'); nm.className='nm';  nm.textContent = e.name;
     const who = document.createElement('span'); who.className='who'; who.hidden = true;
-    b.append(num, sym, nm, who);
+    const mid = document.createElement('div'); mid.className='mid'; mid.append(nm, who);
+    const mass = document.createElement('div'); mass.className='mass'; mass.textContent = e.mass;
+    b.append(top, sym, mid, mass);
     b.addEventListener('click', ()=>onElement(e.sym));
     b.addEventListener('mouseenter', ()=>{ state.hoverZ = e.z; renderDetail(); });
     b.addEventListener('mouseleave', ()=>{ state.hoverZ = null; renderDetail(); });
@@ -510,22 +572,42 @@ function buildTable(){
 }
 
 /* ---------- rendering ---------- */
+// Biggest font (in % of cell width) at which the name's longest word fits on a line and the wrapped
+// lines fit in `avail` (% of cell width). Bold sans text averages ~0.58em per character.
+function fitWho(name, avail){
+  const words = name.split(/\s+/).filter(Boolean), WIDTH = 92;
+  for(const f of [24,21,19,17,15,13,11,9.5]){
+    const per = Math.floor(WIDTH/(0.58*f));
+    if(Math.max(...words.map(w=>w.length)) > per) continue;
+    let lines = 1, cur = 0;
+    words.forEach(w=>{ if(cur && cur+1+w.length > per){ lines++; cur = w.length; } else cur += (cur?1:0) + w.length; });
+    if(lines*f*1.05 <= avail) return 'max(6px,'+f+'cqw)';
+  }
+  return 'max(5.5px,8.5cqw)';
+}
+const effShow = () => state.mode==='assign' ? { num:true, mass:false, ions:false } : state.show;   // Assign mode keeps cells uncluttered
+
 function renderTable(){
-  const showWho = state.showNames || state.mode==='assign';
-  const selSym = state.sel ? studentSym(...state.sel.split(SEP)) : null;
+  const asg = state.mode==='assign';
+  const showWho = state.showNames || asg;
+  const eff = effShow();
+  const pt = $('pt');
+  pt.classList.toggle('hide-num', !eff.num); pt.classList.toggle('hide-mass', !eff.mass); pt.classList.toggle('hide-ion', !eff.ions);
+  const t = tbl(), avail = eff.mass ? 36 : 48;   // room under the symbol, in % of cell width
+  const selSym = state.sel ? studentSym(state.sel) : null;
   EL.forEach(e=>{
     const { btn, who } = cells[e.sym];
-    const a = state.assign[e.sym];
-    const has = !!a && showWho;
+    const n = t[e.sym];
+    const has = !!n && showWho;
     btn.classList.toggle('has-who', has);
     btn.classList.toggle('dim', !!state.filter && state.filter!==e.cat);
     btn.classList.toggle('mine', e.sym===selSym);
     btn.classList.toggle('focus', state.detailZ===e.z && e.sym!==selSym);
     who.hidden = !has;
-    who.textContent = has ? a.n : '';
-    who.className = 'who' + (has && a.n.length>18 ? ' lg' : has && a.n.length>10 ? ' md' : '');
-    btn.title = a ? e.name + ' — ' + a.n : e.name;
-    btn.setAttribute('aria-label', e.name + ' (' + e.sym + '), number ' + e.z + (a ? ', assigned to ' + a.n : ''));
+    who.textContent = has ? n : '';
+    if(has) who.style.fontSize = fitWho(n, avail);
+    btn.title = n ? e.name + ' — ' + n : e.name;
+    btn.setAttribute('aria-label', e.name + ' (' + e.sym + '), number ' + e.z + (n ? ', assigned to ' + n : ''));
   });
   document.querySelectorAll('.chip').forEach(ch=>ch.classList.toggle('active', ch.dataset.cat===state.filter));
 }
@@ -540,7 +622,7 @@ function renderDetail(){
       : 'Hover or click an element for details. Switch to Assign to put students on elements.';
     box.appendChild(p); return;
   }
-  const e = EL[z-1], a = state.assign[e.sym];
+  const e = EL[z-1], n = tbl()[e.sym];
   box.style.setProperty('--cat','var(--c-'+e.cat+')');
   const tile = document.createElement('div'); tile.className='tile';
   const zz = document.createElement('span'); zz.className='z'; zz.textContent = e.z;
@@ -551,42 +633,62 @@ function renderDetail(){
   const m = document.createElement('div'); m.className='meta'; m.textContent = 'Atomic number ' + e.z + '  ·  Atomic mass ' + e.mass;
   const c = document.createElement('span'); c.className='cat'; c.textContent = CAT_NAME[e.cat];
   info.append(h, m, c);
-  if(a){
+  const io = document.createElement('div'); io.className='meta'; io.style.marginTop='6px';
+  io.append('Common ions: ');
+  if(!e.ions.length) io.append('none listed');
+  e.ions.forEach((t,i)=>{ if(i) io.append(', '); const sup=document.createElement('sup'); sup.textContent=t; io.append(e.sym, sup); });
+  info.appendChild(io);
+  if(n){
     const w = document.createElement('div'); w.className='who-line';
-    const b = document.createElement('b'); b.textContent = a.n;
-    w.append('Assigned to ', b); if(a.c) w.append('  ·  ' + a.c);
+    const b = document.createElement('b'); b.textContent = n;
+    w.append('Assigned to ', b); if(curName()) w.append('  ·  ' + curName());
     info.appendChild(w);
   }
   box.append(tile, info);
 }
 
+function renderTableSel(){
+  const names = allNames(), sel = $('tableSel'); sel.textContent = '';
+  if(!names.length){
+    const o = document.createElement('option'); o.textContent = 'No classes yet'; o.value = ''; sel.appendChild(o); sel.disabled = true; return;
+  }
+  sel.disabled = false;
+  const inLists = new Set(classes().map(c=>c.name));
+  names.forEach(nm=>{
+    const o = document.createElement('option'); o.value = nm;
+    o.textContent = nm + (countOf(nm) ? '  ·  ' + countOf(nm) : '') + (inLists.has(nm) ? '' : '  (not in class lists)');
+    sel.appendChild(o);
+  });
+  sel.value = curName();
+  $('pdfScope').hidden = names.length < 2;
+}
+
 function renderPanel(){
   $('panel').hidden = state.mode!=='assign';
   if(state.mode!=='assign') return;
-  const all = classes();
-  const sel = $('clsSel'); sel.textContent='';
-  const cur = activeClass();
-  all.forEach(c=>{ const o=document.createElement('option'); o.value=c.name; o.textContent=c.name + (c.local?' (by hand)':''); sel.appendChild(o); });
-  if(cur) sel.value = cur.name;
-  $('noClass').hidden = !!all.length;
-  $('stuBlock').hidden = !all.length;
-  $('hand').open = $('hand').open || !all.length;
+  const name = curName(), cur = curClass();
+  const noClasses = !classes().length;
+  $('noClass').hidden = !noClasses;
+  $('stuBlock').hidden = noClasses;
+  $('hand').open = $('hand').open || noClasses;
   $('rmClass').hidden = !(cur && cur.local);
+  $('panelCls').textContent = name || '—';
   const list = $('stuList'); list.textContent='';
-  if(!cur){ $('clsCount').textContent='0'; return; }
+  $('staleNote').hidden = !(name && !cur);
+  if(!cur){ $('clsCount').textContent = '0 / 0'; return; }
   let placed = 0;
   cur.students.forEach(n=>{
-    const sym = studentSym(cur.name, n);
+    const sym = studentSym(n);
     if(sym) placed++;
     if(state.onlyUn && sym) return;
     const li = document.createElement('li');
-    li.className = (sym?'done ':'') + (state.sel===skey(cur.name,n)?'sel':'');
+    li.className = (sym?'done ':'') + (state.sel===n?'sel':'');
     const nm = document.createElement('span'); nm.className='nm'; nm.textContent=n; nm.title=n;
     const bd = document.createElement('span'); bd.className='sym-badge' + (sym?'':' none'); bd.textContent = sym || '—';
     const x = document.createElement('button'); x.className='xbtn'; x.type='button'; x.textContent='×'; x.title='Unassign'; x.setAttribute('aria-label','Unassign '+n); x.hidden=!sym;
     x.addEventListener('click', ev=>{ ev.stopPropagation(); unassign(sym); });
     li.append(nm, bd, x);
-    li.addEventListener('click', ()=>{ state.sel = state.sel===skey(cur.name,n) ? null : skey(cur.name,n); render(); });
+    li.addEventListener('click', ()=>{ state.sel = state.sel===n ? null : n; render(); });
     list.appendChild(li);
   });
   $('clsCount').textContent = placed + ' / ' + cur.students.length;
@@ -595,16 +697,16 @@ function renderPanel(){
 function renderStatus(){
   const st = $('status'); st.textContent='';
   const add = (label, val)=>{ const s=document.createElement('span'); const b=document.createElement('b'); b.textContent=val; s.append(b, ' '+label); st.appendChild(s); };
-  const total = Object.keys(state.assign).length;
-  add('elements assigned', total + ' / 118');
-  const cur = state.mode==='assign' ? activeClass() : null;
-  if(cur){
-    const sep = document.createElement('span'); sep.textContent='·'; st.appendChild(sep);
-    const left = cur.students.filter(n=>!studentSym(cur.name,n)).length;
-    add('unassigned in ' + cur.name, left);
-  }
-  const printMeta = $('printMeta');
-  printMeta.textContent = total ? total + ' assigned · ' + new Date().toLocaleDateString() : new Date().toLocaleDateString();
+  const sep = ()=>{ const s=document.createElement('span'); s.textContent='·'; st.appendChild(s); };
+  const total = countOf(curName());
+  add('elements assigned' + (curName() ? ' in ' + curName() : ''), total + ' / 118');
+  const cur = state.mode==='assign' ? curClass() : null;
+  if(cur){ sep(); add('students unassigned', cur.students.filter(n=>!studentSym(n)).length); }
+  const nTables = Object.keys(state.tables).length;
+  if(nTables > 1){ sep(); add('classes with tables', nTables); }
+  const d = new Date().toLocaleDateString();
+  $('printClass').textContent = curName() || '';
+  $('printMeta').textContent = (total ? total + ' assigned · ' : '') + d;
 }
 
 function renderMode(){
@@ -614,17 +716,18 @@ function renderMode(){
   $('pt').classList.toggle('assigning', asg);
   $('app').classList.toggle('assigning', asg);
   $('showNames').checked = state.showNames || asg;
-  $('showNames').disabled = asg;
-  $('namesWrap').classList.toggle('off', asg);
-  $('namesWrap').title = asg ? 'Names are always shown in Assign mode' : '';
+  const eff = effShow();
+  $('showNum').checked = eff.num; $('showMass').checked = eff.mass; $('showIons').checked = eff.ions;
+  ['showNames','showNum','showMass','showIons'].forEach(id=>{ $(id).disabled = asg; $(id).parentNode.classList.toggle('off', asg); });
+  $('toggles').title = asg ? 'These options apply in View mode. Assign mode always shows names.' : '';
   $('clearAll').hidden = !asg;
 }
-function render(){ renderMode(); renderTable(); renderDetail(); renderPanel(); renderStatus(); }
+function render(){ renderMode(); renderTableSel(); renderTable(); renderDetail(); renderPanel(); renderStatus(); }
 
 /* ---------- actions ---------- */
 function unassign(sym){
-  if(!state.assign[sym]) return;
-  delete state.assign[sym]; save(); render();
+  if(!tbl()[sym]) return;
+  delCell(sym); save(); render();
 }
 // Next student in the active class who has no element yet (to speed up bulk assigning).
 function nextUnassigned(cur, afterName){
@@ -632,7 +735,7 @@ function nextUnassigned(cur, afterName){
   const list = cur.students, start = list.indexOf(afterName);   // -1 (not found / null) → begin at the first student
   for(let k=1;k<=list.length;k++){
     const n = list[(start+k)%list.length];
-    if(!studentSym(cur.name,n)) return n;
+    if(!studentSym(n)) return n;
   }
   return null;
 }
@@ -640,86 +743,280 @@ function onElement(sym){
   const e = BY_SYM[sym];
   state.detailZ = e.z;
   if(state.mode!=='assign'){ render(); return; }
-  const occ = state.assign[sym];
+  if(!curName()){ toast('Add a class first (panel on the left).'); render(); return; }
+  const occ = tbl()[sym], cur = curClass();
   if(!state.sel){
     if(occ){
-      // pick up the student on this element so they can be moved
-      if(!classes().some(c=>c.name===occ.c && c.students.includes(occ.n))){
-        // student has since been removed from the class lists — just free the element
-        delete state.assign[sym]; save(); render(); toast(occ.n + ' is no longer on a class list — removed from ' + e.name + '.'); return;
-      }
-      state.cls = occ.c; state.sel = skey(occ.c, occ.n);
+      if(cur && cur.students.includes(occ)) state.sel = occ;      // pick up the student on this element so they can be moved
+      else { delCell(sym); save(); render(); toast(occ + ' is no longer on the class list — removed from ' + e.name + '.'); return; }
     }else{
       toast('Pick a student in the panel first.');
     }
     render(); return;
   }
-  const [c,n] = state.sel.split(SEP);
-  if(occ && occ.c===c && occ.n===n){ delete state.assign[sym]; state.sel = null; save(); render(); return; }   // same element again → unassign
-  const prev = studentSym(c,n);
-  if(prev) delete state.assign[prev];                                  // moving
-  if(occ) toast(occ.n + ' was on ' + e.name + ' — replaced by ' + n + '.');
-  state.assign[sym] = { c, n };
-  const cur = classes().find(k=>k.name===c);
-  const nx = nextUnassigned(cur, n);
-  state.sel = nx ? skey(c, nx) : null;
+  const n = state.sel;
+  if(occ===n){ delCell(sym); state.sel = null; save(); render(); return; }   // same element again → unassign
+  const prev = studentSym(n);
+  if(prev) delCell(prev);                                                    // moving
+  if(occ) toast(occ + ' was on ' + e.name + ' — replaced by ' + n + '.');
+  setCell(sym, n);
+  state.sel = nextUnassigned(cur, n);
   save(); render();
 }
 function assignRandomly(){
-  const cur = activeClass(); if(!cur) return;
-  const todo = cur.students.filter(n=>!studentSym(cur.name,n));
+  const cur = curClass(); if(!cur) return;
+  const todo = cur.students.filter(n=>!studentSym(n));
   if(!todo.length){ toast('Everyone in this class already has an element.'); return; }
-  const free = EL.map(e=>e.sym).filter(s=>!state.assign[s]);
+  const free = EL.map(e=>e.sym).filter(s=>!tbl()[s]);
   for(let i=free.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [free[i],free[j]]=[free[j],free[i]]; }
   let k = 0;
-  todo.forEach(n=>{ if(k<free.length){ state.assign[free[k++]] = { c:cur.name, n }; } });
+  todo.forEach(n=>{ if(k<free.length) setCell(free[k++], n); });
   state.sel = null; save(); render();
   toast(k<todo.length ? 'Ran out of elements — ' + (todo.length-k) + ' students left unassigned.' : 'Assigned ' + k + ' students.', k<todo.length?'err':'ok');
 }
 function clearClass(){
-  const cur = activeClass(); if(!cur) return;
-  const mine = Object.keys(state.assign).filter(s=>state.assign[s].c===cur.name);
-  if(!mine.length) return;
-  if(!confirm('Remove all ' + mine.length + ' assignments for “' + cur.name + '”?')) return;
-  mine.forEach(s=>delete state.assign[s]); state.sel = null; save(); render();
+  const c = curName(), n = countOf(c); if(!n) return;
+  if(!confirm('Remove all ' + n + ' assignments for “' + c + '”?')) return;
+  delete state.tables[c]; state.sel = null; save(); render();
 }
 function clearAll(){
-  const n = Object.keys(state.assign).length; if(!n) return;
+  const n = Object.keys(state.tables).reduce((a,c)=>a+countOf(c),0); if(!n) return;
   if(!confirm('Remove all ' + n + ' assignments for every class?')) return;
-  state.assign = {}; state.sel = null; save(); render();
+  state.tables = {}; state.sel = null; save(); render();
 }
 function addClass(){
   const name = $('newName').value.trim();
   const students = $('newNames').value.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
   if(!name){ toast('Give the class a name.', 'err'); return; }
   if(!students.length){ toast('Add at least one name.', 'err'); return; }
-  if(classes().some(c=>c.name.toLowerCase()===name.toLowerCase())){ toast('A class with that name already exists.', 'err'); return; }
+  if(allNames().some(c=>c.toLowerCase()===name.toLowerCase())){ toast('A class with that name already exists.', 'err'); return; }
   state.local.push({ name, students });
-  state.cls = name; $('newName').value=''; $('newNames').value=''; $('hand').open = false;
+  state.cls = name; state.sel = null; $('newName').value=''; $('newNames').value=''; $('hand').open = false;
   save(); render(); toast('Added “' + name + '”.', 'ok');
 }
 function removeLocalClass(){
-  const cur = activeClass(); if(!cur || !cur.local) return;
-  if(!confirm('Remove the hand-made class “' + cur.name + '” and its assignments?')) return;
+  const cur = curClass(); if(!cur || !cur.local) return;
+  if(!confirm('Remove the hand-made class “' + cur.name + '” and its table?')) return;
   state.local = state.local.filter(c=>c.name!==cur.name);
-  Object.keys(state.assign).forEach(s=>{ if(state.assign[s].c===cur.name) delete state.assign[s]; });
+  delete state.tables[cur.name];
   state.sel = null; state.cls = ''; save(); render();
+}
+function switchClass(name){
+  state.cls = name; state.sel = null;
+  if(state.mode==='assign') state.sel = nextUnassigned(curClass(), null);
+  save(); render();
 }
 function setMode(m){
   state.mode = m; state.sel = null;
-  if(m==='assign'){ loadRosters(); const cur=activeClass(); if(cur) { state.cls=cur.name; const nx=nextUnassigned(cur, null); if(nx) state.sel=skey(cur.name,nx); } }
+  if(m==='assign'){ loadRosters(); state.cls = curName(); state.sel = nextUnassigned(curClass(), null); }
   render();
+}
+
+/* ---------- saving & re-opening ----------
+   The data (every class's table, plus the class lists they came from, plus the display options) is one
+   small JSON object. "Save data" writes it as a .json file; "Save PDF" embeds it inside the PDF as an
+   attachment, so either file can be re-opened here and edited again. */
+const DATA_TYPE = 'teachingtools-periodic-table';
+function buildData(){
+  return {
+    type:DATA_TYPE, version:1, savedAt:Date.now(), active:curName(),
+    tables:JSON.parse(JSON.stringify(state.tables)),
+    classes:classes().map(c=>({ name:c.name, students:c.students.slice() })),
+    show:Object.assign({}, state.show)
+  };
+}
+function importData(d){
+  if(!d || d.type!==DATA_TYPE || typeof d.tables!=='object') throw new Error('This file isn’t Periodic Table data.');
+  const incoming = {};
+  Object.keys(d.tables).forEach(c=>{ const t = cleanTable(d.tables[c]); if(Object.keys(t).length) incoming[c] = t; });
+  const clash = Object.keys(incoming).filter(c=>countOf(c));
+  if(clash.length && !confirm('Replace the current table for ' + clash.map(c=>'“'+c+'”').join(', ') + ' with the one in this file?')) return false;
+  // keep the roster for any class that isn't already known here, so its students can be edited
+  (Array.isArray(d.classes) ? d.classes : []).forEach(c=>{
+    const name = String((c && c.name)||'').trim(), students = ((c && c.students)||[]).map(s=>String(s).trim()).filter(Boolean);
+    if(name && students.length && !classes().some(k=>k.name===name)) state.local.push({ name, students });
+  });
+  Object.assign(state.tables, incoming);
+  if(d.show && typeof d.show==='object') for(const k of ['num','mass','ions']) if(typeof d.show[k]==='boolean') state.show[k] = d.show[k];
+  if(typeof d.active==='string' && allNames().includes(d.active)) state.cls = d.active;
+  else if(Object.keys(incoming).length) state.cls = Object.keys(incoming)[0];
+  state.sel = null; save(); render();
+  toast('Opened ' + Object.keys(incoming).length + ' class table' + (Object.keys(incoming).length===1?'':'s') + '.', 'ok');
+  return true;
+}
+function download(name, blob){
+  const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1500);
+}
+const fileSafe = s => (s||'').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-').toLowerCase() || 'class';
+function saveJson(){
+  download('periodic-table-data.json', new Blob([JSON.stringify(buildData(), null, 2)], { type:'application/json' }));
+}
+async function openFile(file){
+  try{
+    const u8 = new Uint8Array(await file.arrayBuffer());
+    let text;
+    if(u8[0]===0x25 && u8[1]===0x50 && u8[2]===0x44 && u8[3]===0x46){           // "%PDF"
+      let s = ''; for(let i=0;i<u8.length;i+=0x8000) s += String.fromCharCode.apply(null, u8.subarray(i,i+0x8000));
+      const m = [...s.matchAll(/TTPT1:([A-Za-z0-9+\/=]+):TTPT1END/g)];
+      if(!m.length) throw new Error('No Periodic Table data found in this PDF. Only PDFs made with “Save PDF” here carry it (a PDF re-saved or printed by another program loses it) — use “Save data” for a safe copy.');
+      text = new TextDecoder().decode(Uint8Array.from(atob(m[m.length-1][1]), ch=>ch.charCodeAt(0)));
+    }else text = new TextDecoder().decode(u8);
+    importData(JSON.parse(text));
+  }catch(err){ toast(err instanceof SyntaxError ? 'That file isn’t Periodic Table data.' : err.message, 'err'); }
+}
+
+/* ---------- PDF export ----------
+   Written directly (no libraries): letter-landscape pages, vector text in Helvetica, one page per class.
+   Student names are drawn as real text. The data above is embedded as a PDF file attachment (base64,
+   uncompressed) so "Open…" can read it back. */
+const PW = 792, PH = 612;
+const WINANSI = { '’':0x92,'‘':0x91,'“':0x93,'”':0x94,'–':0x96,'—':0x97,'•':0x95,'…':0x85,'€':0x80 };
+let pdfLossy = false;
+function toWin(str){
+  let s = '';
+  for(const ch of String(str).normalize('NFC')){
+    const c = ch.codePointAt(0);
+    if((c>=32 && c<127) || (c>=160 && c<256)) s += ch;
+    else if(WINANSI[ch]) s += String.fromCharCode(WINANSI[ch]);
+    else if(ch==='−') s += '-';
+    else { s += '?'; pdfLossy = true; }
+  }
+  return s;
+}
+const pdfEsc = s => s.replace(/[\\()]/g, m=>'\\'+m);
+const mctx = document.createElement('canvas').getContext('2d');
+function tw(text, size, bold){      // Arial/Liberation Sans are metric-compatible with Helvetica
+  mctx.font = (bold?'bold ':'') + '100px Arial, Helvetica, "Liberation Sans", sans-serif';
+  return mctx.measureText(text).width * size / 100;
+}
+function rgbOf(hex){ const h = hex.trim().replace('#',''); return [0,2,4].map(i=>(parseInt(h.substr(i,2),16)/255).toFixed(3)).join(' '); }
+// Largest size at which the name fits the cell. Whole words are kept intact when possible; only if a single
+// word is wider than the cell is it broken across lines (like overflow-wrap on screen).
+function wrapName(name, maxW, maxH){
+  const words = name.split(/\s+/).filter(Boolean), sizes = [11,10,9,8,7.5,7,6.5,6,5.5,5];
+  let last = null;
+  for(const split of [false,true]) for(const f of sizes){
+    const lines = []; let cur = '', ok = true;
+    const add = w=>{ const t = cur ? cur+' '+w : w; if(cur && tw(t,f,true) > maxW){ lines.push(cur); cur = w; } else cur = t; };
+    for(const w of words){
+      if(tw(w,f,true) <= maxW){ add(w); continue; }
+      if(!split){ ok = false; break; }
+      if(cur){ lines.push(cur); cur = ''; }
+      let piece = '';
+      for(const chr of w){ if(piece && tw(piece+chr,f,true) > maxW){ lines.push(piece); piece = ''; } piece += chr; }
+      cur = piece;
+    }
+    if(!ok) continue;
+    if(cur) lines.push(cur);
+    last = { f, lines };
+    if(lines.length*f*1.08 <= maxH) return last;
+  }
+  return last || { f:5, lines:[name] };
+}
+function drawPage(className, eff){
+  const root = getComputedStyle(document.documentElement);
+  const col = k => rgbOf(root.getPropertyValue('--c-'+k));
+  const t = state.tables[className] || {};
+  const ops = [];
+  const text = (str, x, y, size, bold, color, align)=>{
+    if(str==='') return;
+    const w = tw(str, size, bold), x0 = align==='c' ? x-w/2 : align==='r' ? x-w : x;
+    ops.push(color+' rg BT /F'+(bold?2:1)+' '+size+' Tf '+x0.toFixed(2)+' '+(PH-y).toFixed(2)+' Td ('+pdfEsc(toWin(str))+') Tj ET');
+  };
+  const rect = (x,y,w,h,fill,stroke)=>{
+    ops.push((fill?fill+' rg ':'')+(stroke?stroke+' RG 0.5 w ':'')+x.toFixed(2)+' '+(PH-y-h).toFixed(2)+' '+w.toFixed(2)+' '+h.toFixed(2)+' re '+(fill&&stroke?'B':fill?'f':'S'));
+  };
+  const M = 28, G = 1.5, cw = (PW-2*M-17*G)/18, ch = cw*1.32, step = ch+G;
+  const colX = c => M + (c-1)*(cw+G);
+  const rowY = r => r<=7 ? M+(r-1)*step : M+7*step+10+(r-9)*step;
+  const GREY = '0.36 0.40 0.39', INK = '0.086 0.141 0.122', MUTED = '0.40 0.46 0.44';
+  // title block, in the empty part of the table
+  const tx = colX(3), ty = rowY(1), tW = colX(13)-G-tx, tH = rowY(3)+ch-ty;
+  rect(tx, ty, tW, tH, '1 1 1', '0.85 0.87 0.89');
+  text('Periodic Table', tx+14, ty+30, 22, true, INK, 'l');
+  text(className || 'No class', tx+14, ty+54, 15, true, '0.122 0.239 0.208', 'l');
+  const n = Object.keys(t).length;
+  text((n ? n+' students assigned  ·  ' : '') + new Date().toLocaleDateString(), tx+14, ty+72, 8.5, false, MUTED, 'l');
+  // cells
+  EL.forEach(e=>{
+    const [r,c] = pos(e.z), x = colX(c), y = rowY(r);
+    rect(x, y, cw, ch, col(e.cat), '0.55 0.58 0.57');
+    if(eff.num) text(String(e.z), x+2.5, y+7.2, 5.6, true, '0.3 0.34 0.32', 'l');
+    if(eff.ions && e.ions.length) text(e.ions.join(','), x+cw-2.5, y+7.2, 5, true, '0.2 0.24 0.22', 'r');
+    text(e.sym, x+cw/2, y+23, 15.5, true, INK, 'c');
+    const nameTop = y+27, nameBottom = y+ch-(eff.mass ? 9 : 3), who = t[e.sym];
+    if(who){
+      const L = wrapName(who, cw-4, nameBottom-nameTop);
+      const blockH = L.lines.length*L.f*1.08;
+      let by = nameTop + (nameBottom-nameTop-blockH)/2 + L.f*0.86;
+      L.lines.forEach(line=>{ text(line, x+cw/2, by, L.f, true, GREY, 'c'); by += L.f*1.08; });
+    }else{
+      text(e.name, x+cw/2, nameTop+(nameBottom-nameTop)/2+2, Math.min(5, (cw-3)/Math.max(4,e.name.length)*1.9), false, '0.25 0.3 0.28', 'c');
+    }
+    if(eff.mass) text(e.mass, x+cw/2, y+ch-3, 5, false, '0.25 0.3 0.28', 'c');
+  });
+  text('Lanthanides', colX(3)-6, rowY(9)+ch/2+2, 7, true, MUTED, 'r');
+  text('Actinides',   colX(3)-6, rowY(10)+ch/2+2, 7, true, MUTED, 'r');
+  [[6,'57–71'],[7,'89–103']].forEach(([r,lab])=>{ rect(colX(3), rowY(r), cw, ch, null, '0.7 0.73 0.72'); text(lab, colX(3)+cw/2, rowY(r)+ch/2+2, 6, false, MUTED, 'c'); });
+  // legend
+  const items = CATS.map(([k,l])=>({ k, l, w:7+4+tw(l,7,false)+14 }));
+  const rows = [[]]; let rw = 0;
+  items.forEach(it=>{ if(rw+it.w > PW-2*M && rows[rows.length-1].length){ rows.push([]); rw = 0; } rows[rows.length-1].push(it); rw += it.w; });
+  let ly = rowY(10)+ch+16;
+  rows.forEach(row=>{
+    let x = (PW - row.reduce((a,i)=>a+i.w,0) + 14)/2;
+    row.forEach(it=>{ rect(x, ly-6.2, 7, 7, col(it.k), '0.55 0.58 0.57'); text(it.l, x+11, ly, 7, false, INK, 'l'); x += it.w; });
+    ly += 12;
+  });
+  text('Names and types: PubChem (NIH). Masses: Periodic-Table-JSON, checked against PubChem. Common ions: Greenwood & Earnshaw via Wikipedia. To edit again, open this PDF with Open… in the Teaching Tools Periodic Table.', PW/2, PH-16, 5.6, false, MUTED, 'c');
+  return ops.join('\n');
+}
+function buildPdf(classNames){
+  pdfLossy = false;
+  const eff = state.show;
+  const pages = classNames.map(c=>drawPage(c, eff));
+  const b64 = btoa(Array.from(new TextEncoder().encode(JSON.stringify(buildData())), b=>String.fromCharCode(b)).join(''));
+  const attach = 'TTPT1:' + b64 + ':TTPT1END';
+  const title = toWin('Periodic Table' + (classNames.length===1 && classNames[0] ? ' - ' + classNames[0] : ''));
+  const objs = [];   // objs[i] = body of object i+1
+  objs[0] = '<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(periodic-table-data.txt) 5 0 R] >> >> >>';
+  objs[2] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+  objs[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+  objs[4] = '<< /Type /Filespec /F (periodic-table-data.txt) /UF (periodic-table-data.txt) /Desc (Teaching Tools Periodic Table data) /EF << /F 6 0 R >> >>';
+  objs[5] = '<< /Type /EmbeddedFile /Length ' + attach.length + ' >>\nstream\n' + attach + '\nendstream';
+  objs[6] = '<< /Title (' + pdfEsc(title) + ') /Creator (Teaching Tools Periodic Table) >>';
+  const kids = [];
+  pages.forEach((content, i)=>{
+    const pageNo = 8 + i*2, contNo = pageNo + 1;
+    kids.push(pageNo + ' 0 R');
+    objs[pageNo-1] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + PW + ' ' + PH + '] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ' + contNo + ' 0 R >>';
+    objs[contNo-1] = '<< /Length ' + content.length + ' >>\nstream\n' + content + '\nendstream';
+  });
+  objs[1] = '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + kids.length + ' >>';
+  let out = '%PDF-1.7\n%\xe2\xe3\xcf\xd3\n'; const offs = [];
+  objs.forEach((body, i)=>{ offs[i] = out.length; out += (i+1) + ' 0 obj\n' + body + '\nendobj\n'; });
+  const xref = out.length;
+  out += 'xref\n0 ' + (objs.length+1) + '\n0000000000 65535 f \n' + offs.map(o=>String(o).padStart(10,'0') + ' 00000 n \n').join('')
+      + 'trailer\n<< /Size ' + (objs.length+1) + ' /Root 1 0 R /Info 7 0 R >>\nstartxref\n' + xref + '\n%%EOF\n';
+  const bytes = new Uint8Array(out.length); for(let i=0;i<out.length;i++) bytes[i] = out.charCodeAt(i) & 255;
+  return bytes;
+}
+function savePdf(){
+  const scope = $('pdfScope').hidden ? 'one' : $('pdfScope').value;
+  const names = scope==='all' ? allNames().filter(c=>countOf(c)) : [curName()];
+  if(!names.length || (scope==='one' && !curName() && !countOf(''))){ toast('Nothing to save yet — assign some students first.', 'err'); return; }
+  const bytes = buildPdf(names);
+  download('periodic-table-' + (names.length>1 ? 'all-classes' : fileSafe(names[0])) + '.pdf', new Blob([bytes], { type:'application/pdf' }));
+  toast(pdfLossy ? 'PDF saved — some characters can’t be drawn in the PDF and show as “?”. Your data inside it is complete.' : 'PDF saved — open it here later with Open… to keep editing.', pdfLossy ? 'err' : 'ok');
 }
 
 /* ---------- wiring ---------- */
 $('modeView').addEventListener('click', ()=>setMode('view'));
 $('modeAssign').addEventListener('click', ()=>setMode('assign'));
 $('showNames').addEventListener('change', e=>{ state.showNames = e.target.checked; save(); render(); });
-$('clsSel').addEventListener('change', e=>{
-  state.cls = e.target.value; const cur = activeClass(); state.sel = null;
-  const nx = cur && nextUnassigned(cur, null); if(nx) state.sel = skey(cur.name, nx);
-  save(); render();
-});
+[['showNum','num'],['showMass','mass'],['showIons','ions']].forEach(([id,k])=>$(id).addEventListener('change', e=>{ state.show[k] = e.target.checked; save(); render(); }));
+$('tableSel').addEventListener('change', e=>switchClass(e.target.value));
 $('onlyUn').addEventListener('change', e=>{ state.onlyUn = e.target.checked; render(); });
 $('randBtn').addEventListener('click', assignRandomly);
 $('clearClass').addEventListener('click', clearClass);
@@ -727,11 +1024,18 @@ $('clearAll').addEventListener('click', clearAll);
 $('addClass').addEventListener('click', addClass);
 $('rmClass').addEventListener('click', removeLocalClass);
 $('printBtn').addEventListener('click', ()=>window.print());
+$('pdfBtn').addEventListener('click', savePdf);
+$('jsonBtn').addEventListener('click', saveJson);
+$('openBtn').addEventListener('click', ()=>$('openFile').click());
+$('openFile').addEventListener('change', e=>{ const f = e.target.files[0]; if(f) openFile(f); e.target.value = ''; });
+let titleWas = document.title;
+window.addEventListener('beforeprint', ()=>{ titleWas = document.title; document.title = 'Periodic Table' + (curName() ? ' - ' + curName() : ''); });
+window.addEventListener('afterprint', ()=>{ document.title = titleWas; });
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape' && state.sel){ state.sel = null; render(); }
 });
 // Pick up class-list edits made on the home page without needing a reload.
-window.addEventListener('focus', ()=>{ loadRosters(); if(state.mode==='assign') render(); });
+window.addEventListener('focus', ()=>{ loadRosters(); render(); });
 window.addEventListener('storage', e=>{ if(e.key===ROSTER_LS){ loadRosters(); render(); } });
 
 load(); loadRosters(); buildTable(); render();
