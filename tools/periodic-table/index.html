@@ -212,7 +212,8 @@
     .app,.main,.stage,.canvas-scroll{display:block;height:auto;overflow:visible;padding:0;background:#fff;}
     .pt-wrap{width:100%;min-width:0;}
     .el{box-shadow:none;transition:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .el.dim,.el.grey:not(.mine){opacity:1;filter:none;} .el.mine,.el.focus{box-shadow:none;}
+    .el.dim{opacity:1;} .el.mine,.el.focus{box-shadow:none;}
+    .el.grey,.el.grey.mine{opacity:.3;filter:grayscale(1);}   /* the Assign-mode grey-out is printed (there is no "selected student" on paper) */
     .detail{display:none;}
     .print-title{display:flex;flex-direction:column;justify-content:center;padding:0 14px;border:1px solid var(--line);border-radius:var(--radius);}
     .print-title h2{margin:0;font-size:24px;letter-spacing:.12em;text-transform:uppercase;}
@@ -745,6 +746,9 @@ function renderPanel(){
   if(pendingFocus){ const f = [...list.querySelectorAll('.sym-in')].find(i=>i.dataset.name===pendingFocus); pendingFocus = null; if(f){ f.focus(); f.select(); } }
 }
 
+// What the grey-out currently shows, in words (printed on paper and in the PDF so the page explains itself).
+const greyMode = () => state.mode==='assign' ? state.grey : 'none';   // like the screen: View mode shows no grey-out
+const greyNote = () => greyMode()==='taken' ? ' · greyed out: elements already assigned' : greyMode()==='untaken' ? ' · greyed out: elements not yet assigned' : '';
 function renderStatus(){
   const st = $('status'); st.textContent='';
   const add = (label, val)=>{ const s=document.createElement('span'); const b=document.createElement('b'); b.textContent=val; s.append(b, ' '+label); st.appendChild(s); };
@@ -757,7 +761,7 @@ function renderStatus(){
   if(nTables > 1){ sep(); add('classes with tables', nTables); }
   const d = new Date().toLocaleDateString();
   $('printClass').textContent = curName() || '';
-  $('printMeta').textContent = (total ? total + ' assigned · ' : '') + d;
+  $('printMeta').textContent = (total ? total + ' assigned · ' : '') + d + greyNote();
 }
 
 function renderMode(){
@@ -946,7 +950,8 @@ function buildData(){
     type:DATA_TYPE, version:1, savedAt:Date.now(), active:curName(),
     tables:JSON.parse(JSON.stringify(state.tables)),
     classes:classes().map(c=>({ name:c.name, students:c.students.slice() })),
-    show:Object.assign({}, state.show)
+    show:Object.assign({}, state.show),
+    grey:state.grey
   };
 }
 function importData(d){
@@ -962,6 +967,7 @@ function importData(d){
   });
   Object.assign(state.tables, incoming);
   if(d.show && typeof d.show==='object') for(const k of ['num','mass','ions']) if(typeof d.show[k]==='boolean') state.show[k] = d.show[k];
+  if(['none','taken','untaken'].includes(d.grey)) state.grey = d.grey;
   if(typeof d.active==='string' && allNames().includes(d.active)) state.cls = d.active;
   else if(Object.keys(incoming).length) state.cls = Object.keys(incoming)[0];
   state.sel = null; save(); render();
@@ -1038,7 +1044,9 @@ function wrapName(name, maxW, maxH){
   }
   return last || { f:5, lines:[name] };
 }
-function drawPage(className, eff){
+// Same look as the on-screen grey-out (grayscale, then 30% opacity over white), as a PDF colour.
+function fadeRgb(c){ const [r,g,b] = c.split(' ').map(Number), v = (0.7 + 0.3*(0.2126*r + 0.7152*g + 0.0722*b)).toFixed(3); return v+' '+v+' '+v; }
+function drawPage(className, eff, grey){
   const root = getComputedStyle(document.documentElement);
   const col = k => rgbOf(root.getPropertyValue('--c-'+k));
   const t = state.tables[className] || {};
@@ -1062,23 +1070,25 @@ function drawPage(className, eff){
   text(className || 'No class', tx+14, ty+54, 15, true, '0.122 0.239 0.208', 'l');
   const n = Object.keys(t).length;
   text((n ? n+' students assigned  ·  ' : '') + new Date().toLocaleDateString(), tx+14, ty+72, 8.5, false, MUTED, 'l');
+  if(grey!=='none') text('Greyed out: ' + (grey==='taken' ? 'elements already assigned to a student' : 'elements not yet assigned to a student'), tx+14, ty+87, 8.5, true, MUTED, 'l');
   // cells
   EL.forEach(e=>{
-    const [r,c] = pos(e.z), x = colX(c), y = rowY(r);
-    rect(x, y, cw, ch, col(e.cat), '0.55 0.58 0.57');
-    if(eff.num) text(String(e.z), x+2.5, y+7.2, 5.6, true, '0.3 0.34 0.32', 'l');
-    if(eff.ions && e.ions.length) text(e.ions.join(','), x+cw-2.5, y+7.2, 5, true, '0.2 0.24 0.22', 'r');
-    text(e.sym, x+cw/2, y+23, 15.5, true, INK, 'c');
-    const nameTop = y+27, nameBottom = y+ch-(eff.mass ? 9 : 3), who = t[e.sym];
+    const [r,c] = pos(e.z), x = colX(c), y = rowY(r), who = t[e.sym];
+    const gr = grey==='taken' ? !!who : grey==='untaken' ? !who : false, C = k => gr ? fadeRgb(k) : k;   // greyed-out cell
+    rect(x, y, cw, ch, C(col(e.cat)), C('0.55 0.58 0.57'));
+    if(eff.num) text(String(e.z), x+2.5, y+7.2, 5.6, true, C('0.3 0.34 0.32'), 'l');
+    if(eff.ions && e.ions.length) text(e.ions.join(','), x+cw-2.5, y+7.2, 5, true, C('0.2 0.24 0.22'), 'r');
+    text(e.sym, x+cw/2, y+23, 15.5, true, C(INK), 'c');
+    const nameTop = y+27, nameBottom = y+ch-(eff.mass ? 9 : 3);
     if(who){
       const L = wrapName(who, cw-4, nameBottom-nameTop);
       const blockH = L.lines.length*L.f*1.08;
       let by = nameTop + (nameBottom-nameTop-blockH)/2 + L.f*0.86;
-      L.lines.forEach(line=>{ text(line, x+cw/2, by, L.f, true, GREY, 'c'); by += L.f*1.08; });
+      L.lines.forEach(line=>{ text(line, x+cw/2, by, L.f, true, C(GREY), 'c'); by += L.f*1.08; });
     }else{
-      text(e.name, x+cw/2, nameTop+(nameBottom-nameTop)/2+2, Math.min(5, (cw-3)/Math.max(4,e.name.length)*1.9), false, '0.25 0.3 0.28', 'c');
+      text(e.name, x+cw/2, nameTop+(nameBottom-nameTop)/2+2, Math.min(5, (cw-3)/Math.max(4,e.name.length)*1.9), false, C('0.25 0.3 0.28'), 'c');
     }
-    if(eff.mass) text(e.mass, x+cw/2, y+ch-3, 5, false, '0.25 0.3 0.28', 'c');
+    if(eff.mass) text(e.mass, x+cw/2, y+ch-3, 5, false, C('0.25 0.3 0.28'), 'c');
   });
   text('Lanthanides', colX(3)-6, rowY(9)+ch/2+2, 7, true, MUTED, 'r');
   text('Actinides',   colX(3)-6, rowY(10)+ch/2+2, 7, true, MUTED, 'r');
@@ -1099,7 +1109,8 @@ function drawPage(className, eff){
 function buildPdf(classNames){
   pdfLossy = false;
   const eff = state.show;
-  const pages = classNames.map(c=>drawPage(c, eff));
+  const grey = greyMode();
+  const pages = classNames.map(c=>drawPage(c, eff, grey));
   const b64 = btoa(Array.from(new TextEncoder().encode(JSON.stringify(buildData())), b=>String.fromCharCode(b)).join(''));
   const attach = 'TTPT1:' + b64 + ':TTPT1END';
   const title = toWin('Periodic Table' + (classNames.length===1 && classNames[0] ? ' - ' + classNames[0] : ''));

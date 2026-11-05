@@ -45,8 +45,12 @@ common states exceed +4. If you want a different convention, change the rule (or
 { "type": "teachingtools-periodic-table", "version": 1, "savedAt": 1762300000000, "active": "7A",
   "tables":  { "7A": { "H": "Ada Lovelace", "He": "Alan Turing" } },   // one table per class
   "classes": [ { "name": "7A", "students": ["Ada Lovelace", "..."] } ],
-  "show":    { "num": true, "mass": false, "ions": false } }
+  "show":    { "num": true, "mass": false, "ions": false },
+  "grey":    "none" }                                        // Assign-mode grey-out: "none" | "taken" | "untaken"
 ```
+
+The grey-out chosen in Assign mode is drawn in the PDF (and in the browser's Print) with a caption saying
+what is greyed, using each class's own table; in View mode nothing is greyed, matching the screen.
 
 A PDF that is re-saved, optimised or printed by another program may lose the attachment; "Open…" says so
 and "Save data" is the safe copy. PDF text uses Helvetica (Western European characters); other scripts
