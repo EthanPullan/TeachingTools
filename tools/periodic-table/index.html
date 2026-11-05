@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Periodic Table</title>
+<style>
+  :root{
+    /* Surfaces */
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    /* Text */
+    --ink:#16241f; --muted:#67756f;
+    /* Lines */
+    --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    /* Brand */
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    /* Accent */
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    /* Status */
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    /* Elevation / shape */
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10);
+    --radius:12px;
+    /* Type */
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    /* Element categories (tool-specific, decorative) */
+    --c-alkali:#f2c9c4;  --c-alkaline:#f5d9b0; --c-transition:#e8e2b0; --c-post:#c9dfd8;
+    --c-metalloid:#cfdcae; --c-nonmetal:#bfdcec; --c-halogen:#c9cdee; --c-noble:#e0cbe6;
+    --c-lanthanide:#f3cfe0; --c-actinide:#dcc4b8;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+
+  /* ---- frame ---- */
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+  .toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .brand a{color:inherit;text-decoration:none;}
+  .spacer{flex:1;}
+  .main{flex:1;display:flex;min-height:0;}
+  .panel{width:320px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;overflow-y:auto;padding:16px;}
+  .panel[hidden]{display:none;}
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--app-bg);}
+  .canvas-scroll{flex:1;overflow:auto;padding:16px;}
+  .statusbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:0 16px;height:42px;flex:none;
+    border-top:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--muted);}
+  .statusbar b{font-family:var(--mono);font-weight:600;color:var(--ink);}
+
+  /* ---- components ---- */
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.danger{color:var(--danger);border-color:var(--danger-soft);background:#fff;}
+  .btn.danger:hover{background:var(--danger-soft);}
+  .btn.small{padding:5px 9px;font-size:12px;border-radius:7px;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:15px;line-height:1;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:6px 14px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 9px;}
+  .stack{margin-top:18px;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;}
+  .empty{border:1px dashed var(--line);border-radius:10px;padding:16px;color:var(--muted);
+    font-size:12.5px;line-height:1.55;background:var(--panel-2);}
+  select,input[type=text].in{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--panel-2);}
+  textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 10px;resize:vertical;
+    min-height:78px;background:var(--panel-2);line-height:1.5;}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;user-select:none;}
+  .check input{width:16px;height:16px;accent-color:var(--board);}
+  .check.off{opacity:.45;cursor:not-allowed;}
+  .count-pill{font-family:var(--mono);font-size:11px;background:var(--panel-2);
+    border:1px solid var(--line);border-radius:20px;padding:2px 9px;color:var(--muted);white-space:nowrap;}
+  .row{display:flex;align-items:center;gap:8px;}
+  .row.wrap{flex-wrap:wrap;}
+
+  .list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;}
+  .list li{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border:1px solid var(--line);
+    border-radius:8px;background:#fff;cursor:pointer;transition:background .12s,border-color .12s;}
+  .list li:hover{background:var(--panel-2);}
+  .list li.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);}
+  .list li .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .list li.done .nm{color:var(--muted);}
+  .sym-badge{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--board);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:6px;padding:1px 7px;min-width:30px;text-align:center;}
+  .sym-badge.none{color:var(--muted);font-weight:400;border-style:dashed;}
+  .xbtn{border:none;background:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;padding:2px 4px;border-radius:6px;}
+  .xbtn:hover{color:var(--danger);background:var(--danger-soft);}
+  .xbtn[hidden]{display:none;}
+  details.hand{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--room-bg);}
+  details.hand summary{cursor:pointer;font-weight:600;font-size:12.5px;}
+  details.hand .body{margin-top:10px;display:flex;flex-direction:column;gap:8px;}
+
+  /* ---- the table ---- */
+  .pt-wrap{width:min(100%, calc((100dvh - 215px) / .585));min-width:760px;margin:0 auto;}
+  .pt{display:grid;grid-template-columns:repeat(18,1fr);gap:3px;}
+  .pt .gap{grid-row:8;grid-column:1/-1;height:10px;}
+  .pt .flabel{align-self:center;justify-self:end;padding-right:6px;font-size:10px;font-weight:700;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--muted);text-align:right;grid-column:1/3;}
+  .el{position:relative;container-type:inline-size;aspect-ratio:1/1.1;border:1px solid rgba(20,40,33,.14);
+    border-radius:5px;padding:0;cursor:pointer;color:var(--ink);text-align:center;overflow:hidden;
+    background:var(--cat,#eee);box-shadow:var(--shadow-sm);
+    transition:transform .08s,box-shadow .12s,opacity .15s;}
+  .el:hover{transform:translateY(-1px) scale(1.06);z-index:2;box-shadow:0 2px 4px rgba(20,40,33,.14),0 8px 16px rgba(20,40,33,.08);}
+  .el .num{position:absolute;left:5%;top:4%;font-family:var(--mono);font-size:10px;font-size:15cqw;font-weight:600;color:rgba(22,36,31,.68);}
+  .el .sym{position:absolute;left:0;right:0;top:20%;font-size:20px;font-size:35cqw;font-weight:700;line-height:1.1;}
+  .el .nm{position:absolute;left:0;right:0;bottom:5%;font-size:8px;font-size:12.5cqw;color:rgba(22,36,31,.75);
+    white-space:nowrap;overflow:hidden;text-overflow:clip;padding:0 2px;}
+  /* assigned student: greyed name laid over the symbol */
+  .el .who{position:absolute;left:4%;right:4%;top:19%;height:46%;display:flex;align-items:center;justify-content:center;
+    text-align:center;font-size:9px;font-size:17cqw;font-weight:700;line-height:1.05;color:#66716d;
+    overflow-wrap:anywhere;overflow:hidden;pointer-events:none;
+    text-shadow:0 0 2px #fff,0 0 3px #fff,0 0 5px rgba(255,255,255,.95);}
+  .el .who.md{font-size:14cqw;} .el .who.lg{font-size:11.5cqw;}
+  .el .who[hidden]{display:none;}
+  .el.has-who .sym{opacity:.28;}
+  .el.dim{opacity:.22;}
+  .el.focus{box-shadow:0 0 0 2px var(--board);}
+  .el.mine{box-shadow:0 0 0 3px var(--accent);z-index:3;}
+  .assigning .el:not(.has-who):hover{box-shadow:0 0 0 2px var(--accent),0 8px 16px rgba(20,40,33,.08);}
+  .ghost{aspect-ratio:1/1.1;border:1px dashed rgba(20,40,33,.25);border-radius:5px;display:flex;align-items:center;
+    justify-content:center;font-family:var(--mono);font-size:10px;font-size:max(9px,1.05vw);color:var(--muted);
+    background:repeating-linear-gradient(135deg,transparent 0 5px,rgba(20,40,33,.04) 5px 10px);}
+
+  /* detail card sits in the empty block of the table */
+  .detail{grid-column:3/13;grid-row:1/4;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:12px 16px;display:flex;align-items:center;gap:16px;min-width:0;}
+  .detail .tile{flex:none;width:clamp(64px,8.5vw,112px);aspect-ratio:1/1.1;border-radius:9px;
+    border:1px solid rgba(20,40,33,.14);background:var(--cat,#eee);position:relative;}
+  .detail .tile .z{position:absolute;left:8px;top:5px;font-family:var(--mono);font-weight:600;font-size:12px;color:rgba(22,36,31,.68);}
+  .detail .tile .s{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(28px,3.6vw,48px);font-weight:700;}
+  .detail h2{margin:0 0 2px;font-size:clamp(18px,2.2vw,28px);letter-spacing:.01em;}
+  .detail .meta{font-family:var(--mono);font-size:12px;color:var(--muted);}
+  .detail .cat{display:inline-block;margin-top:6px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    padding:2px 9px;border-radius:20px;background:var(--cat,#eee);border:1px solid rgba(20,40,33,.14);}
+  .detail .who-line{margin-top:6px;font-size:13px;color:var(--muted);}
+  .detail .who-line b{color:var(--ink);}
+  .detail .placeholder{color:var(--muted);font-size:13px;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:14px auto 0;max-width:1000px;}
+  .chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);border-radius:20px;
+    padding:3px 11px 3px 6px;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;}
+  .chip i{width:14px;height:14px;border-radius:50%;background:var(--cat);border:1px solid rgba(20,40,33,.18);}
+  .chip:hover{background:var(--panel-2);}
+  .chip.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);}
+
+  .toast-wrap{position:fixed;left:50%;bottom:58px;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;}
+  .toast{background:var(--ink);color:#fff;padding:10px 15px;border-radius:10px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);
+    max-width:min(92vw,560px);border-left:3px solid var(--accent);animation:tin .2s ease both;}
+  .toast.err{border-left-color:var(--danger);} .toast.ok{border-left-color:var(--ok);}
+  @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  #printHeader{display:none;}
+
+  @media (max-width:880px){
+    .main{flex-direction:column;}
+    .panel{width:100%;max-height:46vh;border-right:none;border-bottom:1px solid var(--line);}
+    .stage{min-height:54vh;}
+  }
+  @media (prefers-reduced-motion:reduce){ .btn:active{transform:none;} .el,.el:hover{transition:none;transform:none;} *{scroll-behavior:auto;} .toast{animation:none;} }
+  @media print{
+    @page{size:landscape;margin:10mm;}
+    html,body{height:auto;background:#fff;}
+    .toolbar,.panel,.statusbar,.toast-wrap,.legend{display:none !important;}
+    .app,.main,.stage,.canvas-scroll{display:block;height:auto;overflow:visible;padding:0;background:#fff;}
+    .pt-wrap{width:100%;min-width:0;}
+    .el{box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .el.dim{opacity:1;} .el.mine,.el.focus{box-shadow:none;}
+    .detail{box-shadow:none;}
+    #printHeader{display:block;margin:0 0 6px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:13px;}
+    #printHeader span{font-family:var(--mono);font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted);margin-left:10px;font-size:11px;}
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span><a href="../../index.html" title="Back to Teaching Tools">Periodic Table</a> <small>assign students to elements</small></div>
+    <div class="seg" role="group" aria-label="Mode">
+      <button id="modeView" class="active" aria-pressed="true">View</button>
+      <button id="modeAssign" aria-pressed="false">Assign</button>
+    </div>
+    <label class="check" id="namesWrap"><input type="checkbox" id="showNames" checked> Show student names</label>
+    <div class="spacer"></div>
+    <button class="btn danger small" id="clearAll"><span class="ic">🗑</span>Clear all</button>
+    <button class="btn small" id="printBtn"><span class="ic">⎙</span>Print</button>
+  </header>
+
+  <div class="main">
+    <aside class="panel" id="panel" hidden aria-label="Assign students">
+      <h3 class="section-title">Class</h3>
+      <div class="row"><select id="clsSel" aria-label="Class"></select><span class="count-pill" id="clsCount">0</span></div>
+
+      <div id="stuBlock">
+        <div class="stack row" style="justify-content:space-between">
+          <h3 class="section-title" style="margin:0">Students</h3>
+          <label class="check"><input type="checkbox" id="onlyUn"> Unassigned only</label>
+        </div>
+        <p class="hint" style="margin:8px 0">Pick a student, then click an element. Clicking an assigned element selects that student so you can move them; click the same element again to unassign.</p>
+        <ul class="list" id="stuList"></ul>
+        <div class="row wrap stack" style="margin-top:12px">
+          <button class="btn small" id="randBtn"><span class="ic">🎲</span>Assign randomly</button>
+          <button class="btn small danger" id="clearClass">Clear class</button>
+        </div>
+      </div>
+      <div class="empty" id="noClass" hidden>No class lists found on this computer yet. Add students on the Teaching Tools home page (Class lists) and they’ll appear here — or add a class by hand below.</div>
+
+      <div class="stack">
+        <details class="hand" id="hand">
+          <summary>Add a class by hand</summary>
+          <div class="body">
+            <input type="text" class="in" id="newName" placeholder="Class name" autocomplete="off" aria-label="New class name">
+            <textarea id="newNames" placeholder="One name per line" spellcheck="false" aria-label="Student names"></textarea>
+            <div class="row"><button class="btn small primary" id="addClass">Add class</button>
+              <button class="btn small danger" id="rmClass" hidden>Remove this class</button></div>
+          </div>
+        </details>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="canvas-scroll">
+        <div class="pt-wrap" id="wrap">
+          <div id="printHeader">Periodic Table <span id="printMeta"></span></div>
+          <div class="pt" id="pt">
+            <div class="detail" id="detail"></div>
+          </div>
+          <div class="legend" id="legend" role="group" aria-label="Filter by element type"></div>
+        </div>
+      </div>
+      <div class="statusbar" id="status"></div>
+    </section>
+  </div>
+</div>
+<div class="toast-wrap" id="toasts" aria-live="polite"></div>
+
+<script>
+/* Periodic Table — assign students to elements.
+   Single file, offline. Class lists come from the shared store the home page
+   writes (localStorage 'teachingtools:rosters'); assignments are saved in this
+   browser under 'teachingtools:periodic-table'. */
+(function(){
+'use strict';
+const $ = id => document.getElementById(id);
+const LS = 'teachingtools:periodic-table';
+const ROSTER_LS = 'teachingtools:rosters';
+const SEP = '\u0001';
+
+/* ---------- element data: atomic number, symbol, name, standard atomic weight, category ----------
+   Bracketed masses are the mass number of the longest-lived isotope (no stable isotopes). */
+const RAW = `
+1 H Hydrogen 1.008 nonmetal
+2 He Helium 4.0026 noble
+3 Li Lithium 6.94 alkali
+4 Be Beryllium 9.0122 alkaline
+5 B Boron 10.81 metalloid
+6 C Carbon 12.011 nonmetal
+7 N Nitrogen 14.007 nonmetal
+8 O Oxygen 15.999 nonmetal
+9 F Fluorine 18.998 halogen
+10 Ne Neon 20.180 noble
+11 Na Sodium 22.990 alkali
+12 Mg Magnesium 24.305 alkaline
+13 Al Aluminum 26.982 post
+14 Si Silicon 28.085 metalloid
+15 P Phosphorus 30.974 nonmetal
+16 S Sulfur 32.06 nonmetal
+17 Cl Chlorine 35.45 halogen
+18 Ar Argon 39.95 noble
+19 K Potassium 39.098 alkali
+20 Ca Calcium 40.078 alkaline
+21 Sc Scandium 44.956 transition
+22 Ti Titanium 47.867 transition
+23 V Vanadium 50.942 transition
+24 Cr Chromium 51.996 transition
+25 Mn Manganese 54.938 transition
+26 Fe Iron 55.845 transition
+27 Co Cobalt 58.933 transition
+28 Ni Nickel 58.693 transition
+29 Cu Copper 63.546 transition
+30 Zn Zinc 65.38 transition
+31 Ga Gallium 69.723 post
+32 Ge Germanium 72.630 metalloid
+33 As Arsenic 74.922 metalloid
+34 Se Selenium 78.971 nonmetal
+35 Br Bromine 79.904 halogen
+36 Kr Krypton 83.798 noble
+37 Rb Rubidium 85.468 alkali
+38 Sr Strontium 87.62 alkaline
+39 Y Yttrium 88.906 transition
+40 Zr Zirconium 91.224 transition
+41 Nb Niobium 92.906 transition
+42 Mo Molybdenum 95.95 transition
+43 Tc Technetium [98] transition
+44 Ru Ruthenium 101.07 transition
+45 Rh Rhodium 102.91 transition
+46 Pd Palladium 106.42 transition
+47 Ag Silver 107.87 transition
+48 Cd Cadmium 112.41 transition
+49 In Indium 114.82 post
+50 Sn Tin 118.71 post
+51 Sb Antimony 121.76 metalloid
+52 Te Tellurium 127.60 metalloid
+53 I Iodine 126.90 halogen
+54 Xe Xenon 131.29 noble
+55 Cs Cesium 132.91 alkali
+56 Ba Barium 137.33 alkaline
+57 La Lanthanum 138.91 lanthanide
+58 Ce Cerium 140.12 lanthanide
+59 Pr Praseodymium 140.91 lanthanide
+60 Nd Neodymium 144.24 lanthanide
+61 Pm Promethium [145] lanthanide
+62 Sm Samarium 150.36 lanthanide
+63 Eu Europium 151.96 lanthanide
+64 Gd Gadolinium 157.25 lanthanide
+65 Tb Terbium 158.93 lanthanide
+66 Dy Dysprosium 162.50 lanthanide
+67 Ho Holmium 164.93 lanthanide
+68 Er Erbium 167.26 lanthanide
+69 Tm Thulium 168.93 lanthanide
+70 Yb Ytterbium 173.05 lanthanide
+71 Lu Lutetium 174.97 lanthanide
+72 Hf Hafnium 178.49 transition
+73 Ta Tantalum 180.95 transition
+74 W Tungsten 183.84 transition
+75 Re Rhenium 186.21 transition
+76 Os Osmium 190.23 transition
+77 Ir Iridium 192.22 transition
+78 Pt Platinum 195.08 transition
+79 Au Gold 196.97 transition
+80 Hg Mercury 200.59 transition
+81 Tl Thallium 204.38 post
+82 Pb Lead 207.2 post
+83 Bi Bismuth 208.98 post
+84 Po Polonium [209] post
+85 At Astatine [210] halogen
+86 Rn Radon [222] noble
+87 Fr Francium [223] alkali
+88 Ra Radium [226] alkaline
+89 Ac Actinium [227] actinide
+90 Th Thorium 232.04 actinide
+91 Pa Protactinium 231.04 actinide
+92 U Uranium 238.03 actinide
+93 Np Neptunium [237] actinide
+94 Pu Plutonium [244] actinide
+95 Am Americium [243] actinide
+96 Cm Curium [247] actinide
+97 Bk Berkelium [247] actinide
+98 Cf Californium [251] actinide
+99 Es Einsteinium [252] actinide
+100 Fm Fermium [257] actinide
+101 Md Mendelevium [258] actinide
+102 No Nobelium [259] actinide
+103 Lr Lawrencium [266] actinide
+104 Rf Rutherfordium [267] transition
+105 Db Dubnium [268] transition
+106 Sg Seaborgium [269] transition
+107 Bh Bohrium [270] transition
+108 Hs Hassium [269] transition
+109 Mt Meitnerium [278] transition
+110 Ds Darmstadtium [281] transition
+111 Rg Roentgenium [282] transition
+112 Cn Copernicium [285] transition
+113 Nh Nihonium [286] post
+114 Fl Flerovium [289] post
+115 Mc Moscovium [290] post
+116 Lv Livermorium [293] post
+117 Ts Tennessine [294] halogen
+118 Og Oganesson [294] noble`;
+const EL = RAW.trim().split('\n').map(l=>{
+  const [z,sym,name,mass,cat] = l.trim().split(' ');
+  return { z:+z, sym, name, mass, cat };
+});
+const CATS = [
+  ['alkali','Alkali metal'],['alkaline','Alkaline earth metal'],['transition','Transition metal'],
+  ['post','Post-transition metal'],['metalloid','Metalloid'],['nonmetal','Reactive nonmetal'],
+  ['halogen','Halogen'],['noble','Noble gas'],['lanthanide','Lanthanide'],['actinide','Actinide']
+];
+const CAT_NAME = Object.fromEntries(CATS);
+const BY_SYM = Object.fromEntries(EL.map(e=>[e.sym,e]));
+
+// Grid position (row, column) of each element in the standard 18-column layout.
+// Lanthanides/actinides sit in their own rows (9, 10) below the main table.
+function pos(z){
+  if(z===1) return [1,1];  if(z===2) return [1,18];
+  if(z<=4)  return [2,z-2];   if(z<=10) return [2,z+8];
+  if(z<=12) return [3,z-10];  if(z<=18) return [3,z];
+  if(z<=36) return [4,z-18];  if(z<=54) return [5,z-36];
+  if(z<=56) return [6,z-54];  if(z<=71) return [9,z-54];
+  if(z<=86) return [6,z-68];
+  if(z<=88) return [7,z-86];  if(z<=103) return [10,z-86];
+  return [7,z-100];
+}
+
+/* ---------- state ---------- */
+const state = {
+  mode:'view',
+  assign:{},          // symbol -> { c:className, n:studentName }
+  local:[],           // classes added by hand: [{name, students[]}]
+  cls:'',             // active class name in the panel
+  showNames:true,
+  sel:null,           // selected student key
+  detailZ:null,       // element clicked (pinned in the detail card)
+  hoverZ:null,
+  filter:null,        // category being highlighted
+  onlyUn:false
+};
+let shared = [];      // classes from the home page's shared store
+const skey = (c,n) => c + SEP + n;
+
+function save(){
+  try{ localStorage.setItem(LS, JSON.stringify({ v:1, assign:state.assign, local:state.local, cls:state.cls, showNames:state.showNames })); }catch(e){}
+}
+function load(){
+  try{
+    const d = JSON.parse(localStorage.getItem(LS)||'null');
+    if(!d) return;
+    if(d.assign && typeof d.assign==='object'){
+      for(const sym of Object.keys(d.assign)){
+        const a = d.assign[sym];
+        if(BY_SYM[sym] && a && typeof a.n==='string') state.assign[sym] = { c:String(a.c||''), n:a.n };
+      }
+    }
+    if(Array.isArray(d.local)) state.local = d.local.filter(c=>c && Array.isArray(c.students)).map(c=>({ name:String(c.name||''), students:c.students.map(String) }));
+    if(typeof d.cls==='string') state.cls = d.cls;
+    if(typeof d.showNames==='boolean') state.showNames = d.showNames;
+  }catch(e){}
+}
+function loadRosters(){
+  try{
+    const d = JSON.parse(localStorage.getItem(ROSTER_LS)||'null');
+    shared = (d && Array.isArray(d.classes) ? d.classes : [])
+      .map((c,i)=>({ name:String((c && c.name)||'').trim() || ('Class '+(i+1)),
+        students:((c && c.students)||[]).map(s=>String(s).trim()).filter(Boolean) }))
+      .filter(c=>c.students.length);
+  }catch(e){ shared = []; }
+}
+const classes = () => shared.concat(state.local.map(c=>({ name:c.name, students:c.students, local:true })));
+const activeClass = () => classes().find(c=>c.name===state.cls) || classes()[0] || null;
+function studentSym(c,n){
+  for(const sym of Object.keys(state.assign)){ const a=state.assign[sym]; if(a.c===c && a.n===n) return sym; }
+  return null;
+}
+
+/* ---------- toast ---------- */
+function toast(msg, kind){
+  const t = document.createElement('div'); t.className = 'toast' + (kind?' '+kind:''); t.textContent = msg;
+  $('toasts').appendChild(t); setTimeout(()=>t.remove(), 3600);
+}
+
+/* ---------- build the table once ---------- */
+const cells = {};   // sym -> {btn, who}
+function buildTable(){
+  const pt = $('pt');
+  EL.forEach(e=>{
+    const [r,c] = pos(e.z);
+    const b = document.createElement('button');
+    b.className = 'el'; b.type = 'button';
+    b.style.gridRow = r; b.style.gridColumn = c; b.style.setProperty('--cat', 'var(--c-'+e.cat+')');
+    b.dataset.sym = e.sym;
+    const num = document.createElement('span'); num.className='num'; num.textContent = e.z;
+    const sym = document.createElement('span'); sym.className='sym'; sym.textContent = e.sym;
+    const nm  = document.createElement('span'); nm.className='nm';  nm.textContent = e.name;
+    const who = document.createElement('span'); who.className='who'; who.hidden = true;
+    b.append(num, sym, nm, who);
+    b.addEventListener('click', ()=>onElement(e.sym));
+    b.addEventListener('mouseenter', ()=>{ state.hoverZ = e.z; renderDetail(); });
+    b.addEventListener('mouseleave', ()=>{ state.hoverZ = null; renderDetail(); });
+    b.addEventListener('focus', ()=>{ state.hoverZ = e.z; renderDetail(); });
+    b.addEventListener('blur', ()=>{ state.hoverZ = null; renderDetail(); });
+    pt.appendChild(b);
+    cells[e.sym] = { btn:b, who };
+  });
+  // placeholders for the lanthanide / actinide ranges, plus row labels
+  [[6,'57–71'],[7,'89–103']].forEach(([r,t])=>{
+    const g = document.createElement('div'); g.className='ghost'; g.style.gridRow=r; g.style.gridColumn=3; g.textContent=t; pt.appendChild(g);
+  });
+  const gap = document.createElement('div'); gap.className='gap'; pt.appendChild(gap);
+  [[9,'Lanthanides'],[10,'Actinides']].forEach(([r,t])=>{
+    const l = document.createElement('div'); l.className='flabel'; l.style.gridRow=r; l.textContent=t; pt.appendChild(l);
+  });
+  // legend
+  const lg = $('legend');
+  CATS.forEach(([k,label])=>{
+    const ch = document.createElement('button'); ch.type='button'; ch.className='chip'; ch.dataset.cat=k;
+    ch.style.setProperty('--cat','var(--c-'+k+')');
+    const i = document.createElement('i'); ch.append(i, document.createTextNode(label));
+    ch.addEventListener('click', ()=>{ state.filter = state.filter===k ? null : k; render(); });
+    lg.appendChild(ch);
+  });
+}
+
+/* ---------- rendering ---------- */
+function renderTable(){
+  const showWho = state.showNames || state.mode==='assign';
+  const selSym = state.sel ? studentSym(...state.sel.split(SEP)) : null;
+  EL.forEach(e=>{
+    const { btn, who } = cells[e.sym];
+    const a = state.assign[e.sym];
+    const has = !!a && showWho;
+    btn.classList.toggle('has-who', has);
+    btn.classList.toggle('dim', !!state.filter && state.filter!==e.cat);
+    btn.classList.toggle('mine', e.sym===selSym);
+    btn.classList.toggle('focus', state.detailZ===e.z && e.sym!==selSym);
+    who.hidden = !has;
+    who.textContent = has ? a.n : '';
+    who.className = 'who' + (has && a.n.length>18 ? ' lg' : has && a.n.length>10 ? ' md' : '');
+    btn.title = a ? e.name + ' — ' + a.n : e.name;
+    btn.setAttribute('aria-label', e.name + ' (' + e.sym + '), number ' + e.z + (a ? ', assigned to ' + a.n : ''));
+  });
+  document.querySelectorAll('.chip').forEach(ch=>ch.classList.toggle('active', ch.dataset.cat===state.filter));
+}
+
+function renderDetail(){
+  const z = state.hoverZ || state.detailZ;
+  const box = $('detail'); box.textContent = '';
+  if(!z){
+    const p = document.createElement('div'); p.className = 'placeholder';
+    p.textContent = state.mode==='assign'
+      ? 'Assign mode — pick a student in the panel, then click an element.'
+      : 'Hover or click an element for details. Switch to Assign to put students on elements.';
+    box.appendChild(p); return;
+  }
+  const e = EL[z-1], a = state.assign[e.sym];
+  box.style.setProperty('--cat','var(--c-'+e.cat+')');
+  const tile = document.createElement('div'); tile.className='tile';
+  const zz = document.createElement('span'); zz.className='z'; zz.textContent = e.z;
+  const s = document.createElement('span'); s.className='s'; s.textContent = e.sym;
+  tile.append(zz, s);
+  const info = document.createElement('div');
+  const h = document.createElement('h2'); h.textContent = e.name;
+  const m = document.createElement('div'); m.className='meta'; m.textContent = 'Atomic number ' + e.z + '  ·  Atomic mass ' + e.mass;
+  const c = document.createElement('span'); c.className='cat'; c.textContent = CAT_NAME[e.cat];
+  info.append(h, m, c);
+  if(a){
+    const w = document.createElement('div'); w.className='who-line';
+    const b = document.createElement('b'); b.textContent = a.n;
+    w.append('Assigned to ', b); if(a.c) w.append('  ·  ' + a.c);
+    info.appendChild(w);
+  }
+  box.append(tile, info);
+}
+
+function renderPanel(){
+  $('panel').hidden = state.mode!=='assign';
+  if(state.mode!=='assign') return;
+  const all = classes();
+  const sel = $('clsSel'); sel.textContent='';
+  const cur = activeClass();
+  all.forEach(c=>{ const o=document.createElement('option'); o.value=c.name; o.textContent=c.name + (c.local?' (by hand)':''); sel.appendChild(o); });
+  if(cur) sel.value = cur.name;
+  $('noClass').hidden = !!all.length;
+  $('stuBlock').hidden = !all.length;
+  $('hand').open = $('hand').open || !all.length;
+  $('rmClass').hidden = !(cur && cur.local);
+  const list = $('stuList'); list.textContent='';
+  if(!cur){ $('clsCount').textContent='0'; return; }
+  let placed = 0;
+  cur.students.forEach(n=>{
+    const sym = studentSym(cur.name, n);
+    if(sym) placed++;
+    if(state.onlyUn && sym) return;
+    const li = document.createElement('li');
+    li.className = (sym?'done ':'') + (state.sel===skey(cur.name,n)?'sel':'');
+    const nm = document.createElement('span'); nm.className='nm'; nm.textContent=n; nm.title=n;
+    const bd = document.createElement('span'); bd.className='sym-badge' + (sym?'':' none'); bd.textContent = sym || '—';
+    const x = document.createElement('button'); x.className='xbtn'; x.type='button'; x.textContent='×'; x.title='Unassign'; x.setAttribute('aria-label','Unassign '+n); x.hidden=!sym;
+    x.addEventListener('click', ev=>{ ev.stopPropagation(); unassign(sym); });
+    li.append(nm, bd, x);
+    li.addEventListener('click', ()=>{ state.sel = state.sel===skey(cur.name,n) ? null : skey(cur.name,n); render(); });
+    list.appendChild(li);
+  });
+  $('clsCount').textContent = placed + ' / ' + cur.students.length;
+}
+
+function renderStatus(){
+  const st = $('status'); st.textContent='';
+  const add = (label, val)=>{ const s=document.createElement('span'); const b=document.createElement('b'); b.textContent=val; s.append(b, ' '+label); st.appendChild(s); };
+  const total = Object.keys(state.assign).length;
+  add('elements assigned', total + ' / 118');
+  const cur = state.mode==='assign' ? activeClass() : null;
+  if(cur){
+    const sep = document.createElement('span'); sep.textContent='·'; st.appendChild(sep);
+    const left = cur.students.filter(n=>!studentSym(cur.name,n)).length;
+    add('unassigned in ' + cur.name, left);
+  }
+  const printMeta = $('printMeta');
+  printMeta.textContent = total ? total + ' assigned · ' + new Date().toLocaleDateString() : new Date().toLocaleDateString();
+}
+
+function renderMode(){
+  const asg = state.mode==='assign';
+  $('modeView').classList.toggle('active', !asg); $('modeView').setAttribute('aria-pressed', String(!asg));
+  $('modeAssign').classList.toggle('active', asg);  $('modeAssign').setAttribute('aria-pressed', String(asg));
+  $('pt').classList.toggle('assigning', asg);
+  $('app').classList.toggle('assigning', asg);
+  $('showNames').checked = state.showNames || asg;
+  $('showNames').disabled = asg;
+  $('namesWrap').classList.toggle('off', asg);
+  $('namesWrap').title = asg ? 'Names are always shown in Assign mode' : '';
+  $('clearAll').hidden = !asg;
+}
+function render(){ renderMode(); renderTable(); renderDetail(); renderPanel(); renderStatus(); }
+
+/* ---------- actions ---------- */
+function unassign(sym){
+  if(!state.assign[sym]) return;
+  delete state.assign[sym]; save(); render();
+}
+// Next student in the active class who has no element yet (to speed up bulk assigning).
+function nextUnassigned(cur, afterName){
+  if(!cur) return null;
+  const list = cur.students, start = list.indexOf(afterName);   // -1 (not found / null) → begin at the first student
+  for(let k=1;k<=list.length;k++){
+    const n = list[(start+k)%list.length];
+    if(!studentSym(cur.name,n)) return n;
+  }
+  return null;
+}
+function onElement(sym){
+  const e = BY_SYM[sym];
+  state.detailZ = e.z;
+  if(state.mode!=='assign'){ render(); return; }
+  const occ = state.assign[sym];
+  if(!state.sel){
+    if(occ){
+      // pick up the student on this element so they can be moved
+      if(!classes().some(c=>c.name===occ.c && c.students.includes(occ.n))){
+        // student has since been removed from the class lists — just free the element
+        delete state.assign[sym]; save(); render(); toast(occ.n + ' is no longer on a class list — removed from ' + e.name + '.'); return;
+      }
+      state.cls = occ.c; state.sel = skey(occ.c, occ.n);
+    }else{
+      toast('Pick a student in the panel first.');
+    }
+    render(); return;
+  }
+  const [c,n] = state.sel.split(SEP);
+  if(occ && occ.c===c && occ.n===n){ delete state.assign[sym]; state.sel = null; save(); render(); return; }   // same element again → unassign
+  const prev = studentSym(c,n);
+  if(prev) delete state.assign[prev];                                  // moving
+  if(occ) toast(occ.n + ' was on ' + e.name + ' — replaced by ' + n + '.');
+  state.assign[sym] = { c, n };
+  const cur = classes().find(k=>k.name===c);
+  const nx = nextUnassigned(cur, n);
+  state.sel = nx ? skey(c, nx) : null;
+  save(); render();
+}
+function assignRandomly(){
+  const cur = activeClass(); if(!cur) return;
+  const todo = cur.students.filter(n=>!studentSym(cur.name,n));
+  if(!todo.length){ toast('Everyone in this class already has an element.'); return; }
+  const free = EL.map(e=>e.sym).filter(s=>!state.assign[s]);
+  for(let i=free.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [free[i],free[j]]=[free[j],free[i]]; }
+  let k = 0;
+  todo.forEach(n=>{ if(k<free.length){ state.assign[free[k++]] = { c:cur.name, n }; } });
+  state.sel = null; save(); render();
+  toast(k<todo.length ? 'Ran out of elements — ' + (todo.length-k) + ' students left unassigned.' : 'Assigned ' + k + ' students.', k<todo.length?'err':'ok');
+}
+function clearClass(){
+  const cur = activeClass(); if(!cur) return;
+  const mine = Object.keys(state.assign).filter(s=>state.assign[s].c===cur.name);
+  if(!mine.length) return;
+  if(!confirm('Remove all ' + mine.length + ' assignments for “' + cur.name + '”?')) return;
+  mine.forEach(s=>delete state.assign[s]); state.sel = null; save(); render();
+}
+function clearAll(){
+  const n = Object.keys(state.assign).length; if(!n) return;
+  if(!confirm('Remove all ' + n + ' assignments for every class?')) return;
+  state.assign = {}; state.sel = null; save(); render();
+}
+function addClass(){
+  const name = $('newName').value.trim();
+  const students = $('newNames').value.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
+  if(!name){ toast('Give the class a name.', 'err'); return; }
+  if(!students.length){ toast('Add at least one name.', 'err'); return; }
+  if(classes().some(c=>c.name.toLowerCase()===name.toLowerCase())){ toast('A class with that name already exists.', 'err'); return; }
+  state.local.push({ name, students });
+  state.cls = name; $('newName').value=''; $('newNames').value=''; $('hand').open = false;
+  save(); render(); toast('Added “' + name + '”.', 'ok');
+}
+function removeLocalClass(){
+  const cur = activeClass(); if(!cur || !cur.local) return;
+  if(!confirm('Remove the hand-made class “' + cur.name + '” and its assignments?')) return;
+  state.local = state.local.filter(c=>c.name!==cur.name);
+  Object.keys(state.assign).forEach(s=>{ if(state.assign[s].c===cur.name) delete state.assign[s]; });
+  state.sel = null; state.cls = ''; save(); render();
+}
+function setMode(m){
+  state.mode = m; state.sel = null;
+  if(m==='assign'){ loadRosters(); const cur=activeClass(); if(cur) { state.cls=cur.name; const nx=nextUnassigned(cur, null); if(nx) state.sel=skey(cur.name,nx); } }
+  render();
+}
+
+/* ---------- wiring ---------- */
+$('modeView').addEventListener('click', ()=>setMode('view'));
+$('modeAssign').addEventListener('click', ()=>setMode('assign'));
+$('showNames').addEventListener('change', e=>{ state.showNames = e.target.checked; save(); render(); });
+$('clsSel').addEventListener('change', e=>{
+  state.cls = e.target.value; const cur = activeClass(); state.sel = null;
+  const nx = cur && nextUnassigned(cur, null); if(nx) state.sel = skey(cur.name, nx);
+  save(); render();
+});
+$('onlyUn').addEventListener('change', e=>{ state.onlyUn = e.target.checked; render(); });
+$('randBtn').addEventListener('click', assignRandomly);
+$('clearClass').addEventListener('click', clearClass);
+$('clearAll').addEventListener('click', clearAll);
+$('addClass').addEventListener('click', addClass);
+$('rmClass').addEventListener('click', removeLocalClass);
+$('printBtn').addEventListener('click', ()=>window.print());
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape' && state.sel){ state.sel = null; render(); }
+});
+// Pick up class-list edits made on the home page without needing a reload.
+window.addEventListener('focus', ()=>{ loadRosters(); if(state.mode==='assign') render(); });
+window.addEventListener('storage', e=>{ if(e.key===ROSTER_LS){ loadRosters(); render(); } });
+
+load(); loadRosters(); buildTable(); render();
+})();
+</script>
+</body>
+</html>
