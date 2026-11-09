@@ -384,6 +384,7 @@
             <p class="hint">One per line: <code>question | answer</code>. You can also paste two columns from a spreadsheet, or type only the answers (<code>12, 7, -3, 0.5, 3/4</code>) if your slides are made somewhere else.
               Answers can be whole numbers, negatives, decimals, fractions (<code>3/4</code>, <code>1 1/2</code>) or short text (<code>x = 5</code>).
               In questions: <code>x^2</code> powers, <code>x_1</code> subscripts, <code>sqrt(x)</code>, <code>{3}/{4}</code> a stacked fraction, <code>*</code> for ×.</p>
+            <label class="check" style="margin-top:8px" title="For chemistry: numbers after a letter become subscripts (CaCl2 shows as CaCl₂), and CaCl_2 counts as CaCl2. Capital letters still matter: Co is not CO."><input type="checkbox" id="formulaChk"> Chemical formulas: show CaCl2 as CaCl<sub>2</sub></label>
             <div id="itemPreview"></div>
           </div>
 
@@ -657,11 +658,12 @@ const BingoCore = (function(){
     return null;
   }
   // Text answers: compared ignoring spaces, with every kind of minus sign treated alike. Case matters (A ≠ a).
-  const normText = s => String(s).replace(MINUS_RE, '-').replace(/\s+/g, '');
-  function valueInfo(raw){
+  // opt.formulas (chemical formula mode): "_" is ignored too, so CaCl_2 = CaCl2. Case still matters: Co ≠ CO.
+  const normText = (s, opt) => { const t = String(s).replace(MINUS_RE, '-').replace(/\s+/g, ''); return opt && opt.formulas ? t.replace(/_/g, '') : t; };
+  function valueInfo(raw, opt){
     const n = parseNumber(raw);
     if(n) return { type:n.type, key:rkey(n.r), r:n.r, places:n.places, mixed:!!n.mixed };
-    return { type:'text', key:'t:' + normText(raw) };
+    return { type:'text', key:'t:' + normText(raw, opt) };
   }
 
   /* ---------- reading the items box ----------
@@ -691,14 +693,14 @@ const BingoCore = (function(){
     return bareSplit(raw.trim()).map(a => ({ q:'', a, sep:false }));
   }
   // → { items:[{q,a,line,v,dupOf}], answers:[{a,k,v,line}], problems:[{line,level,msg}] }
-  function parseItems(text){
+  function parseItems(text, opt){
     const items = [], problems = [], first = new Map();
     String(text || '').split(/\r\n|\r|\n/).forEach((raw, li) => {
       if(!raw.trim()) return;
       const line = li + 1;
       splitLine(raw).forEach(p => {
         if(!p.a){ problems.push({ line, level:'err', msg:'No answer after the last “|”.' }); return; }
-        const it = { q:p.q, a:p.a, line, v:valueInfo(p.a) };
+        const it = { q:p.q, a:p.a, line, v:valueInfo(p.a, opt) };
         if(!p.sep && it.v.type === 'text'){
           const at = p.a.lastIndexOf('=');
           if(at > 0 && p.a.slice(0, at).trim() && parseNumber(p.a.slice(at + 1)))
@@ -707,7 +709,7 @@ const BingoCore = (function(){
         const prev = first.get(it.v.key);
         if(prev){
           it.dupOf = prev.line;
-          if(normText(prev.a) !== normText(it.a))
+          if(normText(prev.a, opt) !== normText(it.a, opt))
             problems.push({ line, level:'warn', item:items.length, msg:'“' + it.a + '” is the same value as “' + prev.a + '” on line ' + prev.line + '. They count as one answer, shown as “' + prev.a + '”.' });
           else if(it.q || prev.q)
             problems.push({ line, level:'warn', item:items.length, msg:'Same answer as line ' + prev.line + ' (' + prev.a + '). Both questions mark the same square.' });
@@ -733,10 +735,12 @@ const BingoCore = (function(){
   }
 
   /* ---------- maths markup (questions and answers) ----------
-     x^2 x^(n+1) x_1 sqrt(x) {a}/{b} * → ×  pi → π  <= >= != → ≤ ≥ ≠  and a proper minus sign. HTML is escaped first. */
+     x^2 x^(n+1) x_1 sqrt(x) {a}/{b} * → ×  pi → π  <= >= != → ≤ ≥ ≠  and a proper minus sign. HTML is escaped first.
+     opt.formulas (chemical formula mode): a digit straight after a letter or ")" is a subscript too: CaCl2 → CaCl₂. */
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-  function renderMath(raw){
+  function renderMath(raw, opt){
     let s = esc(raw);
+    if(opt && opt.formulas) s = s.replace(/([A-Za-z)\]])(\d+)/g, '$1<sub>$2</sub>');
     s = s.replace(/&lt;=/g, '≤').replace(/&gt;=/g, '≥').replace(/!=/g, '≠').replace(/\bpi\b/g, 'π');
     s = s.replace(/\{([^{}]*)\}\/\{([^{}]*)\}/g, '<span class="fr"><span>$1</span><span>$2</span></span>');
     for(let guard = 0; guard < 20 && /sqrt\(([^()]*)\)/.test(s); guard++)
@@ -754,25 +758,33 @@ const BingoCore = (function(){
     return s;
   }
   // Fraction answers are drawn stacked on cards; everything else goes through renderMath.
-  function renderAnswer(a, type){
+  function renderAnswer(a, type, opt){
     if(type === 'frac'){
       const m = /^([+-]?)(?:(\d+) )?(\d+) ?\/ ?(\d+)$/.exec(normNum(a));
       if(m) return (m[1] === '-' ? '−' : m[1]) + (m[2] ? m[2] + '<span class="mx"></span>' : '') +
         '<span class="fr"><span>' + m[3] + '</span><span>' + m[4] + '</span></span>';
     }
-    return renderMath(a);
+    return renderMath(a, opt);
   }
   // Rough printed width of an answer in characters, for choosing a font size (stacked fractions are narrow but tall).
-  function answerShape(a, type){
+  function answerShape(a, type, opt){
     if(type === 'frac'){
       const m = /^([+-]?)(?:(\d+) )?(\d+) ?\/ ?(\d+)$/.exec(normNum(a));
       if(m) return { len:(m[1] ? 1 : 0) + (m[2] ? m[2].length + 0.4 : 0) + Math.max(m[3].length, m[4].length) + 0.3, stacked:true, space:false };
     }
-    const txt = renderMath(a).replace(/<sup>|<sub>/g, '\u0001').replace(/<[^>]+>/g, '')
-      .replace(/&(amp|lt|gt|quot|#39);/g, 'x');
-    let len = 0; for(const ch of txt) len += (ch === '\u0001') ? 0 : 1;
-    const stacked = /class="fr"/.test(renderMath(a));
-    return { len:Math.max(1, len), stacked, space:/\s/.test(txt.trim()) };
+    // Each character counts 1; in formula mode capitals count wider, and subscripts and narrow letters (I, l, t, brackets) narrower.
+    // word: the widest single word, which must fit on one line.
+    const html = renderMath(a, opt), F = opt && opt.formulas;
+    let len = 0, word = 0, cur = 0, sub = false;
+    html.replace(/&(amp|lt|gt|quot|#39);/g, 'x').split(/(<[^>]+>)/).forEach(part => {
+      if(part[0] === '<'){ if(part === '<sub>') sub = true; else if(part === '</sub>') sub = false; return; }
+      for(const ch of part){
+        const w = !F ? 1 : sub ? 0.65 : /[Iiljtfr()]/.test(ch) ? 0.6 : /[MWmw]/.test(ch) ? 1.45 : /[A-Z]/.test(ch) ? 1.3 : /[a-z]/.test(ch) ? 0.95 : 1;
+        len += w;
+        if(/\s/.test(ch)) cur = 0; else { cur += w; word = Math.max(word, cur); }
+      }
+    });
+    return { len:Math.max(1, len), word:Math.max(1, word), stacked:/class="fr"/.test(html), space:/\s/.test(html.replace(/<[^>]+>/g, '').trim()) };
   }
 
   /* ---------- seeded randomness (sfc32) ---------- */
@@ -1123,7 +1135,7 @@ const BingoCore = (function(){
      items: the game's questions, numbered from 1 as in the prompt: [{ q, a }].
      taken: Map key → words for what already has that value ("the answer to question 3"), so clashes are explained.
      → { ok, add:[{a, why}], rejected:[{a, reason}], errors:[...] }. Never throws. */
-  function readDecoyReply(d, items, taken){
+  function readDecoyReply(d, items, taken, opt){
     const errors = [], add = [], rejected = [];
     if(Array.isArray(d)) d = { decoys:d };
     if(!d || typeof d !== 'object' || !Array.isArray(d.decoys)) return { ok:false, add, rejected, errors:['There is no "decoys" list in the reply.'] };
@@ -1138,7 +1150,7 @@ const BingoCore = (function(){
       if(!a){ rejected.push({ a:'decoy ' + (i + 1), reason:'it has no "answer"' }); return; }
       if(a.indexOf('|') >= 0){ rejected.push({ a, reason:'it contains “|”' }); return; }
       if(a.length > 24){ rejected.push({ a, reason:'it is too long for a bingo square' }); return; }
-      const k = valueInfo(a).key;
+      const k = valueInfo(a, opt).key;
       if(seen.has(k)){ rejected.push({ a, reason:'it is the same value as ' + seen.get(k) }); return; }
       const mistake = obj ? one(x.mistake != null ? x.mistake : x.why) : '';
       const qn = obj ? parseInt(x.question, 10) : NaN;
@@ -1169,8 +1181,9 @@ const BingoCore = (function(){
     if(a >= 0 && b > a && (r = attempt(t.slice(a, b + 1)))) return r;
     return { ok:false, error:'This isn’t valid JSON. Ask the AI to reply with only the JSON, in one code block.' };
   }
-  // A question list written by an AI (or by hand): { format, title, items:[{question, answer}], decoys:[{answer, mistake} | "41"] }
-  // → { ok, title, items:[{q,a}], decoys:[{a,why}], errors:[...] }. Never throws.
+  // A question list written by an AI (or by hand, or sent by Compound Naming):
+  // { format, title, items:[{question, answer}], decoys:[{answer, mistake} | "41"], formulas?:true, size?:3|4|5 }
+  // → { ok, title, items:[{q,a}], decoys:[{a,why}], errors:[...], formulas, size }. Never throws.
   function readDraft(d){
     const errors = [], items = [], decoys = [];
     const err = m => { if(errors.length < 30) errors.push(m); };
@@ -1198,7 +1211,9 @@ const BingoCore = (function(){
       decoys.push({ a, why:why.slice(0, 160) });
     });
     if(!items.length && !errors.length) err('The "items" list is empty.');
-    return { ok:!errors.length, title:one(d.title).slice(0, 80), items, decoys, errors };
+    // optional: "formulas": true turns on chemical formula mode; "size": 3|4|5 is the card size to start a new game with
+    return { ok:!errors.length, title:one(d.title).slice(0, 80), items, decoys, errors,
+      formulas:d.formulas === true, size:[3, 4, 5].includes(d.size) ? d.size : null };
   }
   // CSV / TSV (a spreadsheet export). Handles quotes, doubled quotes, line breaks in quotes and a BOM.
   function parseDelimited(text){
@@ -1258,6 +1273,10 @@ const BingoCore = (function(){
 'use strict';
 const C = BingoCore, esc = C.esc;
 const $ = id => document.getElementById(id);
+// The current game's chemical formula mode (CaCl2 shown as CaCl₂; CaCl_2 = CaCl2) goes to every render and parse call.
+const fo = () => ({ formulas:!!(game && game.formulas) });
+const RA = (a, t) => C.renderAnswer(a, t, fo()), RM = s => C.renderMath(s, fo()), ASH = (a, t) => C.answerShape(a, t, fo());
+const VI = a => C.valueInfo(a, fo()), PI = t => C.parseItems(t, fo()), RDR = (d, items, taken) => C.readDecoyReply(d, items, taken, fo());
 const LS = { games:'bingo.v1.games', cur:'bingo.v1.current', ai:'bingo.v1.ai', tab:'bingo.v1.tab' };
 const DATA_TYPE = 'teachingtools-bingo';
 const MAX_CARDS = 200;
@@ -1298,7 +1317,7 @@ function segSet(el, v){ el.querySelectorAll('button').forEach(b => { const on = 
 /* ---------- games and storage ---------- */
 function blankGame(name){
   return { id:uid(), name:name || '', created:Date.now(), updated:Date.now(),
-    itemsText:'', decoys:[], dopt:{ count:null, style:'mistakes', signs:false },
+    itemsText:'', formulas:false, decoys:[], dopt:{ count:null, style:'mistakes', signs:false },
     set:{ size:5, free:true, count:30, d:null },
     cards:null,
     play:{ pattern:'line', round:1, log:[], order:'shuffle', skip:true, strip:true, reveal:false, near:false, showDecoys:false },
@@ -1324,7 +1343,7 @@ function normalizeGame(g){
   if(!g || typeof g !== 'object') return null;
   const b = blankGame();
   const out = { id:isStr(g.id) && g.id ? g.id : b.id, name:isStr(g.name) ? g.name.slice(0, 80) : '', created:+g.created || Date.now(), updated:+g.updated || Date.now(),
-    itemsText:isStr(g.itemsText) ? g.itemsText : '',
+    itemsText:isStr(g.itemsText) ? g.itemsText : '', formulas:g.formulas === true,
     decoys:(Array.isArray(g.decoys) ? g.decoys : []).filter(d => d && isStr(d.a) && d.a.trim()).map(d => ({ a:d.a.trim(), why:isStr(d.why) ? d.why : '', auto:!!d.auto, lock:!!d.lock })),
     dopt:Object.assign({}, b.dopt), set:Object.assign({}, b.set), cards:cleanCards(g.cards), play:Object.assign({}, b.play), print:Object.assign({}, b.print) };
   const o = g.dopt || {};
@@ -1388,13 +1407,13 @@ function switchGame(id){
 /* ---------- what the current text and settings add up to ---------- */
 let dvCache = null;
 function derive(){
-  const sig = game.id + '\u0000' + game.itemsText + '\u0000' + JSON.stringify(game.decoys) + '\u0000' + JSON.stringify(game.set);
+  const sig = game.id + '\u0000' + game.formulas + '\u0000' + game.itemsText + '\u0000' + JSON.stringify(game.decoys) + '\u0000' + JSON.stringify(game.set);
   if(dvCache && dvCache.sig === sig) return dvCache.val;
-  const parsed = C.parseItems(game.itemsText);
+  const parsed = PI(game.itemsText);
   const ansKeys = new Map(parsed.answers.map(a => [a.k, a.a]));
   const seen = new Map();
   const decoys = game.decoys.map((d, idx) => {
-    const v = C.valueInfo(d.a); let bad = '';
+    const v = VI(d.a); let bad = '';
     if(ansKeys.has(v.key)) bad = 'This is the same as the answer “' + ansKeys.get(v.key) + '”, so it can’t be a decoy.';
     else if(seen.has(v.key)) bad = 'Same value as the decoy “' + seen.get(v.key) + '”.';
     else seen.set(v.key, d.a);
@@ -1483,11 +1502,12 @@ function geom(){ return C.geometry(game.cards.size, game.cards.free); }
 
 /* ---------- drawing a card ---------- */
 function cellFont(a, t, n){
-  const sh = C.answerShape(a, t), cell = 94 / n, cw = cell * 0.84, maxFs = cell * 0.40;
+  const sh = ASH(a, t), cell = 94 / n, cw = cell * 0.84, maxFs = cell * 0.40;
   let fs = cw / (0.62 * sh.len);
   if(sh.space && sh.len > 6){
     const lines = sh.len > 16 ? 3 : 2;
     fs = Math.max(fs, Math.min(cw / (0.62 * Math.ceil(sh.len / lines)), cell * 0.84 / (lines * 1.12)));
+    fs = Math.min(fs, cw / (0.62 * sh.word));   // never so big that the longest word has to break
   }
   if(sh.stacked) fs = Math.min(fs, cell * 0.84 / 2.4);
   fs = clamp(fs, 1.6, maxFs);
@@ -1508,7 +1528,7 @@ function cardHTML(cs, n, o){
     if(o.showDecoys && it.decoy) cls.push('decoy');
     if(o.best && o.best.has(i)) cls.push('best');
     if(o.missing && o.missing.has(i)) cls.push('miss');
-    cells += '<div class="' + cls.join(' ') + '" style="' + cellFont(it.a, it.t, size) + '"><span class="bv">' + C.renderAnswer(it.a, it.t) + '</span></div>';
+    cells += '<div class="' + cls.join(' ') + '" style="' + cellFont(it.a, it.t, size) + '"><span class="bv">' + RA(it.a, it.t) + '</span></div>';
   });
   const title = (game.name || '').trim();
   return '<div class="bcard"><div class="bin"><div class="bhead"><span class="bw">BINGO</span><span class="bn">Card ' + (n + 1) + '</span></div>' +
@@ -1549,6 +1569,7 @@ function renderStatus(){
 function renderSetup(){
   const dv = derive(), p = dv.plan;
   setVal($('items'), game.itemsText);
+  $('formulaChk').checked = game.formulas;
   const nq = dv.parsed.items.filter(i => i.q).length;
   $('itemCount').textContent = nq ? plural(dv.parsed.items.length, 'question') + ' · ' + plural(dv.parsed.answers.length, 'answer')
     : plural(dv.parsed.answers.length, 'answer');
@@ -1563,7 +1584,7 @@ function renderSetup(){
     const tip = d.bad || ((d.why ? 'Mistake: ' + d.why + '. ' : '') + (d.auto ? (d.lock ? 'Locked.' : 'Made for you.') : 'Yours: always kept.'));
     return '<span class="' + cls + '" title="' + esc(tip) + '">' +
       (d.auto ? '<button type="button" data-lock="' + d.idx + '" aria-label="' + (d.lock ? 'Unlock ' : 'Lock ') + esc(d.a) + '">' + (d.lock ? '🔒' : '🔓') + '</button>' : '') +
-      '<span>' + C.renderAnswer(d.a, d.v.type) + '</span>' +
+      '<span>' + RA(d.a, d.v.type) + '</span>' +
       '<button type="button" class="x" data-del="' + d.idx + '" aria-label="Remove ' + esc(d.a) + '">×</button></span>';
   }).join('') : '<span class="hint" style="margin:0">No decoys yet. They are optional, but they make the game better.</span>';
   // card settings
@@ -1618,8 +1639,8 @@ function renderPreview(dv){
     const notes = r.probs.map(x => '<span class="note">' + (x.level === 'err' ? '✕ ' : '⚠ ') + esc(x.msg) + '</span>').join('');
     if(!r.it) return '<tr class="err"><td class="ln">' + r.line + '</td><td colspan="3">' + notes + '</td></tr>';
     return '<tr class="' + lvl + '"><td class="ln">' + r.line + '</td>' +
-      (anyQ ? '<td>' + (r.it.q ? C.renderMath(r.it.q) : '<span class="hint">no question: the answer is called on its own</span>') + notes + '</td>' : '') +
-      '<td class="an">' + C.renderAnswer(r.it.a, r.it.v.type) + (anyQ ? '' : notes) + '</td><td class="ty">' + TYPE_LABEL[r.it.v.type] + '</td></tr>';
+      (anyQ ? '<td>' + (r.it.q ? RM(r.it.q) : '<span class="hint">no question: the answer is called on its own</span>') + notes + '</td>' : '') +
+      '<td class="an">' + RA(r.it.a, r.it.v.type) + (anyQ ? '' : notes) + '</td><td class="ty">' + TYPE_LABEL[r.it.v.type] + '</td></tr>';
   }).join('');
   $('itemPreview').innerHTML = '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>Line</th>' + (anyQ ? '<th>Question (as it will be shown)</th>' : '') +
     '<th>Answer</th><th>Kind</th></tr></thead><tbody>' + html + '</tbody></table></div>' +
@@ -1644,9 +1665,9 @@ function makeDecoysAction(reroll){
   if(reroll){
     const out = game.decoys.filter(d => d.auto && !d.lock);
     if(!out.length){ toast('Nothing to re-roll: every decoy is locked or typed by you.', 'warn'); return; }
-    avoid = out.map(d => C.valueInfo(d.a).key); keep = game.decoys.filter(d => !(d.auto && !d.lock)); count = out.length;
+    avoid = out.map(d => VI(d.a).key); keep = game.decoys.filter(d => !(d.auto && !d.lock)); count = out.length;
   } else count = clamp(parseInt($('dCount').value, 10) || suggestedDecoys(dv.parsed.answers.length, dv.plan.S), 1, 100);
-  const taken = new Set(dv.parsed.answers.map(a => a.k).concat(keep.map(d => C.valueInfo(d.a).key)));
+  const taken = new Set(dv.parsed.answers.map(a => a.k).concat(keep.map(d => VI(d.a).key)));
   const made = C.makeDecoys(dv.parsed.answers, taken, count, decoyStyleOpts({ avoid }), C.makeRng(newSeed()));
   if(!made.length){ toast('No more decoys could be made near these answers. Try “Random in range”, or type your own.', 'err'); return; }
   game.decoys = keep.concat(made.map(m => ({ a:m.a, why:m.why, auto:true, lock:false })));
@@ -1680,6 +1701,7 @@ function addOwnDecoys(){
 }
 $('dAddBtn').addEventListener('click', addOwnDecoys);
 $('dAdd').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); addOwnDecoys(); } });
+$('formulaChk').addEventListener('change', e => { game.formulas = e.target.checked; changed(); });
 $('sizeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; game.set.size = +b.dataset.v; changed(); });
 $('freeChk').addEventListener('change', e => { game.set.free = e.target.checked; changed(); });
 $('cardCount').addEventListener('change', e => { const v = parseInt(e.target.value, 10); game.set.count = clamp(v > 0 ? v : 30, 1, MAX_CARDS); e.target.value = game.set.count; changed(); });
@@ -1832,7 +1854,7 @@ function renderAi(){
   if($('adShow').open) $('adPrompt').textContent = buildDecoyPrompt();
   const withWhy = dv.decoys.filter(d => d.why);
   $('dWhy').hidden = !withWhy.length;
-  $('dWhyList').innerHTML = withWhy.map(d => '<li' + (d.bad ? ' style="text-decoration:line-through;color:var(--danger)"' : '') + '><b>' + C.renderAnswer(d.a, d.v.type) + '</b> ' + C.renderMath(d.why) + '</li>').join('');
+  $('dWhyList').innerHTML = withWhy.map(d => '<li' + (d.bad ? ' style="text-decoration:line-through;color:var(--danger)"' : '') + '><b>' + RA(d.a, d.v.type) + '</b> ' + RM(d.why) + '</li>').join('');
 }
 function aiChanged(){
   lsSet(LS.ai, JSON.stringify(ai));
@@ -1952,11 +1974,11 @@ function buildKeySheet(){
   const anyQ = cs.items.some(it => it.q);
   const rows = cs.items.map((it, i) => {
     const p = cs.pool[idx.get(it.k)];
-    return '<tr><td class="n">' + (i + 1) + '</td>' + (anyQ ? '<td>' + (it.q ? C.renderMath(it.q) : '—') + '</td>' : '') +
-      '<td class="a">' + C.renderAnswer(p.a, p.t) + '</td><td class="c">' + an.use[idx.get(it.k)] + '</td></tr>';
+    return '<tr><td class="n">' + (i + 1) + '</td>' + (anyQ ? '<td>' + (it.q ? RM(it.q) : '—') + '</td>' : '') +
+      '<td class="a">' + RA(p.a, p.t) + '</td><td class="c">' + an.use[idx.get(it.k)] + '</td></tr>';
   }).join('');
   const dec = cs.pool.map((p, i) => [p, i]).filter(x => x[0].decoy);
-  const drows = dec.map(([p, i]) => '<tr><td class="a">' + C.renderAnswer(p.a, p.t) + '</td><td>' + (p.why ? C.renderMath(p.why) : '') + '</td><td class="c">' + an.use[i] + '</td></tr>').join('');
+  const drows = dec.map(([p, i]) => '<tr><td class="a">' + RA(p.a, p.t) + '</td><td>' + (p.why ? RM(p.why) : '') + '</td><td class="c">' + an.use[i] + '</td></tr>').join('');
   area.className = '';
   area.innerHTML = '<div class="keysheet"><h1>' + esc(game.name || 'Bingo') + ': answer key</h1>' +
     '<div class="meta">' + cs.list.length + ' cards · ' + cs.size + '×' + cs.size + (cs.free ? ' with FREE' : '') + ' · made ' + esc(fmtDate(cs.made)) + '</div>' +
@@ -2027,7 +2049,7 @@ const numSortCache = new Map();
 function sortedPool(cs){
   const key = cardsSig(cs);
   if(numSortCache.has(key)) return numSortCache.get(key);
-  const val = cs.pool.map((p, i) => { const v = C.valueInfo(p.a); return { i, p, num:v.r ? C.rnum(v.r) : null }; });
+  const val = cs.pool.map((p, i) => { const v = VI(p.a); return { i, p, num:v.r ? C.rnum(v.r) : null }; });
   const cmp = (a, b) => (a.num == null) - (b.num == null) || (a.num != null && b.num != null ? a.num - b.num : 0) || a.p.a.localeCompare(b.p.a, undefined, { numeric:true });
   const out = { real:val.filter(x => !x.p.decoy).sort(cmp), decoy:val.filter(x => x.p.decoy).sort(cmp) };
   numSortCache.set(key, out); return out;
@@ -2083,16 +2105,16 @@ function renderPlay(){
   const byKey = new Map(cs.pool.map(p => [p.k, p]));
   $('log').innerHTML = log.length ? log.map((e, n) => {
     const p = byKey.get(e.k), hidden = e.q && !e.r && !game.play.reveal;
-    return '<li class="' + (hidden ? 'hide' : '') + '"><span class="n">' + (n + 1) + '</span><span class="q">' + (e.q ? C.renderMath(e.q) : '<span class="hint" style="margin:0">' + (e.i >= 0 ? 'answer called' : 'called from the board') + '</span>') + '</span>' +
-      '<span class="a">' + (hidden ? 'not shown yet' : C.renderAnswer(p.a, p.t)) + '</span></li>';
+    return '<li class="' + (hidden ? 'hide' : '') + '"><span class="n">' + (n + 1) + '</span><span class="q">' + (e.q ? RM(e.q) : '<span class="hint" style="margin:0">' + (e.i >= 0 ? 'answer called' : 'called from the board') + '</span>') + '</span>' +
+      '<span class="a">' + (hidden ? 'not shown yet' : RA(p.a, p.t)) + '</span></li>';
   }).reverse().join('') : '<li><span class="hint" style="margin:0">Nothing called yet. Press <b>' + ($('nextLabel').textContent) + '</b>, or click answers on the board.</span></li>';
   // board
   const sp = sortedPool(cs), latest = log.length ? log[log.length - 1].k : null;
   const tile = x => {
-    const len = C.answerShape(x.p.a, x.p.t).len, lc = len <= 3 ? '' : len <= 5 ? ' l2' : len <= 8 ? ' l3' : ' l4';
-    if(x.p.decoy) return '<div class="tile decoy' + lc + '" title="Decoy: never called' + (x.p.why ? '. ' + esc(x.p.why) : '') + '">' + C.renderAnswer(x.p.a, x.p.t) + '</div>';
+    const len = ASH(x.p.a, x.p.t).len, lc = len <= 3 ? '' : len <= 5 ? ' l2' : len <= 8 ? ' l3' : ' l4';
+    if(x.p.decoy) return '<div class="tile decoy' + lc + '" title="Decoy: never called' + (x.p.why ? '. ' + esc(x.p.why) : '') + '">' + RA(x.p.a, x.p.t) + '</div>';
     const on = called.has(x.p.k);
-    return '<button type="button" class="tile' + lc + (on ? ' called' : '') + (x.p.k === latest ? ' latest' : '') + '" data-p="' + x.i + '" aria-pressed="' + on + '" title="' + esc(x.p.a) + (on ? ': called. Click to un-call.' : ': click to call') + '">' + C.renderAnswer(x.p.a, x.p.t) + '</button>';
+    return '<button type="button" class="tile' + lc + (on ? ' called' : '') + (x.p.k === latest ? ' latest' : '') + '" data-p="' + x.i + '" aria-pressed="' + on + '" title="' + esc(x.p.a) + (on ? ': called. Click to un-call.' : ': click to call') + '">' + RA(x.p.a, x.p.t) + '</button>';
   };
   $('tiles').innerHTML = sp.real.map(tile).join('') + (game.play.showDecoys ? sp.decoy.map(tile).join('') : '');
 }
@@ -2135,8 +2157,8 @@ function runCheck(n){
     const li = [];
     if(!r.live) li.push('This card can’t win ' + esc(C.PATTERNS[pattern].name) + ': it has decoys in the way.');
     li.push('Closest: ' + esc(place) + ', with ' + plural(b.missing.length, 'square') + ' to go.');
-    if(notCalled.length) li.push('Not called yet: <b>' + notCalled.map(i => C.renderAnswer(nameOf(i).a, nameOf(i).t)).join(', ') + '</b>.');
-    decoys.forEach(i => { const p = nameOf(i); li.push('<b>' + C.renderAnswer(p.a, p.t) + '</b> was never an answer: it is a decoy' + (p.why ? ' (' + C.renderMath(p.why) + ')' : '') + '. If they crossed it off, which question did they get ' + C.renderAnswer(p.a, p.t) + ' for?'); });
+    if(notCalled.length) li.push('Not called yet: <b>' + notCalled.map(i => RA(nameOf(i).a, nameOf(i).t)).join(', ') + '</b>.');
+    decoys.forEach(i => { const p = nameOf(i); li.push('<b>' + RA(p.a, p.t) + '</b> was never an answer: it is a decoy' + (p.why ? ' (' + RM(p.why) + ')' : '') + '. If they crossed it off, which question did they get ' + RA(p.a, p.t) + ' for?'); });
     detail = '<ul class="vdetail">' + li.map(x => '<li>' + x + '</li>').join('') + '</ul>';
   }
   out.innerHTML = verdict + detail + '<div class="checkcard">' + cardHTML(cs, n - 1, { called, showDecoys:true, best:new Set(b.cells), missing:new Set(b.missing) }) + '</div>' +
@@ -2220,14 +2242,14 @@ function renderPresent(){
     const dupe = e.q && log.slice(0, ui.view).some(x => x.k === e.k) ? '<div class="pnote">This answer was already called, so there is nothing new to cross off.</div>' : '';
     if(e.q){
       const show = shownNow(e);
-      main.innerHTML = earlier + '<div class="pq-box" id="pqBox"><div class="pq" id="pq">' + C.renderMath(e.q) + '</div></div>' +
-        '<div class="pa-box" id="paBox"><div class="pa' + (show ? '' : ' hidden') + '" id="pa">' + (show ? C.renderAnswer(p.a, p.t) : 'Work it out, then press R to reveal') + '</div></div>' + dupe;
+      main.innerHTML = earlier + '<div class="pq-box" id="pqBox"><div class="pq" id="pq">' + RM(e.q) + '</div></div>' +
+        '<div class="pa-box" id="paBox"><div class="pa' + (show ? '' : ' hidden') + '" id="pa">' + (show ? RA(p.a, p.t) : 'Work it out, then press R to reveal') + '</div></div>' + dupe;
       requestAnimationFrame(() => {
         const box = $('pqBox'), q = $('pq'); if(box && q) fitText(q, box, Math.round(window.innerHeight * 0.16), 18);
         const pb = $('paBox'), pa = $('pa'); if(show && pb && pa) fitText(pa, pb, Math.round(window.innerHeight * 0.2), 24);
       });
     } else {
-      main.innerHTML = earlier + '<div class="pq-box" id="paBox"><div class="pa callonly" id="pa">' + C.renderAnswer(p.a, p.t) + '</div></div>';
+      main.innerHTML = earlier + '<div class="pq-box" id="paBox"><div class="pa callonly" id="pa">' + RA(p.a, p.t) + '</div></div>';
       requestAnimationFrame(() => { const pb = $('paBox'), pa = $('pa'); if(pb && pa) fitText(pa, pb, Math.round(window.innerHeight * 0.4), 30); });
     }
   }
@@ -2239,7 +2261,7 @@ function renderPresent(){
     const cur = e && !shownNow(e) ? e.k : null;
     const sp = sortedPool(cs).real.filter(x => seen.has(x.p.k) && x.p.k !== cur);
     strip.hidden = !sp.length;
-    strip.innerHTML = sp.map(x => '<span class="' + (x.p.k === latest ? 'latest' : '') + '">' + C.renderAnswer(x.p.a, x.p.t) + '</span>').join('');
+    strip.innerHTML = sp.map(x => '<span class="' + (x.p.k === latest ? 'latest' : '') + '">' + RA(x.p.a, x.p.t) + '</span>').join('');
   } else strip.hidden = true;
   $('pBack').disabled = ui.view <= 0;
   $('pReveal').disabled = !(e && e.q) || game.play.reveal;
@@ -2287,7 +2309,7 @@ $('modalWrap').addEventListener('click', e => {
 function openGames(){
   const list = Object.values(store.games).sort((a, b) => b.updated - a.updated);
   const row = g => {
-    const n = C.parseItems(g.itemsText).items.length;
+    const n = PI(g.itemsText).items.length;
     return '<li class="' + (g.id === game.id ? 'cur' : '') + '"><div class="gi"><b>' + esc(g.name || 'Untitled game') + '</b><span>' + plural(n, 'question') + ' · ' +
       (g.cards ? plural(g.cards.list.length, 'card') : 'no cards') + ' · changed ' + esc(fmtDate(g.updated)) + '</span></div>' +
       (g.id === game.id ? '<span class="count-pill">open now</span>' : '<button class="btn small primary" data-open="' + g.id + '">Open</button>') +
@@ -2358,7 +2380,7 @@ async function importFile(file){
   try { text = await file.text(); } catch(e){ toast('That file couldn’t be read.', 'err'); return; }
   const name = file.name || 'the file';
   if(/\.(csv|tsv)$/i.test(name)) return offerDraft(Object.assign({ title:name.replace(/\.[^.]+$/, '') }, C.readTable(C.parseDelimited(text))), name);
-  if(/\.txt$/i.test(name) && !/^\s*[[{`]/.test(text)) return offerDraft({ title:name.replace(/\.[^.]+$/, ''), items:C.parseItems(text).items.map(it => ({ q:it.q, a:it.a })), decoys:[] }, name);
+  if(/\.txt$/i.test(name) && !/^\s*[[{`]/.test(text)) return offerDraft({ title:name.replace(/\.[^.]+$/, ''), items:PI(text).items.map(it => ({ q:it.q, a:it.a })), decoys:[] }, name);
   importText(text, name, false);
 }
 function importText(text, name, fromPaste){
@@ -2366,14 +2388,14 @@ function importText(text, name, fromPaste){
   if(!j.ok){
     // not JSON: maybe plain "question | answer" lines were pasted
     if(fromPaste){
-      const p = C.parseItems(text);
+      const p = PI(text);
       if(p.items.length) return offerDraft({ title:'', items:p.items.map(it => ({ q:it.q, a:it.a })), decoys:[] }, name);
     }
     showErrors('This couldn’t be read', [j.error]); return;
   }
   const v = j.value;
   if(fromPaste && (!v || typeof v !== 'object')){
-    const p = C.parseItems(text);
+    const p = PI(text);
     if(p.items.length) return offerDraft({ title:'', items:p.items.map(it => ({ q:it.q, a:it.a })), decoys:[] }, name);
   }
   if(v && v.type === DATA_TYPE) return importGame(v, name);
@@ -2388,7 +2410,7 @@ async function applyDecoyReply(v, name){
   const taken = new Map();
   dv.parsed.items.forEach((it, i) => { if(!taken.has(it.v.key)) taken.set(it.v.key, 'the answer to question ' + (i + 1)); });
   dv.valid.forEach(d => { if(!taken.has(d.k)) taken.set(d.k, 'your decoy “' + d.a + '”'); });
-  const r = C.readDecoyReply(v, dv.parsed.items.map(it => ({ q:it.q, a:it.a })), taken);
+  const r = RDR(v, dv.parsed.items.map(it => ({ q:it.q, a:it.a })), taken);
   if(!r.ok) return showErrors('These decoys can’t be used yet', r.errors, true);
   const msgs = r.rejected.map(x => '“' + x.a + '” was left out: ' + x.reason + '.');
   if(!r.add.length) return showErrors('No new decoys', msgs.length ? msgs : ['The reply had no decoys.'], true);
@@ -2431,10 +2453,10 @@ async function importGame(v, name){
 async function offerDraft(d, name){
   const items = (d.items || []).filter(it => it && it.a), decoys = d.decoys || [];
   if(!items.length && !decoys.length){ showErrors('Nothing to import', ['No questions or answers were found in ' + name + '.']); return; }
-  const lines = items.map(C.itemLine).join('\n');
-  const parsed = C.parseItems(lines);
+  const lines = items.map(C.itemLine).join('\n'), fopt = { formulas:!!d.formulas || game.formulas };
+  const parsed = C.parseItems(lines, fopt);
   const warn = parsed.problems.filter(p => p.level === 'warn');
-  const sample = items.slice(0, 6).map(it => '<li>' + (it.q ? C.renderMath(it.q) + ' → ' : '') + '<b>' + C.renderAnswer(it.a, C.valueInfo(it.a).type) + '</b></li>').join('');
+  const sample = items.slice(0, 6).map(it => '<li>' + (it.q ? C.renderMath(it.q, fopt) + ' → ' : '') + '<b>' + C.renderAnswer(it.a, C.valueInfo(it.a, fopt).type, fopt) + '</b></li>').join('');
   const body = '<p>Found <b>' + plural(items.length, 'question') + '</b>' + (decoys.length ? ' and <b>' + plural(decoys.length, 'decoy') + '</b>' : '') + ' in ' + esc(name) + '.</p>' +
     '<ul class="vdetail">' + sample + (items.length > 6 ? '<li class="hint">…and ' + (items.length - 6) + ' more</li>' : '') + '</ul>' +
     (warn.length ? '<p class="pwarn">⚠ ' + plural(warn.length, 'line needs', 'lines need') + ' a look (for example, two questions with the same answer). They are marked on the Setup tab.</p>' : '') +
@@ -2443,15 +2465,18 @@ async function offerDraft(d, name){
   const btns = empty ? [{ label:'Use them', value:'replace', kind:'primary' }, { label:'Cancel', value:null }]
     : [{ label:'Start a new game', value:'new', kind:'primary' }, { label:'Replace this game’s questions', value:'replace' }, { label:'Add to this game', value:'add' }, { label:'Cancel', value:null }];
   const c = await askChoice('Import questions', body, btns, true);
-  if(!c) return;
+  if(!c) return false;
   const ds = decoys.map(x => ({ a:x.a, why:x.why || '', auto:false, lock:true }));
   if(c === 'new'){
-    const g = blankGame(d.title || 'Imported questions'); g.itemsText = lines; g.decoys = ds;
+    const g = blankGame(d.title || 'Imported questions'); g.itemsText = lines; g.decoys = ds; g.formulas = !!d.formulas;
+    if(d.size) g.set.size = d.size;
     addGame(g, true);
   } else if(c === 'replace'){
-    game.itemsText = lines; game.decoys = ds;
+    game.itemsText = lines; game.decoys = ds; game.formulas = !!d.formulas;
+    if(d.size && empty) game.set.size = d.size;
     if(d.title && !game.name) game.name = d.title;
   } else {
+    if(d.formulas) game.formulas = true;
     game.itemsText = game.itemsText.replace(/\s+$/, '') + (game.itemsText.trim() ? '\n' : '') + lines;
     game.decoys = game.decoys.concat(ds);
   }
@@ -2459,6 +2484,7 @@ async function offerDraft(d, name){
   ui.tab = 'setup'; saveTab();
   changed();
   toast('Added ' + plural(items.length, 'question') + (ds.length ? ' and ' + plural(ds.length, 'decoy') : '') + '. Check them, then make the cards.', 'ok');
+  return true;
 }
 
 /* ---------- toolbar, tabs, keys ---------- */
@@ -2546,7 +2572,11 @@ const BANK = [
     about:'Thirty facts up to 12 × 12, each with a different answer. Decoys are made from likely slips (one off, digits swapped).',
     items:['6 × 7 | 42', '8 × 9 | 72', '7 × 8 | 56', '6 × 9 | 54', '4 × 7 | 28', '3 × 9 | 27', '6 × 8 | 48', '7 × 7 | 49', '9 × 9 | 81', '5 × 8 | 40',
       '4 × 9 | 36', '3 × 8 | 24', '7 × 9 | 63', '8 × 8 | 64', '5 × 7 | 35', '4 × 8 | 32', '3 × 7 | 21', '6 × 5 | 30', '9 × 5 | 45', '4 × 4 | 16',
-      '3 × 6 | 18', '11 × 6 | 66', '12 × 7 | 84', '9 × 11 | 99', '12 × 12 | 144', '3 × 5 | 15', '2 × 7 | 14', '8 × 12 | 96', '7 × 11 | 77', '5 × 5 | 25'] }
+      '3 × 6 | 18', '11 × 6 | 66', '12 × 7 | 84', '9 × 11 | 99', '12 × 12 | 144', '3 × 5 | 15', '2 × 7 | 14', '8 × 12 | 96', '7 × 11 | 77', '5 × 5 | 25'] },
+  // A link entry opens another tool that makes the game and sends it here (see "hand-off" below).
+  { id:'compound-naming', name:'Naming chemical compounds', level:'Grade 9', topic:'Chemistry', link:'../compound-naming/index.html',
+    about:'A generator: choose binary ionic, multivalent (Roman numerals) and covalent (prefixes) compounds, and it makes a new set each time, with decoys from real naming mistakes. It sends the game straight here.',
+    sample:[['Sodium chloride', 'NaCl'], ['Iron(III) oxide', 'Fe2O3'], ['Dinitrogen tetroxide', 'N2O4']] }
 ];
 function gameFromBank(b){
   const g = blankGame(b.name);
@@ -2571,6 +2601,10 @@ function useBank(id){
     : '“' + b.name + '” is ready on Setup.', 'ok');
 }
 function bankCard(b){
+  if(b.link) return '<div class="bk"><div class="bk-top"><b>' + esc(b.name) + '</b><span class="count-pill">generator</span></div>' +
+    '<div class="bk-meta">' + esc(b.level) + ' · ' + esc(b.topic) + ' · decoys made for you</div><p class="hint">' + esc(b.about) + '</p>' +
+    '<ul class="bk-sample">' + b.sample.map(x => '<li>' + C.esc(x[0]) + ' → <b>' + C.renderAnswer(x[1], 'text', { formulas:true }) + '</b></li>').join('') + '</ul>' +
+    '<div class="row" style="margin-top:10px"><a class="btn small primary" href="' + esc(b.link) + '">Open the generator</a></div></div>';
   const parsed = C.parseItems(b.items.join('\n')), n = parsed.items.length;
   const row = it => (it.q ? C.renderMath(it.q) + ' → ' : '') + '<b>' + C.renderAnswer(it.a, it.v.type) + '</b>';
   return '<div class="bk"><div class="bk-top"><b>' + esc(b.name) + '</b><span class="count-pill">' + plural(n, 'question') + '</span></div>' +
@@ -2597,6 +2631,29 @@ if(!game.cards && ui.tab !== 'setup') ui.tab = 'setup';
 if(firstRun){ makeCards({ quiet:true, seed:12345 }); ui.tab = 'setup'; }   // so every tab has something to show
 save();
 renderAll();
+receiveHandoff();
+
+/* ---------- hand-off from another tool (Compound Naming) ----------
+   The sender saves { id, to:'bingo', from, createdAt, payload } under one shared key and opens this page with
+   #handoff=<id>. The payload is a draft (the same format as an AI reply), so it goes through the normal Import dialog.
+   The key is removed once it has been offered, so a reload doesn't offer it again. */
+function receiveHandoff(){
+  const m = /^#handoff=([\w-]{1,64})$/.exec(location.hash);
+  if(!m) return;
+  const KEY = 'teachingtools.handoff.v1';
+  let h = null;
+  try { h = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e){ h = null; }
+  try { history.replaceState(null, '', location.pathname + location.search); } catch(e){ /* file:// in some browsers */ }
+  const fresh = h && h.id === m[1] && h.to === 'bingo' && Date.now() - (+h.createdAt || 0) < 24 * 3600 * 1000;
+  if(!fresh){
+    showErrors('The questions didn’t arrive', ['This can happen when the tools are opened as files on your computer. In Compound Naming, press “Download .json”, then use Import… here and choose that file.']);
+    return;
+  }
+  const d = C.readDraft(h.payload);
+  const done = () => { try { localStorage.removeItem(KEY); } catch(e){ /* nothing to clean */ } };
+  if(!d.ok){ done(); showErrors('These questions can’t be used', d.errors); return; }
+  offerDraft(d, (h.from === 'compound-naming' ? 'Compound Naming' : 'the other tool')).then(done, done);
+}
 })();
 </script>
 </body>
