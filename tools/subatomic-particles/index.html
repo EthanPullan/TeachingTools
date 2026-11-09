@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Subatomic Particles</title>
+<style>
+  :root{
+    /* Surfaces */
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    /* Text */
+    --ink:#16241f; --muted:#67756f;
+    /* Lines */
+    --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    /* Brand */
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    /* Accent */
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    /* Status */
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    /* Elevation / shape */
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10);
+    --radius:12px;
+    /* Type */
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+  [hidden]{display:none !important;}
+
+  /* ---- frame ---- */
+  .app{display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;}
+  .toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .brand a{color:inherit;text-decoration:none;}
+  .spacer{flex:1;}
+  .page{flex:1;padding:16px;}
+  .statusbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:0 16px;min-height:38px;
+    border-top:1px solid var(--line);background:var(--panel);font-size:12.5px;color:var(--muted);position:sticky;bottom:0;}
+  .statusbar .stat b{font-family:var(--mono);font-weight:600;color:var(--ink);}
+  .statusbar .dotline{width:1px;height:16px;background:var(--line);}
+  .statusbar .stamp{margin-left:auto;font-family:var(--mono);font-size:11.5px;}
+  .statusbar .stamp.warn{color:var(--danger);}
+
+  /* ---- controls ---- */
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;border-radius:9px;cursor:pointer;
+    font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:7px;
+    transition:background .12s,border-color .12s,transform .05s;text-decoration:none;white-space:nowrap;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.small{padding:5px 9px;font-size:12px;border-radius:7px;}
+  .btn.big{padding:12px 16px;font-size:15px;border-radius:10px;justify-content:center;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:15px;line-height:1;}
+  input[type=number],input[type=text]{border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--panel-2);}
+  input[type=number]{width:72px;font-family:var(--mono);}
+  .check{display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;user-select:none;}
+  .check input{width:16px;height:16px;accent-color:var(--board);margin:2px 0 0;flex:none;}
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 9px;}
+  .section-title small{text-transform:none;letter-spacing:.02em;font-weight:500;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;margin:6px 0 0;}
+  .count-pill{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);border-radius:20px;padding:2px 9px;color:var(--muted);white-space:nowrap;}
+  .lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .row+.row{margin-top:9px;}
+  .field{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .field input[type=text]{width:100%;}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;}
+  .box+.box{margin-top:14px;}
+  .box-head{display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:9px;flex-wrap:wrap;}
+  .box-head .section-title{margin:0;}
+  .banner{border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5;margin-top:10px;}
+  .banner.warn{background:var(--accent-soft);border:1px solid #efcf9c;}
+  .banner.info{background:var(--together-soft);border:1px solid #bcd3e6;}
+  .banner a{color:var(--together);font-weight:600;}
+  .f{font-family:var(--mono);font-size:13.5px;}
+
+  /* ---- layout ---- */
+  .gen{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:14px;max-width:1280px;margin:0 auto;align-items:start;}
+  .opt+.opt{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
+  .types{display:flex;flex-direction:column;gap:10px;}
+  .types .tx{display:flex;flex-direction:column;min-width:0;}
+  .types .ex{color:var(--muted);font-size:12px;}
+  .types .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap;padding-top:1px;}
+  .send .btn.big{width:100%;}
+  .send .row .btn{flex:1;justify-content:center;}
+
+  /* ---- the set ---- */
+  .twrap{overflow:auto;border:1px solid var(--line);border-radius:9px;}
+  table.set{width:100%;border-collapse:collapse;font-size:13px;}
+  table.set th{background:var(--panel-2);text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap;font-weight:700;}
+  table.set th .side{display:inline-block;margin-left:5px;font-size:9.5px;letter-spacing:.04em;padding:1px 6px;border-radius:10px;}
+  table.set th .side.card{background:var(--accent-soft);color:var(--accent-deep);}
+  table.set th .side.slide{background:var(--together-soft);color:var(--together);}
+  table.set td{padding:6px 9px;border-bottom:1px solid var(--grid-line);vertical-align:middle;}
+  table.set tr:last-child td{border-bottom:none;}
+  table.set td.n{font-family:var(--mono);font-size:11.5px;color:var(--muted);width:1%;}
+  table.set td.a{font-weight:600;white-space:nowrap;}
+  table.set td.ty{font-size:11.5px;color:var(--muted);white-space:nowrap;}
+  table.set td.note{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap;}
+  table.set td.act{white-space:nowrap;width:1%;text-align:right;}
+  table.set tr.locked td{background:#fffaf0;}
+  .ib{border:1px solid transparent;background:none;border-radius:6px;cursor:pointer;padding:3px 6px;font-size:13px;color:var(--muted);line-height:1;}
+  .ib:hover{background:var(--panel-2);border-color:var(--line);color:var(--ink);}
+  .ib[aria-pressed="true"]{color:var(--accent-deep);background:var(--accent-soft);}
+  .empty{border:1px dashed var(--line);border-radius:10px;padding:16px;color:var(--muted);font-size:12.5px;line-height:1.55;background:var(--panel-2);}
+  .dlist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:9px;}
+  .dlist li{display:flex;align-items:center;gap:10px;padding:6px 9px;border-bottom:1px solid var(--grid-line);font-size:13px;}
+  .dlist li:last-child{border-bottom:none;}
+  .dlist .da{min-width:3.5em;font-weight:600;}
+  .dlist .dm{flex:1;color:var(--muted);font-size:12.5px;min-width:0;}
+
+  .toast-wrap{position:fixed;left:50%;bottom:52px;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;}
+  .toast{background:var(--ink);color:#fff;padding:10px 15px;border-radius:10px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);
+    max-width:min(92vw,560px);border-left:3px solid var(--accent);animation:tin .2s ease both;}
+  .toast.err{border-left-color:var(--danger);} .toast.ok{border-left-color:var(--ok);}
+  @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  @media (max-width:900px){ .gen{grid-template-columns:minmax(0,1fr);} }
+  @media (max-width:560px){ .statusbar{position:static;} table.set td.note,table.set th.note,table.set td.ty,table.set th.ty{display:none;} .page{padding:12px;} }
+  @media (prefers-reduced-motion:reduce){ .btn:active{transform:none;} .toast{animation:none;} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span><a href="../../index.html" title="All teaching tools">Subatomic Particles</a><small>chemistry games for Bingo</small></div>
+    <span class="spacer"></span>
+    <a class="btn small" href="../periodic-table/index.html" title="Open the Periodic Table tool">⚛ Periodic Table</a>
+    <a class="btn small" href="../bingo/index.html" title="Open the Bingo tool">🎱 Bingo</a>
+  </header>
+
+  <main class="page">
+    <div class="gen">
+      <div>
+        <section class="box">
+          <div class="opt">
+            <h3 class="section-title">Question types</h3>
+            <div class="types" id="types"></div>
+            <p class="hint">Elements 1 to 36, hydrogen to krypton. Students need a periodic table. Neutron questions name the isotope (chlorine‑35), so there is no rounding to do.</p>
+          </div>
+          <div class="opt">
+            <div class="row">
+              <label class="field"><span class="lab">How many questions</span><input type="number" id="count" min="1" max="100" value="30"></label>
+              <span class="spacer"></span>
+              <label class="field"><span class="lab">Decoys</span><input type="number" id="dcount" min="0" max="40" value="10"></label>
+            </div>
+            <p class="hint">Every question in a set has a different answer, so each one marks its own square.</p>
+            <p class="hint" id="countHint"></p>
+          </div>
+        </section>
+
+        <section class="box send">
+          <h3 class="section-title">Send to Bingo</h3>
+          <label class="field"><span class="lab">Game name</span><input type="text" id="title" maxlength="80"></label>
+          <div class="row" style="margin-top:12px"><button type="button" class="btn primary big" id="sendBtn"><span class="ic">🎱</span> Send to Bingo</button></div>
+          <div class="row"><button type="button" class="btn small" id="jsonBtn">⤓ Download .json</button><button type="button" class="btn small" id="copyBtn">⧉ Copy as text</button></div>
+          <p class="hint">Bingo opens with the questions and decoys ready to use. If that doesn’t work (some browsers block it for tools opened as files), use <b>Download .json</b>, then in Bingo choose <b>Import…</b> and pick the file.</p>
+          <div id="sendMsg"></div>
+        </section>
+      </div>
+
+      <div>
+        <section class="box">
+          <div class="box-head"><h3 class="section-title">The questions <span class="count-pill" id="setCount">0</span></h3>
+            <button type="button" class="btn small primary" id="newBtn" title="Make a new set. Locked rows stay.">↻ New set</button></div>
+          <div id="setArea"></div>
+          <p class="hint">🔒 keeps a row when you make a new set · ↻ swaps it for another of the same type · × removes it.</p>
+        </section>
+        <section class="box">
+          <div class="box-head"><h3 class="section-title">Decoys <small>(on the cards, never the answer)</small> <span class="count-pill" id="decCount">0</span></h3>
+            <button type="button" class="btn small" id="newDecBtn">↻ New decoys</button></div>
+          <div id="decArea"></div>
+          <p class="hint">Each decoy is a mistake students really make. If a student crosses one off, Bingo’s <b>Check a card</b> tells you which question they got wrong, and how.</p>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="statusbar" id="statusbar"></footer>
+</div>
+<div class="toast-wrap" id="toasts" aria-live="polite"></div>
+<script>
+/* <subatomic-core>
+   Pure logic: no DOM. The element and ion tables, the questions, picking a set, the mistake catalogue for decoys and
+   the payload Bingo reads all live here so they can be tested on their own. */
+const SubatomicCore = (function(){
+  'use strict';
+
+  /* ---------- data ----------
+     Elements 1 to 36: [symbol, name, atomic mass, mass numbers of its isotopes]. The place in the list is the atomic
+     number. Names and atomic masses are copied from tools/periodic-table (its RAW table), so the spelling matches the
+     site: aluminum, sulfur. The tests compare the two.
+     Isotopes: the most abundant one first, then other well-known ones. All occur in nature (hydrogen‑3, carbon‑14 and
+     potassium‑40 are radioactive, in trace amounts). Checked by hand against standard isotope tables when this list
+     was written. The most abundant isotope is not always the rounded atomic mass: nickel‑58, copper‑63, selenium‑80. */
+  const ELEMENTS = [
+    ['H', 'hydrogen', 1.008, [1, 2, 3]], ['He', 'helium', 4.003, [4, 3]], ['Li', 'lithium', 6.94, [7, 6]],
+    ['Be', 'beryllium', 9.012, [9]], ['B', 'boron', 10.81, [11, 10]], ['C', 'carbon', 12.011, [12, 13, 14]],
+    ['N', 'nitrogen', 14.007, [14, 15]], ['O', 'oxygen', 15.999, [16, 18]], ['F', 'fluorine', 18.998, [19]],
+    ['Ne', 'neon', 20.18, [20, 22]], ['Na', 'sodium', 22.99, [23]], ['Mg', 'magnesium', 24.305, [24, 25, 26]],
+    ['Al', 'aluminum', 26.982, [27]], ['Si', 'silicon', 28.085, [28, 29, 30]], ['P', 'phosphorus', 30.974, [31]],
+    ['S', 'sulfur', 32.06, [32, 34]], ['Cl', 'chlorine', 35.45, [35, 37]], ['Ar', 'argon', 39.948, [40, 36]],
+    ['K', 'potassium', 39.098, [39, 41, 40]], ['Ca', 'calcium', 40.078, [40, 44]], ['Sc', 'scandium', 44.956, [45]],
+    ['Ti', 'titanium', 47.867, [48, 46]], ['V', 'vanadium', 50.942, [51]], ['Cr', 'chromium', 51.996, [52, 53]],
+    ['Mn', 'manganese', 54.938, [55]], ['Fe', 'iron', 55.845, [56, 54]], ['Co', 'cobalt', 58.933, [59]],
+    ['Ni', 'nickel', 58.693, [58, 60]], ['Cu', 'copper', 63.546, [63, 65]], ['Zn', 'zinc', 65.382, [64, 66]],
+    ['Ga', 'gallium', 69.723, [69, 71]], ['Ge', 'germanium', 72.631, [74, 72]], ['As', 'arsenic', 74.922, [75]],
+    ['Se', 'selenium', 78.972, [80, 78]], ['Br', 'bromine', 79.904, [79, 81]], ['Kr', 'krypton', 83.798, [84, 86]]
+  ].map(([sym, name, mass, isotopes], i) => ({ z:i + 1, sym, name, mass, isotopes }));
+  const BY_SYM = new Map(ELEMENTS.map(e => [e.sym, e]));
+
+  /* Ions: [symbol, charge]. The same ion chart as tools/compound-naming for these elements, plus H⁺, Sc³⁺ and Ga³⁺
+     (shown on the site's periodic table). Change the list here to match a different chart. */
+  const IONS = [
+    ['H', 1], ['Li', 1], ['Na', 1], ['K', 1], ['Be', 2], ['Mg', 2], ['Ca', 2], ['Zn', 2], ['Al', 3], ['Sc', 3], ['Ga', 3],
+    ['Ti', 3], ['Ti', 4], ['Cr', 2], ['Cr', 3], ['Mn', 2], ['Mn', 4], ['Fe', 2], ['Fe', 3], ['Co', 2], ['Co', 3],
+    ['Ni', 2], ['Ni', 3], ['Cu', 1], ['Cu', 2],
+    ['N', -3], ['P', -3], ['O', -2], ['S', -2], ['Se', -2], ['F', -1], ['Cl', -1], ['Br', -1]
+  ];
+
+  const TYPES = ['atoms', 'ions', 'mass', 'charge'];
+  const TYPE_NAME = { atoms:'Protons, neutrons, electrons', ions:'Electrons in ions', mass:'Mass and atomic number', charge:'Ion charge' };
+  const TYPE_SHORT = { atoms:'Atoms', ions:'Ions', mass:'Mass number', charge:'Charge' };
+  const MINUS = '−';   // − a real minus sign (Bingo treats it and "-" alike)
+  const NBH = '‑';     // ‑ a hyphen that never breaks the line; Bingo would draw a plain "-" before a digit as a minus
+
+  /* ---------- small helpers ---------- */
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  const SUPD = { 1:'', 2:'²', 3:'³', 4:'⁴' };
+  // "Fe³⁺", "Na⁺", "O²⁻"
+  const ionLabel = (sym, q) => sym + SUPD[Math.abs(q)] + (q < 0 ? '⁻' : '⁺');
+  // A charge as it goes on a bingo square, the way the periodic table prints it: "2+", "1−". Never "+2": Bingo
+  // reads that as the number 2.
+  const chargeText = q => Math.abs(q) + (q < 0 ? MINUS : '+');
+  const isoName = (e, a) => e.name + NBH + a;
+  const n1 = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+  // How Bingo compares answers: spaces ignored, every minus sign alike.
+  const keyOf = s => String(s).replace(/[−–]/g, '-').replace(/\s+/g, '');
+
+  /* ---------- the questions ----------
+     Each: { id, type, kind, q (on the slide), a (on the card), short (names the question in a decoy's note),
+     note (the working, for the teacher), tags (what to spread out when picking), plus the numbers it was made from }. */
+  function build(){
+    const out = [], add = x => { x.a = String(x.a); x.tags = [x.sym, 'k:' + x.kind]; out.push(x); };
+    ELEMENTS.forEach(e => {
+      const { z, sym, name } = e;
+      add({ id:'p:' + sym, type:'atoms', kind:'p', sym, z, q:'How many protons are in an atom of ' + name + '?', a:z,
+        short:'Protons in ' + name, note:'atomic number ' + z });
+      add({ id:'e:' + sym, type:'atoms', kind:'e', sym, z, q:'How many electrons are in a neutral atom of ' + name + '?', a:z,
+        short:'Electrons in ' + name, note:'same as protons: ' + z });
+      e.isotopes.forEach(A => {
+        const N = A - z, iso = isoName(e, A);
+        add({ id:'n:' + sym + '-' + A, type:'atoms', kind:'n', sym, z, A, N, q:'How many neutrons are in an atom of ' + iso + '?', a:N,
+          short:'Neutrons in ' + iso, note:A + ' ' + MINUS + ' ' + z + ' = ' + N });
+        add({ id:'m:' + sym + '-' + A, type:'mass', kind:'mass', sym, z, A, N,
+          q:'An atom has ' + n1(z, 'proton') + ' and ' + n1(N, 'neutron') + '. What is its mass number?', a:A,
+          short:'Mass number, ' + z + ' p and ' + N + ' n', note:z + ' + ' + N + ' = ' + A + ' (' + iso + ')' });
+        add({ id:'z:' + sym + '-' + A, type:'mass', kind:'atomic', sym, z, A, N,
+          q:'An atom with mass number ' + A + ' has ' + n1(N, 'neutron') + '. What is its atomic number?', a:z,
+          short:'Atomic number, mass ' + A + ' and ' + N + ' n', note:A + ' ' + MINUS + ' ' + N + ' = ' + z + ' (' + iso + ')' });
+      });
+    });
+    IONS.forEach(([sym, q]) => {
+      const z = BY_SYM.get(sym).z, el = z - q, ion = ionLabel(sym, q), step = (q > 0 ? ' ' + MINUS + ' ' : ' + ') + Math.abs(q);
+      add({ id:'i:' + sym + ':' + q, type:'ions', kind:'ion', sym, z, charge:q, el, q:'How many electrons are in the ion ' + ion + '?', a:el,
+        short:'Electrons in ' + ion, note:z + step + ' = ' + el });
+      add({ id:'c:' + sym + ':' + q, type:'charge', kind:'charge', sym, z, charge:q, el,
+        q:'An ion has ' + n1(z, 'proton') + ' and ' + n1(el, 'electron') + '. What is its charge?', a:chargeText(q),
+        short:'Charge, ' + z + ' p and ' + el + ' e', note:z + ' ' + MINUS + ' ' + el + ', so ' + chargeText(q) + ' (' + ion + ')' });
+    });
+    return out;
+  }
+  const ALL = build();
+  // Every question, by type.
+  const pools = () => { const P = {}; TYPES.forEach(t => { P[t] = ALL.filter(x => x.type === t); }); return P; };
+
+  /* ---------- seeded randomness (sfc32): copied from Bingo ---------- */
+  function makeRng(seed){
+    let a = 0x9E3779B9, b = 0x243F6A88, c = 0xB7E15162, d = (seed >>> 0) ^ 0x5bd1e995;
+    function next(){
+      a |= 0; b |= 0; c |= 0; d |= 0;
+      const t = (((a + b) | 0) + d) | 0;
+      d = (d + 1) | 0; a = b ^ (b >>> 9); b = (c + (c << 3)) | 0; c = (c << 21) | (c >>> 11); c = (c + t) | 0;
+      return (t >>> 0) / 4294967296;
+    }
+    for(let i = 0; i < 16; i++) next();
+    return next;
+  }
+  function shuffle(arr, rng){
+    for(let i = arr.length - 1; i > 0; i--){ const j = Math.floor(rng() * (i + 1)); const t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+    return arr;
+  }
+
+  /* ---------- picking a set ----------
+     opt: { types:[...], count, locked:[questions kept as they are] }. One question at a time goes to the ticked type
+     with the fewest so far, and inside a type to the least-used element and kind (so there aren't ten sodium
+     questions, and protons, neutrons and electrons come up equally).
+     No two questions in a set share an answer: two questions with one answer would mark the same bingo square.
+     → { list, short } (short: how many fewer than asked could be made). */
+  function tracker(list){
+    const answers = new Set(), ids = new Set(), use = new Map();
+    const mark = x => { answers.add(keyOf(x.a)); ids.add(x.id); x.tags.forEach(t => use.set(t, (use.get(t) || 0) + 1)); };
+    list.forEach(mark);
+    return { mark, free:x => !ids.has(x.id) && !answers.has(keyOf(x.a)), score:x => x.tags.reduce((acc, t) => acc + (use.get(t) || 0), 0) };
+  }
+  // The free question with the lowest score (the first of equals; cand is already shuffled), or null.
+  function best(cand, T){
+    let pick = null, low = Infinity;
+    cand.forEach(x => { if(!T.free(x)) return; const s = T.score(x); if(s < low){ low = s; pick = x; } });
+    return pick;
+  }
+  function pickSet(P, opt, rng){
+    const types = TYPES.filter(t => (opt.types || []).includes(t));
+    const locked = (opt.locked || []).filter(x => types.includes(x.type));
+    const want = Math.max(locked.length, opt.count | 0);
+    const list = locked.slice(), T = tracker(list), have = {}, cand = {};
+    types.forEach(t => { have[t] = locked.filter(x => x.type === t).length; cand[t] = shuffle(P[t].slice(), rng); });
+    const open = shuffle(types.slice(), rng);
+    while(list.length < want && open.length){
+      const t = open.reduce((m, x) => (have[x] < have[m] ? x : m));
+      const x = best(cand[t], T);
+      if(!x){ open.splice(open.indexOf(t), 1); continue; }
+      T.mark(x); have[t]++; list.push(x);
+    }
+    const rank = x => TYPES.indexOf(x.type);
+    list.sort((x, y) => rank(x) - rank(y));
+    return { list, short:Math.max(0, want - list.length) };
+  }
+  // Another question of the same type to put in place of set[i], or null if there are none left.
+  function replaceOne(P, set, i, rng){
+    const old = set[i], T = tracker(set.filter((_, j) => j !== i));
+    return best(shuffle(P[old.type].filter(x => x.id !== old.id), rng), T);
+  }
+
+  /* ---------- decoys: the mistake catalogue ----------
+     Each candidate: { answer, kind, why }. The note starts with the question's short name, so the teacher sees which
+     question the mistake belongs to. A mistake that happens to land on the right answer is left out (hydrogen‑1:
+     1 proton and 0 neutrons, take away instead of add, is still 1). */
+  function mistakesFor(x){
+    const out = [], add = (kind, answer, why) => { if(keyOf(answer) !== keyOf(x.a)) out.push({ answer:String(answer), kind, why:x.short + ': ' + why }); };
+    const { z, A, N } = x;
+    if(x.kind === 'p' || x.kind === 'e'){
+      const m = Math.round(BY_SYM.get(x.sym).mass);
+      if(m !== z) add('atomicMass', m, 'gave the atomic mass, not the atomic number');
+    } else if(x.kind === 'n'){
+      if(z !== N) add('protons', z, 'gave the protons');
+      add('massNumber', A, 'gave the mass number');
+      add('added', A + z, 'added the atomic number instead of taking it away');
+    } else if(x.kind === 'mass'){
+      if(N !== z) add('subtracted', Math.abs(N - z), 'took away instead of adding');
+      add('withElectrons', 2 * z + N, 'counted the electrons too');
+    } else if(x.kind === 'atomic'){
+      add('added', A + N, 'added instead of taking away');
+      if(N !== z) add('neutrons', N, 'gave the neutrons');
+    } else if(x.kind === 'ion'){
+      add('wrongWay', z + x.charge, x.charge > 0 ? 'added electrons, but a positive ion has lost them' : 'took electrons away, but a negative ion has gained them');
+      add('ignoredCharge', z, 'ignored the charge');
+    } else if(x.kind === 'charge'){
+      add('wrongSign', chargeText(-x.charge), x.charge > 0 ? 'more protons than electrons is positive' : 'more electrons than protons is negative');
+    }
+    return out;
+  }
+
+  /* set: the questions; opt: { avoid:[keys to skip if possible], keep:[decoys kept] }.
+     A decoy never equals an answer in the set, no two decoys are the same, and at most 2 come from one question.
+     Mistakes are spread across kinds. → [{ answer, mistake, source, kind }] */
+  function makeDecoys(set, count, rng, opt){
+    opt = opt || {};
+    const keep = opt.keep || [], avoid = new Set(opt.avoid || []);
+    const taken = new Set(set.map(x => keyOf(x.a)).concat(keep.map(d => keyOf(d.answer))));
+    const per = new Map(), kinds = new Map(), out = [];
+    keep.forEach(d => { per.set(d.source, (per.get(d.source) || 0) + 1); kinds.set(d.kind, (kinds.get(d.kind) || 0) + 1); });
+    const lists = shuffle(set.slice(), rng).map(x => ({ x, m:shuffle(mistakesFor(x), rng) }));
+    for(let round = 1; round <= 2 && out.length < count; round++){
+      for(const L of lists){
+        if(out.length >= count) break;
+        if((per.get(L.x.id) || 0) >= round) continue;
+        // the least-used kind of mistake first; a decoy being re-rolled only if nothing else is left
+        const ok = L.m.filter(m => !taken.has(keyOf(m.answer)));
+        if(!ok.length) continue;
+        ok.sort((p, q) => (avoid.has(keyOf(p.answer)) - avoid.has(keyOf(q.answer))) || ((kinds.get(p.kind) || 0) - (kinds.get(q.kind) || 0)));
+        const m = ok[0];
+        taken.add(keyOf(m.answer)); per.set(L.x.id, (per.get(L.x.id) || 0) + 1); kinds.set(m.kind, (kinds.get(m.kind) || 0) + 1);
+        out.push({ answer:m.answer, mistake:m.why, source:L.x.id, kind:m.kind });
+      }
+    }
+    return out;
+  }
+
+  /* ---------- what is sent to Bingo: its draft format (the same as an AI reply) ---------- */
+  function typesTitle(types){
+    const t = TYPES.filter(x => types.includes(x)).map(x => TYPE_SHORT[x].toLowerCase());
+    if(!t.length || t.length === TYPES.length) return 'Subatomic particles';
+    return 'Subatomic particles: ' + (t.length < 2 ? t[0] : t.slice(0, -1).join(', ') + ' and ' + t[t.length - 1]);
+  }
+  function payload(set, decoys, title){
+    return { format:'teachingtools-bingo-draft', title:String(title || '').slice(0, 80), source:'subatomic-particles',
+      items:set.map(x => ({ question:x.q, answer:x.a })),
+      decoys:decoys.map(d => ({ answer:d.answer, mistake:d.mistake })) };
+  }
+
+  return { ELEMENTS, IONS, TYPES, TYPE_NAME, TYPE_SHORT, ALL, esc, ionLabel, chargeText, keyOf, pools,
+    makeRng, shuffle, pickSet, replaceOne, mistakesFor, makeDecoys, typesTitle, payload };
+})();
+/* </subatomic-core> */
+
+/* ================= the page ================= */
+(function(){
+'use strict';
+const K = SubatomicCore, esc = K.esc;
+const $ = id => document.getElementById(id);
+const LS_STATE = 'subatomicparticles.v1.state';
+const HANDOFF_KEY = 'teachingtools.handoff.v1';   // read by tools/bingo (receiveHandoff)
+const BINGO_URL = '../bingo/index.html';
+const EXAMPLE = { atoms:'Neutrons in chlorine‑35 → 18', ions:'Electrons in O²⁻ → 10', mass:'17 protons, 18 neutrons → 35', charge:'12 protons, 10 electrons → 2+' };
+const P = K.pools();
+
+/* ---------- small helpers ---------- */
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
+function rand(){
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; } catch(e){ return Math.random(); }
+}
+const newRng = () => K.makeRng(Math.floor(rand() * 4294967296) >>> 0);
+const fileSafe = s => (s || '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase().slice(0, 60) || 'game';
+function download(name, blob){
+  const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+function toast(msg, kind){
+  const t = document.createElement('div'); t.className = 'toast' + (kind ? ' ' + kind : ''); t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), kind === 'err' ? 6500 : 3800);
+}
+async function copyText(text){
+  try { await navigator.clipboard.writeText(text); return true; } catch(e){ /* fall back below */ }
+  try {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok;
+  } catch(e){ return false; }
+}
+function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
+
+/* ---------- state ----------
+   Saved in this browser: the options, the set (by question id, with its locks) and the decoys. */
+const BY_ID = new Map(K.ALL.map(x => [x.id, x]));
+const st = { types:K.TYPES.slice(), count:30, dcount:10, title:'', set:[], decoys:[] };
+let storageOk = true, saveTimer = null;
+function load(){
+  let s = null;
+  try { s = JSON.parse(lsGet(LS_STATE) || 'null'); } catch(e){ s = null; }
+  if(!s || typeof s !== 'object') return false;
+  if(Array.isArray(s.types)) st.types = K.TYPES.filter(t => s.types.includes(t));
+  if(Number.isInteger(s.count)) st.count = clamp(s.count, 1, 100);
+  if(Number.isInteger(s.dcount)) st.dcount = clamp(s.dcount, 0, 40);
+  if(typeof s.title === 'string') st.title = s.title.slice(0, 80);
+  if(Array.isArray(s.set)) st.set = s.set.filter(r => r && BY_ID.has(r.id)).map(r => ({ x:BY_ID.get(r.id), lock:!!r.lock }));
+  if(Array.isArray(s.decoys)) st.decoys = s.decoys.filter(d => d && typeof d.answer === 'string' && typeof d.mistake === 'string')
+    .map(d => ({ answer:d.answer, mistake:d.mistake, source:String(d.source || ''), kind:String(d.kind || '') }));
+  return st.set.length > 0;
+}
+function save(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 250); }
+function saveNow(){
+  clearTimeout(saveTimer); saveTimer = null;
+  storageOk = lsSet(LS_STATE, JSON.stringify({ types:st.types, count:st.count, dcount:st.dcount, title:st.title,
+    set:st.set.map(r => ({ id:r.x.id, lock:r.lock })), decoys:st.decoys }));
+  renderStatus();
+}
+window.addEventListener('pagehide', () => { if(saveTimer) saveNow(); });
+
+const questions = () => st.set.map(r => r.x);
+const autoTitle = () => K.typesTitle(st.types);
+let lastShort = 0;
+
+/* ---------- actions ---------- */
+// A new set: locked rows stay if their type is still ticked.
+function newSet(){
+  const locked = st.set.filter(r => r.lock && st.types.includes(r.x.type)).map(r => r.x);
+  const r = K.pickSet(P, { types:st.types, count:st.count, locked }, newRng());
+  const keep = new Set(locked.map(x => x.id));
+  st.set = r.list.map(x => ({ x, lock:keep.has(x.id) }));
+  lastShort = st.types.length ? r.short : 0;
+  st.decoys = K.makeDecoys(questions(), st.dcount, newRng());
+  changed();
+}
+function newDecoys(){
+  st.decoys = K.makeDecoys(questions(), st.dcount, newRng(), { avoid:st.decoys.map(d => K.keyOf(d.answer)) });
+  changed();
+}
+// Keep the decoys that still make sense (their question is still here, they don't clash with an answer), then top up.
+function topUpDecoys(){
+  const sources = new Set(st.set.map(r => r.x.id)), answers = new Set(questions().map(x => K.keyOf(x.a)));
+  const keep = st.decoys.filter(d => sources.has(d.source) && !answers.has(K.keyOf(d.answer))).slice(0, st.dcount);
+  st.decoys = keep.concat(K.makeDecoys(questions(), st.dcount - keep.length, newRng(), { keep }));
+}
+function replaceRow(i){
+  const x = K.replaceOne(P, questions(), i, newRng());
+  if(!x){ toast('There are no other “' + K.TYPE_NAME[st.set[i].x.type].toLowerCase() + '” questions with a new answer left to swap in.', 'warn'); return; }
+  st.set[i] = { x, lock:false };
+  topUpDecoys(); changed();
+}
+function removeRow(i){ st.set.splice(i, 1); topUpDecoys(); changed(); }
+function rerollDecoy(j){
+  const old = st.decoys[j], keep = st.decoys.filter((_, x) => x !== j);
+  const d = K.makeDecoys(questions(), 1, newRng(), { keep, avoid:[K.keyOf(old.answer)] })[0];
+  if(!d || d.answer === old.answer){ toast('There isn’t another decoy to swap in.', 'warn'); return; }
+  st.decoys[j] = d; changed();
+}
+function changed(){ save(); render(); }
+
+/* ---------- what is sent ---------- */
+const payload = () => K.payload(questions(), st.decoys, st.title.trim() || autoTitle());
+function downloadJson(){
+  const p = payload();
+  download('subatomic-particles-' + fileSafe(p.title) + '.json', new Blob([JSON.stringify(p, null, 1)], { type:'application/json' }));
+}
+function sendMsg(html, kind){ $('sendMsg').innerHTML = html ? '<div class="banner ' + (kind || 'info') + '">' + html + '</div>' : ''; }
+function sendToBingo(){
+  if(!st.set.length) return;
+  saveNow();
+  const id = 'h' + Date.now().toString(36) + Math.floor(rand() * 1e9).toString(36);
+  const rec = { id, to:'bingo', from:'subatomic-particles', createdAt:Date.now(), payload:payload() };
+  let ok = false;
+  try { localStorage.setItem(HANDOFF_KEY, JSON.stringify(rec)); ok = JSON.parse(localStorage.getItem(HANDOFF_KEY)).id === id; } catch(e){ ok = false; }
+  if(!ok){
+    downloadJson();
+    sendMsg('This browser wouldn’t pass the game to Bingo directly, so it was <b>downloaded as a file</b> instead. ' +
+      'Open <a href="' + BINGO_URL + '">Bingo</a>, choose <b>Import…</b> and pick that file.', 'warn');
+    return;
+  }
+  location.href = BINGO_URL + '#handoff=' + id;
+}
+function copyAsText(){
+  const p = payload();
+  const lines = p.items.map(it => it.question + ' | ' + it.answer).join('\n');
+  copyText(lines).then(ok => toast(ok ? 'Copied ' + plural(p.items.length, 'line') + '. In Bingo, paste them into the questions box. Decoys aren’t included: use Send or .json for those.'
+    : 'Couldn’t copy. Use Download .json instead.', ok ? 'ok' : 'err'));
+}
+
+/* ---------- render ---------- */
+function render(){
+  // types
+  $('types').innerHTML = K.TYPES.map(t =>
+    '<label class="check"><input type="checkbox" data-type="' + t + '"' + (st.types.includes(t) ? ' checked' : '') + '>' +
+    '<span class="tx"><span>' + esc(K.TYPE_NAME[t]) + '</span><span class="ex">' + esc(EXAMPLE[t]) + '</span></span>' +
+    '<span class="n">' + P[t].length + ' possible</span></label>').join('');
+  // counts
+  if(document.activeElement !== $('count')) $('count').value = st.count;
+  if(document.activeElement !== $('dcount')) $('dcount').value = st.dcount;
+  const hints = [];
+  if(!st.types.length) hints.push('Tick at least one question type.');
+  else if(lastShort) hints.push('Only ' + plural(st.set.length, 'question') + ' with different answers can be made from these choices.');
+  if(st.set.length && st.set.length < 24) hints.push('A 5×5 card with FREE has 24 squares, so ' + (st.set.length < 15 ? 'use 3×3 or 4×4 cards in Bingo, or add more questions.' : 'every card will have some decoys. 4×4 cards (16 squares) work well.'));
+  $('countHint').textContent = hints.join(' ');
+  // title
+  $('title').placeholder = autoTitle();
+  if(document.activeElement !== $('title')) $('title').value = st.title;
+  // the set
+  $('setCount').textContent = st.set.length;
+  $('setArea').innerHTML = st.set.length ? '<div class="twrap"><table class="set"><thead><tr><th>#</th><th>Question<span class="side slide">on the slide</span></th>' +
+    '<th>Answer<span class="side card">on the card</span></th><th class="ty">Type</th><th class="note">Working</th><th></th></tr></thead><tbody>' +
+    st.set.map((r, i) => '<tr' + (r.lock ? ' class="locked"' : '') + '><td class="n">' + (i + 1) + '</td><td>' + esc(r.x.q) + '</td><td class="a f">' + esc(r.x.a) + '</td>' +
+      '<td class="ty">' + esc(K.TYPE_SHORT[r.x.type]) + '</td><td class="note">' + esc(r.x.note) + '</td><td class="act">' +
+      '<button type="button" class="ib" data-lock="' + i + '" aria-pressed="' + r.lock + '" title="' + (r.lock ? 'Locked: kept when you make a new set' : 'Lock: keep this one when you make a new set') + '" aria-label="Lock row ' + (i + 1) + '">' + (r.lock ? '🔒' : '🔓') + '</button>' +
+      '<button type="button" class="ib" data-swap="' + i + '" title="Swap for another question of this type" aria-label="Swap row ' + (i + 1) + '">↻</button>' +
+      '<button type="button" class="ib" data-del="' + i + '" title="Remove" aria-label="Remove row ' + (i + 1) + '">×</button></td></tr>').join('') +
+    '</tbody></table></div>' : '<div class="empty">' + (st.types.length ? 'No questions. Press <b>New set</b>.' : 'Tick a question type to make questions.') + '</div>';
+  // decoys
+  $('decCount').textContent = st.decoys.length;
+  $('decArea').innerHTML = st.decoys.length ? '<ul class="dlist">' + st.decoys.map((d, j) => '<li><span class="da f">' + esc(d.answer) + '</span>' +
+      '<span class="dm">' + esc(d.mistake) + '</span><button type="button" class="ib" data-dre="' + j + '" title="Swap for another decoy" aria-label="Swap decoy ' + (j + 1) + '">↻</button>' +
+      '<button type="button" class="ib" data-ddel="' + j + '" title="Remove" aria-label="Remove decoy ' + (j + 1) + '">×</button></li>').join('') + '</ul>'
+    : '<div class="empty">' + (st.dcount ? 'No decoys yet.' : 'Decoys are off. Set “Decoys” above 0 to add some.') + '</div>';
+  $('sendBtn').disabled = $('jsonBtn').disabled = $('copyBtn').disabled = !st.set.length;
+  renderStatus();
+}
+function renderStatus(){
+  const by = t => st.set.filter(r => r.x.type === t).length;
+  $('statusbar').innerHTML = '<span class="stat"><b>' + st.set.length + '</b> questions</span><span class="dotline"></span>' +
+    K.TYPES.filter(t => by(t)).map(t => '<span class="stat">' + esc(K.TYPE_SHORT[t]) + ' <b>' + by(t) + '</b></span>').join('') +
+    '<span class="dotline"></span><span class="stat"><b>' + st.decoys.length + '</b> decoys</span>' +
+    '<span class="stamp' + (storageOk ? '' : ' warn') + '">' + (storageOk ? (saveTimer ? 'Saving…' : 'Saved in this browser') : 'Not saved: this browser blocks storage') + '</span>';
+}
+
+/* ---------- events ---------- */
+$('types').addEventListener('change', e => {
+  const t = e.target.dataset.type; if(!t) return;
+  st.types = K.TYPES.filter(x => x === t ? e.target.checked : st.types.includes(x));
+  newSet();
+});
+$('count').addEventListener('change', e => { st.count = clamp(parseInt(e.target.value, 10) || 30, 1, 100); e.target.value = st.count; newSet(); });
+$('dcount').addEventListener('change', e => { const v = parseInt(e.target.value, 10); st.dcount = clamp(isNaN(v) ? 10 : v, 0, 40); e.target.value = st.dcount; topUpDecoys(); changed(); });
+$('title').addEventListener('input', e => { st.title = e.target.value; save(); });
+$('newBtn').addEventListener('click', newSet);
+$('newDecBtn').addEventListener('click', newDecoys);
+$('setArea').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  if(b.dataset.lock) { const r = st.set[+b.dataset.lock]; r.lock = !r.lock; changed(); }
+  else if(b.dataset.swap) replaceRow(+b.dataset.swap);
+  else if(b.dataset.del) removeRow(+b.dataset.del);
+});
+$('decArea').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  if(b.dataset.dre) rerollDecoy(+b.dataset.dre);
+  else if(b.dataset.ddel){ st.decoys.splice(+b.dataset.ddel, 1); changed(); }
+});
+$('sendBtn').addEventListener('click', sendToBingo);
+$('jsonBtn').addEventListener('click', () => { downloadJson(); sendMsg('Saved. In <a href="' + BINGO_URL + '">Bingo</a>, choose <b>Import…</b> and pick the file.', 'info'); });
+$('copyBtn').addEventListener('click', copyAsText);
+
+/* ---------- start ---------- */
+if(!load()) newSet(); else render();
+if(!storageOk) renderStatus();
+})();
+</script>
+</body>
+</html>

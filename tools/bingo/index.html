@@ -1181,7 +1181,7 @@ const BingoCore = (function(){
     if(a >= 0 && b > a && (r = attempt(t.slice(a, b + 1)))) return r;
     return { ok:false, error:'This isn’t valid JSON. Ask the AI to reply with only the JSON, in one code block.' };
   }
-  // A question list written by an AI (or by hand, or sent by Compound Naming):
+  // A question list written by an AI (or by hand, or sent by a generator tool such as Compound Naming):
   // { format, title, items:[{question, answer}], decoys:[{answer, mistake} | "41"], formulas?:true, size?:3|4|5 }
   // → { ok, title, items:[{q,a}], decoys:[{a,why}], errors:[...], formulas, size }. Never throws.
   function readDraft(d){
@@ -2576,7 +2576,10 @@ const BANK = [
   // A link entry opens another tool that makes the game and sends it here (see "hand-off" below).
   { id:'compound-naming', name:'Naming chemical compounds', level:'Grade 9', topic:'Chemistry', link:'../compound-naming/index.html',
     about:'A generator: choose binary ionic, multivalent (Roman numerals) and covalent (prefixes) compounds, and it makes a new set each time, with decoys from real naming mistakes. It sends the game straight here.',
-    sample:[['Sodium chloride', 'NaCl'], ['Iron(III) oxide', 'Fe2O3'], ['Dinitrogen tetroxide', 'N2O4']] }
+    sample:[['Sodium chloride', 'NaCl'], ['Iron(III) oxide', 'Fe2O3'], ['Dinitrogen tetroxide', 'N2O4']] },
+  { id:'subatomic-particles', name:'Subatomic particles', level:'Grade 9', topic:'Chemistry', link:'../subatomic-particles/index.html',
+    about:'A generator: protons, neutrons and electrons in atoms and ions, mass number and ion charge, for hydrogen to krypton. It makes a new set each time, every question with a different answer, with decoys from real mistakes. It sends the game straight here.',
+    sample:[['How many neutrons are in an atom of chlorine\u201135?', '18'], ['How many electrons are in the ion O²⁻?', '10'], ['An ion has 12 protons and 10 electrons. What is its charge?', '2+']] }
 ];
 function gameFromBank(b){
   const g = blankGame(b.name);
@@ -2633,7 +2636,7 @@ save();
 renderAll();
 receiveHandoff();
 
-/* ---------- hand-off from another tool (Compound Naming) ----------
+/* ---------- hand-off from another tool (Compound Naming, Subatomic Particles) ----------
    The sender saves { id, to:'bingo', from, createdAt, payload } under one shared key and opens this page with
    #handoff=<id>. The payload is a draft (the same format as an AI reply), so it goes through the normal Import dialog.
    The key is removed once it has been offered, so a reload doesn't offer it again. */
@@ -2646,13 +2649,14 @@ function receiveHandoff(){
   try { history.replaceState(null, '', location.pathname + location.search); } catch(e){ /* file:// in some browsers */ }
   const fresh = h && h.id === m[1] && h.to === 'bingo' && Date.now() - (+h.createdAt || 0) < 24 * 3600 * 1000;
   if(!fresh){
-    showErrors('The questions didn’t arrive', ['This can happen when the tools are opened as files on your computer. In Compound Naming, press “Download .json”, then use Import… here and choose that file.']);
+    showErrors('The questions didn’t arrive', ['This can happen when the tools are opened as files on your computer. In the tool that made them, press “Download .json”, then use Import… here and choose that file.']);
     return;
   }
   const d = C.readDraft(h.payload);
   const done = () => { try { localStorage.removeItem(KEY); } catch(e){ /* nothing to clean */ } };
   if(!d.ok){ done(); showErrors('These questions can’t be used', d.errors); return; }
-  offerDraft(d, (h.from === 'compound-naming' ? 'Compound Naming' : 'the other tool')).then(done, done);
+  const from = { 'compound-naming':'Compound Naming', 'subatomic-particles':'Subatomic Particles' }[h.from] || 'the other tool';
+  offerDraft(d, from).then(done, done);
 }
 })();
 </script>
