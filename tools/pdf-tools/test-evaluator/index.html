@@ -1211,6 +1211,21 @@
     const hn = el('label', 'check'); hn.style.margin = '0'; hn.innerHTML = '<input type="checkbox" class="hideNames">Hide names';
     hn.firstChild.checked = hideNames; head.appendChild(hn);
     box.appendChild(head);
+    // Questions PDF: tick questions in the table's last row, then download them as one PDF.
+    for (const id of [...pdfSel]) if (!qById(id)) pdfSel.delete(id);
+    const picked = questions.filter(q => pdfSel.has(q.id));
+    const ph = el('div', 'sum-head');
+    ph.appendChild(el('span', 'field-label', 'Questions PDF'));
+    const all = el('button', 'btn small', 'All'); all.dataset.pickAll = '1';
+    const none = el('button', 'btn small', 'None'); none.dataset.pickNone = '1'; none.disabled = !picked.length;
+    ph.appendChild(all); ph.appendChild(none);
+    const sm = el('label', 'check'); sm.style.margin = '0'; sm.innerHTML = '<input type="checkbox" id="pdfMarks">Show marks';
+    sm.firstChild.checked = pdfMarks; ph.appendChild(sm);
+    const dl = el('button', 'btn primary small', picked.length ? '⬇ Download PDF of ' + (picked.length === 1 ? qLabel(picked[0]) : picked.length + ' questions') : '⬇ Download PDF');
+    dl.id = 'pdfGo'; dl.disabled = !picked.length || pdfBusy;
+    dl.title = picked.length ? 'Every student’s answer to ' + picked.map(qLabel).join(', ') + ', one question after another' : 'Tick the questions you want in the bottom row of the table';
+    ph.appendChild(dl);
+    box.appendChild(ph);
 
     const wrap = el('div', 'sum-wrap'), t = el('table', 'sum-t');
     const hr = t.createTHead().insertRow();
@@ -1235,14 +1250,15 @@
     });
     const tf = t.createTFoot(), ar = tf.insertRow(), pr = tf.insertRow();
     ar.appendChild(el('td')); ar.appendChild(el('td', 'who', 'Class average'));
-    pr.appendChild(el('td')); pr.appendChild(el('td', 'who', 'Question PDF'));
+    pr.appendChild(el('td')); pr.appendChild(el('td', 'who', 'In the PDF'));
     for (const q of questions){
       const vs = pcs.map(pc => getMark(q, pc)).filter(v => v != null);
       const avg = vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
       const td = el('td', band(avg == null || !q.marks ? null : avg / q.marks), avg == null ? '–' : fmtNum(avg) + (q.marks ? ' · ' + Math.round(avg / q.marks * 100) + '%' : ''));
       ar.appendChild(td);
-      const pd = el('td'), b = el('button', 'btn small', '⬇ PDF'); b.dataset.pdf = q.id; b.title = 'Every student’s answer to ' + qLabel(q) + ', in one PDF';
-      pd.appendChild(b); pr.appendChild(pd);
+      const pd = el('td'), cb = el('input'); cb.type = 'checkbox'; cb.dataset.pick = q.id; cb.checked = pdfSel.has(q.id);
+      cb.setAttribute('aria-label', 'Put ' + qLabel(q) + ' in the PDF'); cb.style.cssText = 'width:17px;height:17px;accent-color:var(--board);cursor:pointer;';
+      pd.appendChild(cb); pr.appendChild(pd);
     }
     const full = pcs.filter(pc => questions.every(q => getMark(q, pc) != null));
     const tavg = full.length && total ? full.reduce((a, pc) => a + questions.reduce((s, q) => s + getMark(q, pc), 0), 0) / full.length : null;
@@ -1251,17 +1267,26 @@
     pr.appendChild(el('td')); pr.appendChild(el('td'));
     wrap.appendChild(t); box.appendChild(wrap);
   }
+  $('sumView').addEventListener('change', e => {
+    const id = e.target.dataset.pick;
+    if (id){ if (e.target.checked) pdfSel.add(id); else pdfSel.delete(id); render(); }
+    else if (e.target.id === 'pdfMarks'){ pdfMarks = e.target.checked; render(); }
+  });
   $('sumView').addEventListener('click', e => {
-    const b = e.target.closest('[data-pdf]');
-    if (b){ const q = qById(b.dataset.pdf); if (q) questionPdf(q, b).catch(fail); return; }
+    if (e.target.closest('[data-pick-all]')){ questions.forEach(q => pdfSel.add(q.id)); return render(); }
+    if (e.target.closest('[data-pick-none]')){ pdfSel.clear(); return render(); }
+    if (e.target.closest('#pdfGo')){ const qs = questions.filter(q => pdfSel.has(q.id)); if (qs.length) questionsPdf(qs).catch(fail); return; }
     const td = e.target.closest('td.sc'); if (!td) return;
     mkQ = td.dataset.q; mkKey = ''; setView('mark'); focusMarkRow(+td.dataset.k);
   });
 
-  // One question, every student: the boxed answers stacked on letter pages, labelled with the name.
-  async function questionPdf(q, btn){
-    if (btn) btn.disabled = true;
-    toast('Building the ' + qLabel(q) + ' PDF…');
+  // The ticked questions, each starting a new page: every student's boxed answers stacked on letter
+  // pages, labelled with the name (and, if "Show marks" is on, the mark).
+  let pdfSel = new Set(), pdfMarks = false, pdfBusy = false;
+  async function questionsPdf(qs){
+    if (pdfBusy) return;
+    pdfBusy = true; render();
+    toast('Building the PDF of ' + qs.map(qLabel).join(', ') + '…');
     try {
       const out = await PDFLib.PDFDocument.create();
       const font = await out.embedFont(PDFLib.StandardFonts.Helvetica), bold = await out.embedFont(PDFLib.StandardFonts.HelveticaBold);
@@ -1270,33 +1295,41 @@
       const W = 612, H = 792, M = 40, CW = W - 2 * M, grey = PDFLib.rgb(0.4, 0.45, 0.43), line = PDFLib.rgb(0.85, 0.87, 0.89);
       let page, y;
       const newPage = () => { page = out.addPage([W, H]); y = H - M; };
-      newPage();
-      page.drawText(clean(qLabel(q) + ' · every student’s answer'), { x:M, y:y - 16, size:16, font:bold }); y -= 24;
-      page.drawText(clean((state.base || state.file.name) + ' · out of ' + fmtNum(q.marks) + ' · ' + state.pieces.length + ' tests'), { x:M, y:y - 10, size:10, font, color:grey }); y -= 26;
-      for (const [k, pc] of state.pieces.entries()){
-        const imgs = [];
-        for (const b of q.boxes){
-          const i = pc.pages[b.page]; if (i == null) continue;
-          const url = await getCrop(i, b.rect, 1400);
-          const img = await out.embedJpg(await cropBlobs.get(url).arrayBuffer());
-          let w = CW, h = w * img.height / img.width;
-          if (h > 330){ h = 330; w = h * img.width / img.height; }
-          imgs.push({ img, w, h });
+      for (const q of qs){
+        newPage();
+        page.drawText(clean(qLabel(q) + ' · every student’s answer'), { x:M, y:y - 16, size:16, font:bold }); y -= 24;
+        page.drawText(clean((state.base || state.file.name) + ' · out of ' + fmtNum(q.marks) + ' · ' + state.pieces.length + ' tests'), { x:M, y:y - 10, size:10, font, color:grey }); y -= 26;
+        for (const [k, pc] of state.pieces.entries()){
+          const imgs = [];
+          for (const b of q.boxes){
+            const i = pc.pages[b.page]; if (i == null) continue;
+            const url = await getCrop(i, b.rect, 1400);
+            const img = await out.embedJpg(await cropBlobs.get(url).arrayBuffer());
+            let w = CW, h = w * img.height / img.width;
+            if (h > 330){ h = 330; w = h * img.width / img.height; }
+            imgs.push({ img, w, h });
+          }
+          const need = 18 + imgs.reduce((a, x) => a + x.h + 6, 0);
+          if (y - need < M && y < H - M - 40) newPage();   // keep a student's answer on one page when it fits
+          page.drawText(clean(who(pc, k)), { x:M, y:y - 11, size:11, font:bold });
+          if (pdfMarks){
+            const v = getMark(q, pc), t = clean(v == null ? 'not marked' : fmtNum(v) + ' / ' + fmtNum(q.marks)), ft = v == null ? font : bold;
+            page.drawText(t, { x:W - M - ft.widthOfTextAtSize(t, 11), y:y - 11, size:11, font:ft, color:v == null ? grey : PDFLib.rgb(0, 0, 0) });
+          }
+          y -= 17;
+          for (const x of imgs){
+            if (y - x.h < M) newPage();
+            page.drawImage(x.img, { x:M, y:y - x.h, width:x.w, height:x.h });
+            page.drawRectangle({ x:M, y:y - x.h, width:x.w, height:x.h, borderColor:line, borderWidth:0.75 });
+            y -= x.h + 6;
+          }
+          y -= 12;
         }
-        const need = 18 + imgs.reduce((a, x) => a + x.h + 6, 0);
-        if (y - need < M && y < H - M - 40) newPage();   // keep a student's answer on one page when it fits
-        page.drawText(clean(who(pc, k)), { x:M, y:y - 11, size:11, font:bold }); y -= 17;
-        for (const x of imgs){
-          if (y - x.h < M) newPage();
-          page.drawImage(x.img, { x:M, y:y - x.h, width:x.w, height:x.h });
-          page.drawRectangle({ x:M, y:y - x.h, width:x.w, height:x.h, borderColor:line, borderWidth:0.75 });
-          y -= x.h + 6;
-        }
-        y -= 12;
       }
       out.setProducer('Teaching Tools · Test Evaluator'); out.setCreator('Teaching Tools · Test Evaluator');
-      saveBytes(await out.save(), safeName((state.base || 'test') + ' - ' + qLabel(q)) + '.pdf');
-    } finally { if (btn) btn.disabled = false; }
+      const what = qs.length === 1 ? qLabel(qs[0]) : qs.length <= 4 ? qs.map(qLabel).join(', ') : qs.length + ' questions';
+      saveBytes(await out.save(), safeName((state.base || 'test') + ' - ' + what) + '.pdf');
+    } finally { pdfBusy = false; render(); }
   }
 
   /* ---------- progress: autosaved per PDF in this browser, or as a file to carry elsewhere ---------- */
