@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bingo</title>
-<style>
+<style id="appStyle">
   :root{
     /* Surfaces */
     --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
@@ -35,6 +35,7 @@
   input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
   :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
   [hidden]{display:none !important;}
+  .standalone .site-only{display:none !important;}   /* off in a standalone copy (see STANDALONE) */
 
   /* ---- frame ---- */
   .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
@@ -361,6 +362,7 @@
       <div class="mlist">
         <button type="button" id="exportGame">Game file (.json)<small>Everything: questions, decoys, cards and calls. Import it on any computer.</small></button>
         <button type="button" id="exportCsv">Questions (.csv)<small>Questions, answers and decoys, for a spreadsheet.</small></button>
+        <button type="button" id="exportPage" class="site-only">Shareable page (.html)<small>This game as one web page that works on its own. Send it to a colleague: they open it and play.</small></button>
       </div>
     </details>
     <input type="file" id="importFile" accept=".json,.csv,.tsv,.txt,application/json,text/csv,text/plain" hidden>
@@ -1261,10 +1263,21 @@ const BingoCore = (function(){
   // Items back into the text box: "question | answer", or the answer alone.
   const itemLine = it => it.q ? it.q.replace(/\s+/g, ' ') + ' | ' + it.a : it.a;
 
+  /* ---------- a shareable page ----------
+     One game as a web page that works on its own: this tool's own style, markup and script (src), with the game in a
+     JSON block in front of the script. "<" is escaped in the JSON, so nothing typed in a question can end the block. */
+  function sharePage(src, title, data){
+    return '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>' + esc(title) + '</title>\n' +
+      '<style id="appStyle">' + src.style + '</style>\n<style id="pageStyle">@page{size:portrait;margin:10mm;}</style>\n</head>\n<body>\n' + src.body +
+      '\n<script type="application/json" id="sharedGame">' + JSON.stringify(data).replace(/</g, '\\u003c') + '<\/script>\n' +
+      '<script>' + src.script + '<\/script>\n</body>\n</html>\n';
+  }
+
   return { rat, rkey, rnum, normNum, parseNumber, valueInfo, parseItems, parseList, esc, renderMath, renderAnswer,
     answerShape, makeRng, shuffle, choose, geometry, PATTERNS, PATTERN_ORDER, targetName, decoyLayouts,
     generateCards, analyseCards, checkCard, simulate, makeDecoys, cardSetKey,
-    extractJson, readDraft, readDecoyReply, parseDelimited, readTable, toCsv, itemLine };
+    extractJson, readDraft, readDecoyReply, parseDelimited, readTable, toCsv, itemLine, sharePage };
 })();
 /* </bingo-core> */
 
@@ -1277,8 +1290,32 @@ const $ = id => document.getElementById(id);
 const fo = () => ({ formulas:!!(game && game.formulas) });
 const RA = (a, t) => C.renderAnswer(a, t, fo()), RM = s => C.renderMath(s, fo()), ASH = (a, t) => C.answerShape(a, t, fo());
 const VI = a => C.valueInfo(a, fo()), PI = t => C.parseItems(t, fo()), RDR = (d, items, taken) => C.readDecoyReply(d, items, taken, fo());
-const LS = { games:'bingo.v1.games', cur:'bingo.v1.current', ai:'bingo.v1.ai', tab:'bingo.v1.tab' };
 const DATA_TYPE = 'teachingtools-bingo';
+/* A standalone copy (a page made by Export → Shareable page) carries one game in a JSON block:
+   { type, version, savedAt, share (an id for this copy), game }. STANDALONE is the one switch for everything that is
+   different there:
+   - it keeps its games under its own storage keys, so it never mixes with the user's own Bingo games or another copy;
+   - its game goes in the first time it is opened (see "start");
+   - what needs the rest of the site is off: the link home, and the generators in the ready-made list;
+   - it can't make another shareable page (anything marked class="site-only" is hidden): to pass it on, send the same
+     file. So a page is only ever written by the real tool, never by a copy of a copy. */
+const SHARED = (function(){
+  try {
+    const d = JSON.parse($('sharedGame').textContent);
+    return d && d.type === DATA_TYPE && d.game && /^[\w-]{1,40}$/.test(d.share) ? { share:d.share, game:d.game } : null;
+  } catch(e){ return null; }
+})();
+const STANDALONE = !!SHARED;
+/* This page's own source, read before anything is drawn, so Export → Shareable page can write a working copy of the
+   tool. Only the tool's own parts are taken: its style, the markup in front of this script, and this script. */
+const SELF = STANDALONE ? null : (function(){
+  const me = document.currentScript, style = $('appStyle'), body = [];
+  if(!me || !style) return null;
+  for(let el = document.body.firstElementChild; el && el !== me; el = el.nextElementSibling) if(el.tagName !== 'SCRIPT') body.push(el.outerHTML);
+  return { style:style.textContent, body:body.join('\n'), script:me.textContent };
+})();
+const NS = STANDALONE ? 'bingo.shared.' + SHARED.share : 'bingo.v1';
+const LS = { games:NS + '.games', cur:NS + '.current', ai:NS + '.ai', tab:NS + '.tab' };
 const MAX_CARDS = 200;
 const TYPE_LABEL = { int:'whole', dec:'decimal', frac:'fraction', text:'text' };
 
@@ -2366,7 +2403,21 @@ function exportCsv(){
   download('bingo-' + fileSafe(game.name) + '.csv', new Blob(['﻿' + C.toCsv(rows)], { type:'text/csv' }));
   toast('Questions saved as a spreadsheet (.csv).', 'ok');
 }
+// The current game as a page that works on its own: a copy of this tool with the game inside it. It starts a fresh
+// round (no calls); the cards are the same ones.
+function exportPage(){
+  if(!SELF){ toast('This browser can’t make the page. Use Game file (.json) instead: a colleague can Import it in Bingo.', 'err'); return; }
+  saveNow();
+  const g = JSON.parse(JSON.stringify(game));
+  g.play.log = []; g.play.round = 1;
+  if(g.cards) g.cards.printed = false;
+  const data = { type:DATA_TYPE, version:1, savedAt:Date.now(), share:uid(), game:g };
+  const file = 'bingo-' + fileSafe(game.name) + '.html';
+  download(file, new Blob([C.sharePage(SELF, (game.name || 'Untitled game') + ' · Bingo', data)], { type:'text/html' }));
+  toast('Saved ' + file + '. Send that file to a colleague: it opens in any browser with this game ready' + (game.cards ? ', cards included.' : '.'), 'ok');
+}
 $('exportGame').addEventListener('click', () => { $('exportMenu').open = false; exportGame(); });
+$('exportPage').addEventListener('click', () => { $('exportMenu').open = false; exportPage(); });
 $('exportCsv').addEventListener('click', () => { $('exportMenu').open = false; exportCsv(); });
 document.addEventListener('click', e => { if($('exportMenu').open && !e.target.closest('#exportMenu')) $('exportMenu').open = false; });
 $('importBtn').addEventListener('click', () => $('importFile').click());
@@ -2604,6 +2655,7 @@ function useBank(id){
     : '“' + b.name + '” is ready on Setup.', 'ok');
 }
 function bankCard(b){
+  if(b.link && STANDALONE) return '';   // the generators are other tools of the site
   if(b.link) return '<div class="bk"><div class="bk-top"><b>' + esc(b.name) + '</b><span class="count-pill">generator</span></div>' +
     '<div class="bk-meta">' + esc(b.level) + ' · ' + esc(b.topic) + ' · decoys made for you</div><p class="hint">' + esc(b.about) + '</p>' +
     '<ul class="bk-sample">' + b.sample.map(x => '<li>' + C.esc(x[0]) + ' → <b>' + C.renderAnswer(x[1], 'text', { formulas:true }) + '</b></li>').join('') + '</ul>' +
@@ -2621,7 +2673,16 @@ function bankCard(b){
 
 /* ---------- start ---------- */
 loadStore();
-let firstRun = false;
+let firstRun = false, sharedNew = false;
+if(STANDALONE){
+  document.documentElement.classList.add('standalone');
+  const home = document.querySelector('.brand a'); home.removeAttribute('href'); home.removeAttribute('title');
+  // the first time a copy is opened, its game goes in; after that the copy carries on from this browser
+  if(!Object.keys(store.games).length){
+    const g = normalizeGame(SHARED.game);
+    if(g){ store.games[g.id] = g; store.current = g.id; sharedNew = true; }
+  }
+}
 if(!store.current){
   const ids = Object.keys(store.games);
   if(ids.length) store.current = ids.sort((a, b) => store.games[b].updated - store.games[a].updated)[0];
@@ -2632,8 +2693,10 @@ const savedTab = lsGet(LS.tab);
 ui.tab = ['setup', 'cards', 'play'].includes(savedTab) ? savedTab : 'setup';
 if(!game.cards && ui.tab !== 'setup') ui.tab = 'setup';
 if(firstRun){ makeCards({ quiet:true, seed:12345 }); ui.tab = 'setup'; }   // so every tab has something to show
+if(sharedNew && game.cards) ui.tab = 'cards';
 save();
 renderAll();
+if(sharedNew) toast('“' + (game.name || 'Untitled game') + '” is ready' + (game.cards ? ': print the cards, then go to Play' : '') + '. This is your own copy, so change anything you like.', 'ok');
 receiveHandoff();
 
 /* ---------- hand-off from another tool (Compound Naming, Subatomic Particles) ----------
