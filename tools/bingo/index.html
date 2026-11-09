@@ -158,6 +158,13 @@
   .ai pre{white-space:pre-wrap;font-family:var(--mono);font-size:11.5px;background:var(--panel-2);border:1px solid var(--line);
     border-radius:9px;padding:10px;max-height:260px;overflow:auto;margin:8px 0 0;}
   .aigrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+  .aidec{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--room-bg);}
+  .aidec > summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--board);}
+  .aidec > summary small{font-weight:500;color:var(--muted);}
+  .dwhy{margin-top:8px;}
+  .dwhy summary{cursor:pointer;font-size:12.5px;color:var(--together);font-weight:600;}
+  .dwhy ul{list-style:none;margin:6px 0 0;padding:0;font-size:12.5px;line-height:1.55;max-height:220px;overflow:auto;}
+  .dwhy li b{font-family:var(--mono);display:inline-block;min-width:44px;}
   .aigrid .wide{grid-column:1 / -1;}
   .step{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--board);
     color:#fff;font-size:11px;font-weight:700;flex:none;}
@@ -256,6 +263,7 @@
   .pstart{text-align:center;}
   .pstart .pw{font-size:16vh;font-weight:800;letter-spacing:.2em;color:#fff;line-height:1;}
   .pstart .ps{font-size:3.2vh;color:rgba(255,255,255,.75);margin-top:3vh;}
+  .pstart .pname{font-size:4.6vh;font-weight:700;color:var(--accent);margin-top:2vh;}
 
   /* ---- modal ---- */
   .modal-wrap{position:fixed;inset:0;z-index:950;background:rgba(15,28,24,.5);display:flex;align-items:flex-start;justify-content:center;
@@ -275,6 +283,16 @@
   .glist .gi{flex:1;min-width:180px;}
   .glist .gi b{display:block;}
   .glist .gi span{font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .bank{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;}
+  .bk{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--room-bg);}
+  .bk-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;}
+  .bk-meta{font-size:11.5px;color:var(--muted);margin-top:2px;font-family:var(--mono);}
+  .bk .hint{margin-top:6px;}
+  .bk-sample,.bk-all ol,.bk-dec{margin:8px 0 0;padding-left:20px;font-size:13px;line-height:1.6;}
+  .bk-sample{list-style:none;padding-left:0;}
+  .bk-all summary{cursor:pointer;font-size:12.5px;color:var(--together);font-weight:600;margin-top:8px;}
+  .bk-all ol{max-height:260px;overflow:auto;}
+  .bk-dec{list-style:none;padding-left:0;}
   .menu{position:relative;}
   .menu > summary{list-style:none;}
   .menu > summary::-webkit-details-marker{display:none;}
@@ -359,7 +377,8 @@
       <div class="setup">
         <div>
           <div class="box">
-            <div class="box-head"><h3 class="section-title">1 · Questions and answers</h3><span class="count-pill" id="itemCount">0</span></div>
+            <div class="box-head"><h3 class="section-title">1 · Questions and answers</h3><span class="spacer"></span><span class="count-pill" id="itemCount">0</span>
+              <button class="btn small" id="bankBtn" type="button" title="Start from a ready-made game">▤ Ready-made games</button></div>
             <textarea id="items" spellcheck="false" aria-label="Questions and answers, one per line"
               placeholder="6 × 7 | 42&#10;Solve 2x + 3 = 11 | 4&#10;{3}/{4} of 20 | 15&#10;&#10;…or only the answers:  42, 4, 15, -3, 0.5, 3/4"></textarea>
             <p class="hint">One per line: <code>question | answer</code>. You can also paste two columns from a spreadsheet, or type only the answers (<code>12, 7, -3, 0.5, 3/4</code>) if your slides are made somewhere else.
@@ -425,7 +444,26 @@
               <input type="text" id="dAdd" placeholder="Add your own, e.g. 41, 43, 7/8" style="flex:1;min-width:160px" aria-label="Add your own decoys">
               <button class="btn small" id="dAddBtn">Add</button>
             </div>
-            <p class="hint">🔒 keeps a decoy when you re-roll. Ones you type yourself are always kept. Hover a decoy to see the mistake it stands for.</p>
+            <p class="hint">🔒 keeps a decoy when you re-roll. Ones you type yourself (or an AI writes) are always kept.</p>
+            <details class="dwhy" id="dWhy" hidden><summary>What each decoy stands for</summary><ul id="dWhyList"></ul></details>
+            <details class="aidec ai" id="aiDec">
+              <summary><span class="ic">✦</span> Write decoys with an AI <small>(best decoys: it reads your questions)</small></summary>
+              <p class="hint" style="margin-top:6px">Copy the prompt into any AI chat. It reads your questions and suggests wrong answers from mistakes students really make, each linked to the question it comes from. It is told every value that is already taken, and anything that still clashes is left out when you paste the reply back.</p>
+              <div class="row" style="margin-top:8px">
+                <span class="step">1</span>
+                <label class="row" style="gap:6px;margin:0"><span class="lab">How many</span><input type="number" id="adCount" min="1" max="60" aria-label="How many decoys to ask for"></label>
+                <label class="row" style="gap:6px;margin:0;flex:1;min-width:180px"><span class="lab">Students</span><input type="text" id="adLevel" placeholder="e.g. Grade 7 (optional)" style="flex:1;min-width:0"></label>
+              </div>
+              <div class="row">
+                <span class="step">2</span>
+                <button class="btn small primary" id="adCopy" type="button"><span class="ic">⧉</span>Copy decoy prompt</button>
+                <button class="btn small" id="adSave" type="button">Save as .txt</button>
+                <details id="adShow" style="flex-basis:100%"><summary>Show the prompt</summary><pre id="adPrompt"></pre></details>
+              </div>
+              <div class="row" style="margin-top:10px"><span class="step">3</span><b style="font-size:13px">Paste the AI's reply</b></div>
+              <textarea id="adReply" rows="3" style="margin-top:8px;font-family:var(--mono);font-size:12px" placeholder="Paste the whole reply here." aria-label="The AI's decoy reply"></textarea>
+              <div class="row" style="margin-top:8px"><button class="btn small primary" id="adUse" type="button">Add these decoys</button></div>
+            </details>
           </div>
 
           <div class="box" id="cardBox">
@@ -1080,6 +1118,41 @@ const BingoCore = (function(){
     return out;
   }
 
+  /* ---------- decoys written by an AI ----------
+     d: the parsed reply { format:'teachingtools-bingo-decoys', decoys:[{ answer, question, mistake }] } (or just the list).
+     items: the game's questions, numbered from 1 as in the prompt: [{ q, a }].
+     taken: Map key → words for what already has that value ("the answer to question 3"), so clashes are explained.
+     → { ok, add:[{a, why}], rejected:[{a, reason}], errors:[...] }. Never throws. */
+  function readDecoyReply(d, items, taken){
+    const errors = [], add = [], rejected = [];
+    if(Array.isArray(d)) d = { decoys:d };
+    if(!d || typeof d !== 'object' || !Array.isArray(d.decoys)) return { ok:false, add, rejected, errors:['There is no "decoys" list in the reply.'] };
+    if(d.format !== undefined && d.format !== 'teachingtools-bingo-decoys') errors.push('"format" should be "teachingtools-bingo-decoys".');
+    if(!d.decoys.length) errors.push('The "decoys" list is empty.');
+    if(errors.length) return { ok:false, add, rejected, errors };
+    const one = x => String(x == null ? '' : x).replace(/\s+/g, ' ').trim();
+    const seen = new Map(taken || []);
+    d.decoys.forEach((x, i) => {
+      const obj = x && typeof x === 'object';
+      const a = one(obj ? (x.answer != null ? x.answer : x.a) : x);
+      if(!a){ rejected.push({ a:'decoy ' + (i + 1), reason:'it has no "answer"' }); return; }
+      if(a.indexOf('|') >= 0){ rejected.push({ a, reason:'it contains “|”' }); return; }
+      if(a.length > 24){ rejected.push({ a, reason:'it is too long for a bingo square' }); return; }
+      const k = valueInfo(a).key;
+      if(seen.has(k)){ rejected.push({ a, reason:'it is the same value as ' + seen.get(k) }); return; }
+      const mistake = obj ? one(x.mistake != null ? x.mistake : x.why) : '';
+      const qn = obj ? parseInt(x.question, 10) : NaN;
+      let why = mistake;
+      if(qn >= 1 && items && qn <= items.length){
+        const it = items[qn - 1], q = it.q || ('the answer ' + it.a);
+        why = (q.length > 48 ? q.slice(0, 46).trim() + '…' : q) + ': ' + (mistake || 'a common mistake');
+      }
+      seen.set(k, 'the decoy “' + a + '” earlier in the reply');
+      add.push({ a, why:why.slice(0, 200) });
+    });
+    return { ok:true, add, rejected, errors };
+  }
+
   /* ---------- import helpers ---------- */
   // Pull JSON out of an AI reply: it may be wrapped in a code fence or have a sentence around it.
   function extractJson(text){
@@ -1176,7 +1249,7 @@ const BingoCore = (function(){
   return { rat, rkey, rnum, normNum, parseNumber, valueInfo, parseItems, parseList, esc, renderMath, renderAnswer,
     answerShape, makeRng, shuffle, choose, geometry, PATTERNS, PATTERN_ORDER, targetName, decoyLayouts,
     generateCards, analyseCards, checkCard, simulate, makeDecoys, cardSetKey,
-    extractJson, readDraft, parseDelimited, readTable, toCsv, itemLine };
+    extractJson, readDraft, readDecoyReply, parseDelimited, readTable, toCsv, itemLine };
 })();
 /* </bingo-core> */
 
@@ -1614,27 +1687,32 @@ $('dPer').addEventListener('input', e => { game.set.d = +e.target.value; changed
 $('dPerReset').addEventListener('click', () => { game.set.d = null; changed(); });
 $('makeBtn').addEventListener('click', () => makeCards());
 
-function makeCards(){
+// opts.quiet: no questions or toasts (a ready-made game or the first-run sample); opts.seed: a fixed seed
+function makeCards(opts){
+  opts = opts || {};
   const dv = derive(), p = dv.plan;
-  if(!p.canMake){ toast(p.errs[0] || 'These settings can’t make cards.', 'err'); return; }
+  if(!p.canMake){ if(!opts.quiet) toast(p.errs[0] || 'These settings can’t make cards.', 'err'); return false; }
   const cs = game.cards;
-  if(cs && (cs.printed || game.play.log.length)){
+  if(!opts.quiet && cs && (cs.printed || game.play.log.length)){
     const msg = (cs.printed ? 'You have printed these cards. New cards won’t match the printed ones.' : 'New cards replace the ' + cs.list.length + ' you have.') +
       (game.play.log.length ? ' The ' + plural(game.play.log.length, 'call') + ' so far will be cleared.' : '') + '\n\nMake new cards?';
-    if(!confirm(msg)) return;
+    if(!confirm(msg)) return false;
   }
   const pool = dv.parsed.answers.map(a => ({ a:a.a, k:a.k, t:a.v.type, decoy:false, why:'' }))
     .concat(dv.valid.map(d => ({ a:d.a, k:d.k, t:d.v.type, decoy:true, why:d.why })));
-  const seed = newSeed();
+  const seed = opts.seed != null ? opts.seed >>> 0 : newSeed();
   const res = C.generateCards(pool, { size:p.size, free:p.free, d:p.d, count:game.set.count }, C.makeRng(seed), []);
-  if(!res.cards.length){ toast(res.error || 'No cards could be made.', 'err'); return; }
+  if(!res.cards.length){ if(!opts.quiet) toast(res.error || 'No cards could be made.', 'err'); return false; }
   game.cards = { seed, made:Date.now(), size:p.size, free:p.free, d:p.d, pool, items:snapshotItems(dv.parsed), list:res.cards, printed:false };
-  if(res.error){ game.set.count = res.cards.length; toast(res.error + ' Made ' + res.cards.length + '.', 'warn'); }
-  else toast('Made ' + plural(res.cards.length, 'card') + '.', 'ok');
+  if(res.error) game.set.count = res.cards.length;
+  if(!opts.quiet){
+    if(res.error) toast(res.error + ' Made ' + res.cards.length + '.', 'warn');
+    else toast('Made ' + plural(res.cards.length, 'card') + '.', 'ok');
+  }
   game.play.log = []; game.play.round = 1; ui.view = -1;
   anCache = null; simCache = new Map();
-  ui.tab = 'cards'; saveTab();
-  changed();
+  if(!opts.quiet){ ui.tab = 'cards'; saveTab(); changed(); } else save();
+  return true;
 }
 
 /* ---------- AI prompt ---------- */
@@ -1644,8 +1722,8 @@ const AI_KINDS = {
   any:'any numbers: whole numbers, negatives, decimals or fractions (written like 3/4 or 1 1/2)',
   text:'numbers, or short text such as x = 5, 2π or √2'
 };
-let ai = { topic:'', level:'', kind:'int', count:30, decoys:10, own:'' };
-try { const a = JSON.parse(lsGet(LS.ai) || 'null'); if(a && typeof a === 'object') ['topic', 'level', 'kind', 'own'].forEach(k => { if(isStr(a[k])) ai[k] = a[k]; }), ['count', 'decoys'].forEach(k => { if(Number.isInteger(a[k])) ai[k] = a[k]; }); } catch(e){ /* defaults */ }
+let ai = { topic:'', level:'', kind:'int', count:30, decoys:10, own:'', dcount:null };
+try { const a = JSON.parse(lsGet(LS.ai) || 'null'); if(a && typeof a === 'object') ['topic', 'level', 'kind', 'own'].forEach(k => { if(isStr(a[k])) ai[k] = a[k]; }), ['count', 'decoys', 'dcount'].forEach(k => { if(Number.isInteger(a[k])) ai[k] = a[k]; }); } catch(e){ /* defaults */ }
 if(!AI_KINDS[ai.kind]) ai.kind = 'int';
 function buildPrompt(){
   const n = clamp(ai.count || 30, 5, 200), d = clamp(ai.decoys == null ? 10 : ai.decoys, 0, 100), own = ai.own.trim();
@@ -1674,9 +1752,7 @@ function buildPrompt(){
   L.push('');
   if(d){
     L.push('DECOYS');
-    L.push('A decoy is a wrong answer that a student would get by making a common mistake on one of the questions: for example a sign error, doing the operations in the wrong order, adding instead of multiplying, or a slip with place value. Decoys are printed on the cards but never called, so a student who made that mistake can be shown it.');
-    L.push('- Each decoy must have a different value from every answer and from every other decoy.');
-    L.push('- Use the same kind of number as the answers.');
+    decoyRules(Math.max(1, Math.ceil(d / Math.max(1, n) * 2))).forEach(x => L.push(x));
     L.push('- In "mistake", say in a few words which question and which mistake gives it.');
     L.push('');
   }
@@ -1696,16 +1772,74 @@ function buildPrompt(){
     L.push('  ]');
   } else L.push('  "decoys": []');
   L.push('}');
+  L.push('(The example lines only show the format: replace them with your own questions' + (d ? ' and decoys' : '') + '.)');
   L.push('After the code block you may add one short sentence for the teacher, for example anything you were unsure about.');
   if(own){ L.push(''); L.push('THE TEACHER’S QUESTIONS'); L.push(own); }
+  return L.join('\n');
+}
+// How to write good decoys: shared by the question prompt and the decoy-only prompt.
+function decoyRules(perQ){
+  return [
+    'A decoy is a wrong answer printed on the bingo cards but never called. A student who makes a common mistake gets the decoy, crosses it off, and when they call BINGO the teacher can show them the mistake. So a good decoy is the answer a real student would really get.',
+    '- Make each decoy by working ONE question the wrong way, the way students in this class really go wrong. Typical mistakes: using the opposite operation (adding instead of subtracting, multiplying instead of dividing), dropping or flipping a negative sign, doing the steps in the wrong order, dividing the wrong way round (2 ÷ 8 instead of 2 × 8), a place-value or decimal-point slip, misreading the words of a word problem.',
+    '- Do the wrong working yourself and give its exact result. Then make sure the decoy is NOT also the correct answer to any question.',
+    '- Spread them out: use many different questions, at most ' + perQ + ' from any one question.',
+    '- Every decoy must have a different value from every answer and every other decoy. Different forms of the same value count as the same (0.5 and 1/2, 3 and 3.0).',
+    '- Write decoys the same way as the answers, at most 8 characters: whole numbers where the mistake gives one, decimals like 3.5, fractions like 3/4 or 1 1/2, a minus sign like -7. Never use the character |.',
+    '- Skip silly values nobody would get (such as huge numbers from a mistake no one makes). Fewer, believable decoys beat many odd ones.'
+  ];
+}
+// A prompt that asks an AI for decoys for THIS game's questions.
+function buildDecoyPrompt(){
+  const dv = derive(), items = dv.parsed.items;
+  const n = clamp(ai.dcount || suggestedDecoys(dv.parsed.answers.length, dv.plan.S), 1, 60);
+  const anyQ = items.some(it => it.q);
+  const L = [];
+  L.push('You are helping a teacher with a maths BINGO game. The teacher shows one question at a time; students work out the answer and cross it off their bingo card if it is there.');
+  if(ai.level.trim()) L.push('Students: ' + ai.level.trim());
+  L.push('');
+  L.push('YOUR TASK');
+  L.push('Write ' + n + ' decoys for the questions below.' + (anyQ ? '' : ' Only the answers are listed (the questions are on the teacher\u2019s slides), so base each decoy on a likely slip that gives a wrong answer near one of these answers.'));
+  L.push('');
+  decoyRules(Math.max(1, Math.ceil(n / Math.max(1, items.length) * 2))).forEach(x => L.push(x));
+  L.push('- In "question", give the number of the question the decoy comes from. In "mistake", say in a few words what the student did wrong.');
+  L.push('');
+  L.push('THE QUESTIONS (number. question → correct answer)');
+  items.forEach((it, i) => L.push((i + 1) + '. ' + (it.q ? it.q + ' → ' : '') + it.a));
+  L.push('');
+  const taken = dv.parsed.answers.map(a => a.a).concat(dv.valid.map(d => d.a));
+  L.push('VALUES ALREADY TAKEN (never use these, in any form): ' + taken.join(', '));
+  L.push('');
+  L.push('REPLY FORMAT');
+  L.push('Reply with only this JSON, in one code block. Straight double quotes, no comments, no trailing commas.');
+  L.push('{');
+  L.push('  "format": "teachingtools-bingo-decoys",');
+  L.push('  "decoys": [');
+  L.push('    { "answer": "THE WRONG ANSWER", "question": 1, "mistake": "WHAT THE STUDENT DID WRONG, e.g. added 5 instead of taking it away" }');
+  L.push('  ]');
+  L.push('}');
+  L.push('(That line only shows the format: write ' + n + ' real decoys in its place.)');
+  L.push('After the code block you may add one short sentence for the teacher.');
   return L.join('\n');
 }
 function renderAi(){
   setVal($('aiTopic'), ai.topic); setVal($('aiLevel'), ai.level); setVal($('aiKind'), ai.kind);
   setVal($('aiCount'), ai.count); setVal($('aiDecoys'), ai.decoys); setVal($('aiOwn'), ai.own);
   if($('aiShow').open) $('aiPrompt').textContent = buildPrompt();
+  const dv = derive();
+  setVal($('adCount'), ai.dcount || suggestedDecoys(dv.parsed.answers.length, dv.plan.S));
+  setVal($('adLevel'), ai.level);
+  if($('adShow').open) $('adPrompt').textContent = buildDecoyPrompt();
+  const withWhy = dv.decoys.filter(d => d.why);
+  $('dWhy').hidden = !withWhy.length;
+  $('dWhyList').innerHTML = withWhy.map(d => '<li' + (d.bad ? ' style="text-decoration:line-through;color:var(--danger)"' : '') + '><b>' + C.renderAnswer(d.a, d.v.type) + '</b> ' + C.renderMath(d.why) + '</li>').join('');
 }
-function aiChanged(){ lsSet(LS.ai, JSON.stringify(ai)); if($('aiShow').open) $('aiPrompt').textContent = buildPrompt(); }
+function aiChanged(){
+  lsSet(LS.ai, JSON.stringify(ai));
+  if($('aiShow').open) $('aiPrompt').textContent = buildPrompt();
+  if($('adShow').open) $('adPrompt').textContent = buildDecoyPrompt();
+  setVal($('aiLevel'), ai.level); setVal($('adLevel'), ai.level);
+}
 [['aiTopic', 'topic'], ['aiLevel', 'level'], ['aiOwn', 'own']].forEach(([id, k]) => $(id).addEventListener('input', e => { ai[k] = e.target.value; aiChanged(); }));
 $('aiKind').addEventListener('change', e => { ai.kind = e.target.value; aiChanged(); });
 $('aiCount').addEventListener('change', e => { ai.count = clamp(parseInt(e.target.value, 10) || 30, 5, 200); e.target.value = ai.count; aiChanged(); });
@@ -1717,6 +1851,27 @@ $('aiCopy').addEventListener('click', async () => {
   else { $('aiShow').open = true; toast('Couldn’t copy. The prompt is shown below: select it and copy it.', 'warn'); }
 });
 $('aiSave').addEventListener('click', () => download('bingo-ai-prompt.txt', new Blob([buildPrompt()], { type:'text/plain' })));
+$('adLevel').addEventListener('input', e => { ai.level = e.target.value; aiChanged(); });
+$('adCount').addEventListener('change', e => { const v = parseInt(e.target.value, 10); ai.dcount = v > 0 ? clamp(v, 1, 60) : null; aiChanged(); renderSetup(); });
+$('adShow').addEventListener('toggle', () => { if($('adShow').open) $('adPrompt').textContent = buildDecoyPrompt(); });
+function decoyPromptReady(){
+  if(!derive().parsed.items.length){ toast('Type the questions and answers first: the AI needs them to write decoys.', 'warn'); return false; }
+  return true;
+}
+$('adCopy').addEventListener('click', async () => {
+  if(!decoyPromptReady()) return;
+  const ok = await copyText(buildDecoyPrompt());
+  if(ok) toast('Decoy prompt copied. Paste it into your AI chat, then paste its reply below.', 'ok');
+  else { $('adShow').open = true; toast('Couldn’t copy. The prompt is shown below: select it and copy it.', 'warn'); }
+});
+$('adSave').addEventListener('click', () => { if(decoyPromptReady()) download('bingo-decoy-prompt.txt', new Blob([buildDecoyPrompt()], { type:'text/plain' })); });
+$('adUse').addEventListener('click', () => {
+  const t = $('adReply').value;
+  if(!t.trim()){ toast('Paste the AI’s reply first.', 'warn'); return; }
+  const j = C.extractJson(t);
+  if(!j.ok){ showErrors('This couldn’t be read', [j.error], true); return; }
+  applyDecoyReply(j.value, 'the AI’s reply');
+});
 $('aiUse').addEventListener('click', () => {
   const t = $('aiReply').value;
   if(!t.trim()){ toast('Paste the AI’s reply first.', 'warn'); return; }
@@ -2057,7 +2212,7 @@ function renderPresent(){
     main.innerHTML = '<div class="pstart"><div class="pw" style="font-size:9vh">That’s all!</div><div class="ps">' + esc(allDoneMsg()) + ' Check any cards that are still waiting.</div></div>';
   } else if(!e){
     $('pLeft').textContent = 'Round ' + game.play.round;
-    main.innerHTML = '<div class="pstart"><div class="pw">BINGO</div><div class="ps">Playing for <b>' + esc(P.name) + '</b>: ' + esc(P.hint) + '.<br>Press <b>Space</b> or <b>Next</b> for the ' + (hasQuestions() ? 'first question' : 'first call') + '.</div></div>';
+    main.innerHTML = '<div class="pstart"><div class="pw">BINGO</div>' + (game.name ? '<div class="pname">' + esc(game.name) + '</div>' : '') + '<div class="ps">Playing for <b>' + esc(P.name) + '</b>: ' + esc(P.hint) + '.<br>Press <b>Space</b> or <b>Next</b> for the ' + (hasQuestions() ? 'first question' : 'first call') + '.</div></div>';
   } else {
     const p = byKey.get(e.k);
     $('pLeft').textContent = 'Call ' + (ui.view + 1) + (e.i >= 0 && e.q ? ' · Question ' + (e.i + 1) : '');
@@ -2138,13 +2293,17 @@ function openGames(){
       (g.id === game.id ? '<span class="count-pill">open now</span>' : '<button class="btn small primary" data-open="' + g.id + '">Open</button>') +
       '<button class="btn small" data-dup="' + g.id + '" title="Make a copy">Copy</button><button class="btn small danger" data-gdel="' + g.id + '">Delete</button></li>';
   };
-  openModal('<h2>Your games</h2><p class="hint" style="margin-top:0">Kept in this browser on this computer. To move a game to another computer, use Export → Game file and Import it there.</p>' +
+  openModal('<h2>Games</h2>' +
+    '<h3 class="section-title" style="margin-top:14px">Ready-made games</h3><p class="hint" style="margin:-4px 0 10px">Start from one of these: you get your own copy with the cards already made, and you can change anything.</p>' +
+    '<div class="bank">' + BANK.map(bankCard).join('') + '</div>' +
+    '<h3 class="section-title" style="margin-top:20px">Your games</h3><p class="hint" style="margin:-4px 0 0">Kept in this browser on this computer. To move a game to another computer, use Export → Game file and Import it there.</p>' +
     '<ul class="glist" id="glist">' + list.map(row).join('') + '</ul>' +
     '<div class="mfoot"><button class="btn" type="button" data-gnew>+ New game</button><button class="btn primary" type="button" data-close>Done</button></div>', { wide:true });
 }
 $('modal').addEventListener('click', e => {
   const b = e.target.closest('button'); if(!b) return;
-  if(b.dataset.open){ closeModal(null); switchGame(b.dataset.open); toast('Opened “' + (game.name || 'Untitled game') + '”.', 'ok'); }
+  if(b.dataset.bank){ closeModal(null); useBank(b.dataset.bank); }
+  else if(b.dataset.open){ closeModal(null); switchGame(b.dataset.open); toast('Opened “' + (game.name || 'Untitled game') + '”.', 'ok'); }
   else if(b.dataset.dup){
     const src = store.games[b.dataset.dup]; if(!src) return;
     const g = normalizeGame(JSON.parse(JSON.stringify(src))); g.id = uid(); g.name = (src.name || 'Untitled game') + ' (copy)'; g.created = g.updated = Date.now();
@@ -2167,6 +2326,7 @@ $('modal').addEventListener('click', e => {
   }
 });
 $('gamesBtn').addEventListener('click', openGames);
+$('bankBtn').addEventListener('click', openGames);
 
 /* ---------- import / export ---------- */
 function exportGame(){
@@ -2217,9 +2377,34 @@ function importText(text, name, fromPaste){
     if(p.items.length) return offerDraft({ title:'', items:p.items.map(it => ({ q:it.q, a:it.a })), decoys:[] }, name);
   }
   if(v && v.type === DATA_TYPE) return importGame(v, name);
+  if(v && typeof v === 'object' && (v.format === 'teachingtools-bingo-decoys' || (!Array.isArray(v) && !v.items && !v.questions && Array.isArray(v.decoys)))) return applyDecoyReply(v, name);
   const d = C.readDraft(v);
   if(!d.ok) return showErrors('These questions can’t be used yet', d.errors, true);
   offerDraft(d, name);
+}
+async function applyDecoyReply(v, name){
+  const dv = derive();
+  if(!dv.parsed.items.length){ showErrors('Add the questions first', ['These are decoys only. Type or import the questions, then add the decoys.']); return; }
+  const taken = new Map();
+  dv.parsed.items.forEach((it, i) => { if(!taken.has(it.v.key)) taken.set(it.v.key, 'the answer to question ' + (i + 1)); });
+  dv.valid.forEach(d => { if(!taken.has(d.k)) taken.set(d.k, 'your decoy “' + d.a + '”'); });
+  const r = C.readDecoyReply(v, dv.parsed.items.map(it => ({ q:it.q, a:it.a })), taken);
+  if(!r.ok) return showErrors('These decoys can’t be used yet', r.errors, true);
+  const msgs = r.rejected.map(x => '“' + x.a + '” was left out: ' + x.reason + '.');
+  if(!r.add.length) return showErrors('No new decoys', msgs.length ? msgs : ['The reply had no decoys.'], true);
+  r.add.forEach(d => game.decoys.push({ a:d.a, why:d.why, auto:false, lock:true }));
+  $('adReply').value = '';
+  ui.tab = 'setup'; saveTab();
+  changed();
+  if(game.cards) toast('New decoys change the game: make new cards to use them.', 'warn');
+  if(msgs.length){
+    for(;;){
+      const c = await askChoice('Added ' + plural(r.add.length, 'decoy'), '<p>Added ' + plural(r.add.length, 'decoy') + ' from ' + esc(name) + '. ' + msgs.length + (msgs.length === 1 ? ' was' : ' were') + ' left out:</p><ul class="vdetail">' + msgs.map(m => '<li>' + esc(m) + '</li>').join('') + '</ul><p class="hint">If you want more, copy these messages back to the AI and ask for replacements.</p>',
+        [{ label:'Copy messages', value:'copy' }, { label:'OK', value:null, kind:'primary' }]);
+      if(c !== 'copy') return;
+      toast(await copyText(msgs.join('\n')) ? 'Copied.' : 'Couldn’t copy. Select the text and copy it.', 'ok');
+    }
+  } else toast('Added ' + plural(r.add.length, 'decoy') + '. Hover one, or open “What each decoy stands for”, to see its mistake.', 'ok');
 }
 async function showErrors(title, errors, forAi){
   for(;;){
@@ -2308,39 +2493,108 @@ document.addEventListener('keydown', e => {
   else if(k === 'c' || k === 'C'){ e.preventDefault(); openCheck(0); }
 });
 
-/* ---------- first open: a sample game that explains itself ---------- */
-const SAMPLE = ['6 × 7 | 42', '8 × 9 | 72', '7 × 8 | 56', '6 × 9 | 54', '4 × 7 | 28', '3 × 9 | 27', '6 × 8 | 48', '7 × 7 | 49', '9 × 9 | 81', '5 × 8 | 40',
-  '4 × 9 | 36', '3 × 8 | 24', '7 × 9 | 63', '8 × 8 | 64', '5 × 7 | 35', '4 × 8 | 32', '3 × 7 | 21', '6 × 5 | 30', '9 × 5 | 45', '4 × 4 | 16',
-  '3 × 6 | 18', '11 × 6 | 66', '12 × 7 | 84', '9 × 11 | 99', '12 × 12 | 144', '3 × 5 | 15', '2 × 7 | 14', '8 × 12 | 96', '7 × 11 | 77', '5 × 5 | 25'].join('\n');
-function sampleGame(){
-  const g = blankGame('Sample: times tables');
-  g.itemsText = SAMPLE;
-  const parsed = C.parseItems(SAMPLE);
-  g.decoys = C.makeDecoys(parsed.answers, new Set(parsed.answers.map(a => a.k)), 10, { style:'mistakes' }, C.makeRng(7)).map(m => ({ a:m.a, why:m.why, auto:true, lock:false }));
+/* ---------- ready-made games (the bank) ----------
+   Built in, read-only. "Use this game" makes the teacher's own copy (with cards), so the bank never changes.
+   Add a game here: a unique id, a name, and items as "question | answer" lines. Decoys are optional: give your own
+   (with the mistake each one stands for), or leave them out and the tool makes likely-mistake decoys for you. */
+const BANK = [
+  { id:'equations-one-two-step', name:'One- and two-step equations', level:'Grades 7–8', topic:'Solving equations',
+    about:'One- and two-step equations, then word problems that turn into equations. Retyped from a teacher’s own slide deck. Two questions share the answer 20.',
+    items:[
+      'x + 5 = 9 | 4',
+      'x - 7 = 12 | 19',
+      '3x = 15 | 5',
+      '{x}/{8} = 2 | 16',
+      '5x + 3 = 13 | 2',
+      '{x}/{7} - 1 = 9 | 70',
+      '{x}/{5} + 2 = 7 | 25',
+      '-x = -7 | 7',
+      'Calculators cost $25 each. If Ms. Dunn pays $225 for a set of calculators, how many calculators did Ms. Dunn buy? | 9',
+      '4 boys split a bag of Halloween candy. If each boy ends up with 12 pieces, how many pieces were in the bag? | 48',
+      'The sum of 6 and 2 times a number is 12. Find the number. | 3',
+      'The difference of a number and 11 is 19. Find the number. | 30',
+      'The quotient of a number and 9 is 7. Find the number. | 63',
+      '11x = 66 | 6',
+      'x - 4 = 22 | 26',
+      '3x + 9 = 12 | 1',
+      '4 + 2x = 20 | 8',
+      '8x - 5 = 83 | 11',
+      '{x}/{2} + 5 = 17 | 24',
+      '8 students go to Taco Bell for dinner. They split the bill evenly. Each person pays $2.50. How much was the total bill? | 20',
+      'James is buying an XBox 360. He gives the cashier $300 and gets $19 in change. How much was the Xbox? | 281',
+      'x - 14 = 25 | 39',
+      '6x = 72 | 12',
+      '{x}/{12} = 3 | 36',
+      '{x}/{4} + 10 = 25 | 60',
+      '7x - 3 = 137 | 20',
+      'The sum of half a number and 5 is 12. Find the number. | 14',
+      'x + 1 = 19 | 18'
+    ],
+    decoys:[
+      { a:'45', why:'3x = 15: multiplied by 3 instead of dividing' },
+      { a:'56', why:'x/7 − 1 = 9: took away 1 instead of adding it' },
+      { a:'33', why:'x/5 + 2 = 7: multiplied 7 by 5 before taking away 2' },
+      { a:'-7', why:'−x = −7: kept the minus sign' },
+      { a:'319', why:'the XBox: added the $19 change instead of taking it away' },
+      { a:'55', why:'11x = 66: took away 11 instead of dividing' },
+      { a:'66', why:'6x = 72: took away 6 instead of dividing' },
+      { a:'140', why:'x/4 + 10 = 25: added 10 instead of taking it away' },
+      { a:'3.2', why:'5x + 3 = 13: added 3 instead of taking it away' },
+      { a:'3.5', why:'half a number + 5 = 12: halved 7 instead of doubling it' }
+    ] },
+  { id:'times-tables', name:'Times tables', level:'Grades 3–5', topic:'Multiplication facts',
+    about:'Thirty facts up to 12 × 12, each with a different answer. Decoys are made from likely slips (one off, digits swapped).',
+    items:['6 × 7 | 42', '8 × 9 | 72', '7 × 8 | 56', '6 × 9 | 54', '4 × 7 | 28', '3 × 9 | 27', '6 × 8 | 48', '7 × 7 | 49', '9 × 9 | 81', '5 × 8 | 40',
+      '4 × 9 | 36', '3 × 8 | 24', '7 × 9 | 63', '8 × 8 | 64', '5 × 7 | 35', '4 × 8 | 32', '3 × 7 | 21', '6 × 5 | 30', '9 × 5 | 45', '4 × 4 | 16',
+      '3 × 6 | 18', '11 × 6 | 66', '12 × 7 | 84', '9 × 11 | 99', '12 × 12 | 144', '3 × 5 | 15', '2 × 7 | 14', '8 × 12 | 96', '7 × 11 | 77', '5 × 5 | 25'] }
+];
+function gameFromBank(b){
+  const g = blankGame(b.name);
+  g.itemsText = b.items.join('\n');
+  if(b.decoys) g.decoys = b.decoys.map(d => ({ a:d.a, why:d.why || '', auto:false, lock:true }));
+  else {
+    const parsed = C.parseItems(g.itemsText);
+    g.decoys = C.makeDecoys(parsed.answers, new Set(parsed.answers.map(a => a.k)), 10, { style:'mistakes' }, C.makeRng(7))
+      .map(m => ({ a:m.a, why:m.why, auto:true, lock:false }));
+  }
   return g;
+}
+function useBank(id){
+  const b = BANK.find(x => x.id === id); if(!b) return;
+  const g = gameFromBank(b);
+  store.games[g.id] = g;
+  switchGame(g.id);
+  const ok = makeCards({ quiet:true });
+  ui.tab = ok ? 'cards' : 'setup'; saveTab();
+  save(); renderAll();
+  toast(ok ? '“' + b.name + '” is ready: ' + plural(game.cards.list.length, 'card') + ' made. Print them, then go to Play. It’s your own copy, so change anything you like.'
+    : '“' + b.name + '” is ready on Setup.', 'ok');
+}
+function bankCard(b){
+  const parsed = C.parseItems(b.items.join('\n')), n = parsed.items.length;
+  const row = it => (it.q ? C.renderMath(it.q) + ' → ' : '') + '<b>' + C.renderAnswer(it.a, it.v.type) + '</b>';
+  return '<div class="bk"><div class="bk-top"><b>' + esc(b.name) + '</b><span class="count-pill">' + plural(n, 'question') + '</span></div>' +
+    '<div class="bk-meta">' + esc(b.level) + ' · ' + esc(b.topic) + ' · ' + (b.decoys ? plural(b.decoys.length, 'hand-written decoy') : 'decoys made for you') + '</div>' +
+    '<p class="hint">' + esc(b.about) + '</p>' +
+    '<ul class="bk-sample">' + parsed.items.slice(0, 3).map(it => '<li>' + row(it) + '</li>').join('') + '</ul>' +
+    '<details class="bk-all"><summary>See all ' + n + ' questions' + (b.decoys ? ' and the decoys' : '') + '</summary><ol>' + parsed.items.map(it => '<li>' + row(it) + '</li>').join('') + '</ol>' +
+    (b.decoys ? '<p class="lab" style="margin:8px 0 4px">Decoys</p><ul class="bk-dec">' + b.decoys.map(d => '<li><b>' + C.renderAnswer(d.a, C.valueInfo(d.a).type) + '</b> ' + C.renderMath(d.why) + '</li>').join('') + '</ul>' : '') + '</details>' +
+    '<div class="row" style="margin-top:10px"><button type="button" class="btn small primary" data-bank="' + esc(b.id) + '">Use this game</button></div></div>';
 }
 
 /* ---------- start ---------- */
 loadStore();
+let firstRun = false;
 if(!store.current){
   const ids = Object.keys(store.games);
   if(ids.length) store.current = ids.sort((a, b) => store.games[b].updated - store.games[a].updated)[0];
-  else { const g = sampleGame(); store.games[g.id] = g; store.current = g.id; }
+  else { const g = gameFromBank(BANK.find(b => b.id === 'times-tables')); store.games[g.id] = g; store.current = g.id; firstRun = true; }
 }
 game = store.games[store.current];
 const savedTab = lsGet(LS.tab);
 ui.tab = ['setup', 'cards', 'play'].includes(savedTab) ? savedTab : 'setup';
 if(!game.cards && ui.tab !== 'setup') ui.tab = 'setup';
-if(game.name === 'Sample: times tables' && !game.cards && game.itemsText === SAMPLE){
-  // make the sample's cards so every tab has something to show
-  ui.tab = 'setup';
-  const dv = derive(), p = dv.plan;
-  if(p.canMake){
-    const pool = dv.parsed.answers.map(a => ({ a:a.a, k:a.k, t:a.v.type, decoy:false, why:'' })).concat(dv.valid.map(d => ({ a:d.a, k:d.k, t:d.v.type, decoy:true, why:d.why })));
-    const res = C.generateCards(pool, { size:p.size, free:p.free, d:p.d, count:game.set.count }, C.makeRng(12345), []);
-    if(res.cards.length) game.cards = { seed:12345, made:Date.now(), size:p.size, free:p.free, d:p.d, pool, items:snapshotItems(dv.parsed), list:res.cards, printed:false };
-  }
-}
+if(firstRun){ makeCards({ quiet:true, seed:12345 }); ui.tab = 'setup'; }   // so every tab has something to show
 save();
 renderAll();
 })();
