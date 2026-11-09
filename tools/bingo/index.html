@@ -257,6 +257,16 @@
     border-top:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.12);}
   .pstrip span{font-family:var(--mono);font-weight:700;font-size:2.4vh;padding:3px 10px;border-radius:8px;background:rgba(255,255,255,.12);}
   .pstrip span.latest{background:var(--accent);color:var(--board-2);}
+  #pOverlay{position:absolute;z-index:5;box-sizing:border-box;border-radius:12px;background:rgba(0,0,0,.28);cursor:grab;touch-action:none;user-select:none;}
+  #pOverlay.drag{cursor:grabbing;}
+  #pOverlay .og{display:grid;width:100%;height:100%;}
+  #pOverlay .og i{border-radius:18%;background:rgba(255,255,255,.14);}
+  #pOverlay .og i.on{background:var(--accent);}
+  #pOverlay .rz{position:absolute;right:2px;bottom:2px;width:16px;height:16px;cursor:nwse-resize;opacity:.35;border-right:3px solid #fff;border-bottom:3px solid #fff;border-radius:0 0 8px 0;}
+  #pOverlay:hover .rz,#pOverlay.drag .rz{opacity:.9;}
+  .pdes{display:grid;gap:6px;margin:12px auto 0;width:max-content;}
+  .pdes button{width:54px;height:54px;border-radius:9px;border:2px solid var(--line);background:#fff;cursor:pointer;font-size:16px;color:var(--muted);padding:0;}
+  .pdes button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent-deep);color:var(--board-2);}
   .pctrl{display:flex;gap:8px;justify-content:flex-end;padding:10px 22px 16px;}
   .pctrl .btn{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.2);}
   .pctrl .btn:hover{background:rgba(255,255,255,.16);}
@@ -558,6 +568,9 @@
           <label class="field"><span class="lab">Win with</span><select id="patSel"></select></label>
           <div class="pwarn" id="patWarn"></div>
           <div class="hint" id="patEst"></div>
+          <div class="row" style="margin-top:9px"><button class="btn small" id="patDesign" type="button" title="Click squares on a grid to make your own winning shape">Design your own…</button></div>
+          <div class="row" style="margin-top:9px"><label class="check" title="Draws the pattern in a corner of the full-screen caller. Drag it there to move it; drag its corner to resize."><input type="checkbox" id="ovChk"> Show the pattern on the projector</label></div>
+          <div class="row" id="ovRow" style="margin-top:6px"><label class="row" style="gap:8px;margin:0"><span class="lab">Size</span><input type="range" id="ovSize" min="8" max="40" aria-label="Size of the pattern on the projector"></label><button class="btn small" id="ovReset" type="button">Reset</button></div>
           <div class="row" style="margin-top:9px"><button class="btn small" id="newRound" title="Clear the calls and play again with the same cards">New round</button></div>
         </div>
         <div class="pblock">
@@ -592,8 +605,10 @@
   <div class="ptop"><span id="pLeft"></span><span class="pat" id="pPat"></span><span id="pRight"></span></div>
   <div class="pmain" id="pMain"></div>
   <div class="pstrip" id="pStrip"></div>
+  <div id="pOverlay" hidden title="The pattern to win. Drag to move; drag the corner to resize." aria-label="The pattern to win"></div>
   <div class="pctrl">
-    <span class="phelp">Space next · ← back · R reveal · Z undo · C check · F full screen · Esc close</span>
+    <span class="phelp">Space next · ← back · R reveal · O pattern · Z undo · C check · F full screen · Esc close</span>
+    <button class="btn" id="pPatBtn" title="Show or hide the pattern to win (O)">Pattern</button>
     <button class="btn" id="pBack">◀ Back</button>
     <button class="btn" id="pReveal">Reveal</button>
     <button class="btn primary" id="pNext">Next ▶</button>
@@ -847,7 +862,18 @@ const BingoCore = (function(){
     full:{ name:'Full card', hint:'every square', targets:g => [g.all] }
   };
   const PATTERN_ORDER = ['line', 'row', 'col', 'corners', 'x', 'frame', 'full'];
+  // The squares to draw for a pattern (for the little pictures and the projector overlay). Patterns that mean "any
+  // row / column / line" show one example. custom: the squares the teacher picked.
+  function patternShape(pattern, size, cells){
+    if(pattern === 'custom') return [...new Set((cells || []).filter(i => Number.isInteger(i) && i >= 0 && i < size * size))].sort((a, b) => a - b);
+    const g = geometry(size, false), t = PATTERNS[pattern].targets(g);
+    const on = pattern === 'line' ? g.rows[0].concat(g.diags[0]) : pattern === 'row' ? g.rows[0] : pattern === 'col' ? g.cols[0] : [].concat(...t);
+    return [...new Set(on)].sort((a, b) => a - b);
+  }
+  // A pattern is a key of PATTERNS, or an object like one ({ name, hint, targets:g => [[squares]] }) for a custom shape.
+  const patOf = pattern => typeof pattern === 'string' ? PATTERNS[pattern] : pattern;
   function targetName(pattern, g, ti){
+    if(pattern === 'custom') return 'your pattern';
     if(pattern === 'line'){
       if(ti < g.size) return 'row ' + (ti + 1);
       if(ti < 2 * g.size) return 'column ' + (ti - g.size + 1);
@@ -1002,7 +1028,7 @@ const BingoCore = (function(){
 
   /* ---------- checking a card ---------- */
   function checkCard(card, pool, g, called, pattern){
-    const targets = PATTERNS[pattern].targets(g);
+    const targets = patOf(pattern).targets(g);
     const isCalled = i => card[i] < 0 || called.has(pool[card[i]].k);
     const isDecoy = i => card[i] >= 0 && !!pool[card[i]].decoy;
     let best = null, live = 0, toGo = Infinity;
@@ -1017,7 +1043,7 @@ const BingoCore = (function(){
 
   /* ---------- how long will a game take? (random call orders against the real cards) ---------- */
   function simulate(pool, cards, size, free, pattern, sims){
-    const g = geometry(size, free), targets = PATTERNS[pattern].targets(g);
+    const g = geometry(size, free), targets = patOf(pattern).targets(g);
     const A = []; pool.forEach((p, i) => { if(!p.decoy) A.push(i); });
     const ct = cards.map(c => targets.filter(t => !t.some(i => c[i] >= 0 && pool[c[i]].decoy)).map(t => t.map(i => c[i]).filter(x => x >= 0)));
     const winnable = ct.filter(x => x.length).length;
@@ -1283,7 +1309,7 @@ const BingoCore = (function(){
   }
 
   return { rat, rkey, rnum, normNum, parseNumber, valueInfo, parseItems, parseList, esc, renderMath, renderAnswer,
-    answerShape, makeRng, shuffle, choose, geometry, PATTERNS, PATTERN_ORDER, targetName, decoyLayouts,
+    answerShape, makeRng, shuffle, choose, geometry, PATTERNS, PATTERN_ORDER, patternShape, targetName, decoyLayouts,
     generateCards, analyseCards, checkCard, simulate, makeDecoys, cardSetKey,
     extractJson, readDraft, readDecoyReply, parseDelimited, readTable, toCsv, itemLine, sharePage };
 })();
@@ -1365,7 +1391,7 @@ function blankGame(name){
     itemsText:'', formulas:false, decoys:[], dopt:{ count:null, style:'mistakes', signs:false },
     set:{ size:5, free:true, count:30, d:null },
     cards:null,
-    play:{ pattern:'line', round:1, log:[], order:'shuffle', skip:true, strip:true, reveal:false, near:false, showDecoys:false },
+    play:{ pattern:'line', custom:null, overlay:{ on:false, fx:0.985, fy:0.08, s:16 }, round:1, log:[], order:'shuffle', skip:true, strip:true, reveal:false, near:false, showDecoys:false },
     print:{ per:2, title:true, name:true, decoys:false } };
 }
 const isStr = x => typeof x === 'string';
@@ -1402,6 +1428,14 @@ function normalizeGame(g){
   if(Number.isInteger(s.d) && s.d >= 0) out.set.d = s.d;
   const p = g.play || {};
   if(C.PATTERNS[p.pattern]) out.play.pattern = p.pattern;
+  const pc = p.custom;
+  if(pc && [3, 4, 5].includes(pc.size) && Array.isArray(pc.cells)){
+    const cells = C.patternShape('custom', pc.size, pc.cells);
+    if(cells.length) out.play.custom = { size:pc.size, cells };
+  }
+  if(p.pattern === 'custom' && out.play.custom) out.play.pattern = 'custom';
+  const ov = p.overlay, num = (x, a, b, d) => Number.isFinite(x) ? clamp(x, a, b) : d;
+  if(ov && typeof ov === 'object') out.play.overlay = { on:ov.on === true, fx:num(ov.fx, 0, 1, 0.985), fy:num(ov.fy, 0, 1, 0.08), s:num(ov.s, 8, 40, 16) };
   if(Number.isInteger(p.round) && p.round > 0) out.play.round = p.round;
   ['skip', 'strip', 'reveal', 'near', 'showDecoys'].forEach(k => { if(typeof p[k] === 'boolean') out.play[k] = p[k]; });
   if(p.order === 'order') out.play.order = 'order';
@@ -1538,9 +1572,17 @@ function analysis(){
   const val = C.analyseCards(cs.pool, cs.list, cs.size, cs.free);
   anCache = { sig, val }; return val;
 }
+// The pattern being played for: a built-in one, or the shape the teacher designed (only if it fits these cards).
+function customOk(){ const c = game.play.custom, cs = game.cards; return !!(c && cs && c.size === cs.size && c.cells.length); }
+function patKey(){ return game.play.pattern === 'custom' && customOk() ? 'custom' : (C.PATTERNS[game.play.pattern] ? game.play.pattern : 'line'); }
+function curPat(){
+  if(patKey() === 'custom'){ const cells = game.play.custom.cells; return { name:'Your pattern', hint:'the squares you picked', targets:() => [cells] }; }
+  return C.PATTERNS[patKey()];
+}
+function curShape(){ const k = patKey(); return C.patternShape(k, game.cards.size, k === 'custom' ? game.play.custom.cells : null); }
 function estimate(pattern){
-  const cs = game.cards, key = cardsSig(cs) + ':' + pattern;
-  if(!simCache.has(key)) simCache.set(key, C.simulate(cs.pool, cs.list, cs.size, cs.free, pattern, 300));
+  const cs = game.cards, key = cardsSig(cs) + ':' + (pattern === 'custom' ? 'custom:' + game.play.custom.cells.join(',') : pattern);
+  if(!simCache.has(key)) simCache.set(key, C.simulate(cs.pool, cs.list, cs.size, cs.free, pattern === 'custom' ? curPat() : pattern, 300));
   return simCache.get(key);
 }
 function geom(){ return C.geometry(game.cards.size, game.cards.free); }
@@ -1604,7 +1646,7 @@ function renderStatus(){
   if(cs){
     parts.push('<span class="dotline"></span><span class="stat"><b>' + cs.list.length + '</b> cards · ' + cs.size + '×' + cs.size + '</span>');
     const called = calledSet().size, total = cs.pool.filter(p => !p.decoy).length;
-    parts.push('<span class="dotline"></span><span class="stat">Round <b>' + game.play.round + '</b> · ' + esc(C.PATTERNS[game.play.pattern].name) + ' · called <b>' + called + '</b>/' + total + '</span>');
+    parts.push('<span class="dotline"></span><span class="stat">Round <b>' + game.play.round + '</b> · ' + esc(curPat().name) + ' · called <b>' + called + '</b>/' + total + '</span>');
   }
   parts.push('<span class="stamp' + (storageOk ? '' : ' warn') + '">' + (storageOk ? (saveTimer ? 'Saving…' : 'Saved in this browser') : 'Not saved: export a game file') + '</span>');
   $('statusbar').innerHTML = parts.join('');
@@ -2101,9 +2143,8 @@ function sortedPool(cs){
   const out = { real:val.filter(x => !x.p.decoy).sort(cmp), decoy:val.filter(x => x.p.decoy).sort(cmp) };
   numSortCache.set(key, out); return out;
 }
-function patMini(pattern, size){
-  const g = C.geometry(size, false), on = new Set([].concat(...C.PATTERNS[pattern].targets(g).slice(0, pattern === 'line' || pattern === 'row' ? 1 : pattern === 'col' ? 1 : 99)));
-  if(pattern === 'line'){ g.diags[0].forEach(i => on.add(i)); }
+function patMini(pattern, size, cells){
+  const on = new Set(C.patternShape(pattern, size, cells));
   let h = '<span class="patmini" style="grid-template-columns:repeat(' + size + ',5px)">';
   for(let i = 0; i < size * size; i++) h += '<i class="' + (on.has(i) ? 'on' : '') + '"></i>';
   return h + '</span>';
@@ -2123,24 +2164,27 @@ function renderPlay(){
   // pattern
   const sel = $('patSel');
   if(!sel.options.length || sel.dataset.size !== String(cs.size)){
-    sel.innerHTML = C.PATTERN_ORDER.map(k => { const P = C.PATTERNS[k], dis = P.minSize && cs.size < P.minSize; return '<option value="' + k + '"' + (dis ? ' disabled' : '') + '>' + esc(P.name) + ': ' + esc(P.hint) + (dis ? ' (not on 3×3)' : '') + '</option>'; }).join('');
+    sel.innerHTML = C.PATTERN_ORDER.map(k => { const P = C.PATTERNS[k], dis = P.minSize && cs.size < P.minSize; return '<option value="' + k + '"' + (dis ? ' disabled' : '') + '>' + esc(P.name) + ': ' + esc(P.hint) + (dis ? ' (not on 3×3)' : '') + '</option>'; }).join('') + '<option value="custom">Your own: the squares you pick</option>';
     sel.dataset.size = cs.size;
   }
-  if(C.PATTERNS[game.play.pattern].minSize > cs.size) game.play.pattern = 'line';
+  if(C.PATTERNS[game.play.pattern] && C.PATTERNS[game.play.pattern].minSize > cs.size) game.play.pattern = 'line';
+  if(game.play.pattern === 'custom' && !customOk()) game.play.pattern = 'line';
   sel.value = game.play.pattern;
   $('roundNo').textContent = game.play.round;
-  const est = estimate(game.play.pattern), P = C.PATTERNS[game.play.pattern];
+  $('patDesign').textContent = customOk() ? 'Edit your own pattern…' : 'Design your own…';
+  $('ovChk').checked = game.play.overlay.on; $('ovRow').hidden = !game.play.overlay.on; setVal($('ovSize'), game.play.overlay.s);
+  const est = estimate(patKey()), P = curPat();
   const w = $('patWarn');
   if(!est.winnable){ w.className = 'pwarn err'; w.textContent = 'No card can win ' + P.name + ': every card has decoys in the way. Pick another pattern.'; }
   else if(est.winnable < cs.list.length){ w.className = 'pwarn'; w.textContent = 'Only ' + est.winnable + ' of the ' + cs.list.length + ' cards can win ' + P.name + ' (decoys are in the way on the others).'; }
   else { w.className = 'pwarn'; w.textContent = ''; }
-  $('patEst').innerHTML = est.first ? patMini(game.play.pattern, cs.size) + 'The first BINGO usually comes after about <b>' + est.first + '</b> of ' + est.answers + ' answers' + (est.half ? '; half the cards by about <b>' + est.half + '</b>' : '') + '.' : '';
+  $('patEst').innerHTML = est.first ? patMini(patKey(), cs.size, game.play.custom && game.play.custom.cells) + 'The first BINGO usually comes after about <b>' + est.first + '</b> of ' + est.answers + ' answers' + (est.half ? '; half the cards by about <b>' + est.half + '</b>' : '') + '.' : '';
   // near
   $('nearChk').checked = game.play.near;
   const no = $('nearOut'); no.hidden = !game.play.near;
   if(game.play.near){
     const g = geom(), wins = [], one = [], two = [];
-    cs.list.forEach((c, n) => { const r = C.checkCard(c, cs.pool, g, called, game.play.pattern); if(r.win) wins.push(n + 1); else if(r.toGo === 1) one.push(n + 1); else if(r.toGo === 2) two.push(n + 1); });
+    cs.list.forEach((c, n) => { const r = C.checkCard(c, cs.pool, g, called, curPat()); if(r.win) wins.push(n + 1); else if(r.toGo === 1) one.push(n + 1); else if(r.toGo === 2) two.push(n + 1); });
     const fmt = a => a.length > 24 ? a.slice(0, 24).join(', ') + ' … (+' + (a.length - 24) + ')' : a.join(', ');
     no.innerHTML = (wins.length ? '<div class="win">BINGO: card' + (wins.length > 1 ? 's' : '') + ' <b>' + fmt(wins) + '</b></div>' : '') +
       (one.length ? '<div>1 to go: <b>' + fmt(one) + '</b></div>' : '') + (two.length ? '<div>2 to go: <b>' + fmt(two) + '</b></div>' : '') +
@@ -2172,7 +2216,10 @@ $('startBtn').addEventListener('click', nextFromPlay);
 $('undoBtn').addEventListener('click', undo);
 $('presentBtn').addEventListener('click', () => openPresent(false));
 $('newRound').addEventListener('click', newRound);
-$('patSel').addEventListener('change', e => { game.play.pattern = e.target.value; changed(); });
+$('patSel').addEventListener('change', e => {
+  if(e.target.value === 'custom' && !customOk()){ openDesigner(); return; }
+  game.play.pattern = e.target.value; changed();
+});
 $('orderSeg').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; game.play.order = b.dataset.v; changed(); });
 [['skipChk', 'skip'], ['stripChk', 'strip'], ['revealChk', 'reveal'], ['nearChk', 'near'], ['boardDecoys', 'showDecoys']].forEach(([id, k]) =>
   $(id).addEventListener('change', e => { game.play[k] = e.target.checked; changed(); }));
@@ -2186,7 +2233,7 @@ function openCheck(n){
   const cs = game.cards;
   openModal('<h2>Check a card</h2><form class="row" id="mCheckForm" autocomplete="off" style="margin-top:8px"><span class="lab">Card</span>' +
     '<input type="number" id="mCheckNo" min="1" max="' + cs.list.length + '" value="' + (n > 0 ? n : '') + '" aria-label="Card number">' +
-    '<button class="btn small primary" type="submit">Check</button><span class="hint" style="margin:0">Winning with <b>' + esc(C.PATTERNS[game.play.pattern].name) + '</b>: ' + esc(C.PATTERNS[game.play.pattern].hint) + '</span></form>' +
+    '<button class="btn small primary" type="submit">Check</button><span class="hint" style="margin:0">Winning with <b>' + esc(curPat().name) + '</b>: ' + esc(curPat().hint) + '</span></form>' +
     '<div id="mCheckOut"></div><div class="mfoot"><button class="btn primary" type="button" data-close>Close</button></div>', { wide:true });
   $('mCheckForm').addEventListener('submit', e => { e.preventDefault(); runCheck(parseInt($('mCheckNo').value, 10)); });
   if(n > 0) runCheck(n); else $('mCheckNo').focus();
@@ -2195,8 +2242,8 @@ function runCheck(n){
   const cs = game.cards, out = $('mCheckOut');
   if(!(n >= 1 && n <= cs.list.length)){ out.innerHTML = '<p class="verdict no">There is no card ' + (isNaN(n) ? '' : n) + '. The cards are numbered 1 to ' + cs.list.length + '.</p>'; return; }
   ui.check = String(n);
-  const g = geom(), called = calledSet(), pattern = game.play.pattern;
-  const r = C.checkCard(cs.list[n - 1], cs.pool, g, called, pattern), b = r.best;
+  const g = geom(), called = calledSet(), pattern = patKey();
+  const r = C.checkCard(cs.list[n - 1], cs.pool, g, called, curPat()), b = r.best;
   const place = C.targetName(pattern, g, b.ti);
   const nameOf = i => cs.pool[cs.list[n - 1][i]];
   let verdict, detail = '';
@@ -2205,7 +2252,7 @@ function runCheck(n){
     verdict = '<p class="verdict no">✗ Card ' + n + ' doesn’t have BINGO yet.</p>';
     const notCalled = b.missing.filter(i => !nameOf(i).decoy), decoys = b.missing.filter(i => nameOf(i).decoy);
     const li = [];
-    if(!r.live) li.push('This card can’t win ' + esc(C.PATTERNS[pattern].name) + ': it has decoys in the way.');
+    if(!r.live) li.push('This card can’t win ' + esc(curPat().name) + ': it has decoys in the way.');
     li.push('Closest: ' + esc(place) + ', with ' + plural(b.missing.length, 'square') + ' to go.');
     if(notCalled.length) li.push('Not called yet: <b>' + notCalled.map(i => RA(nameOf(i).a, nameOf(i).t)).join(', ') + '</b>.');
     decoys.forEach(i => { const p = nameOf(i); li.push('<b>' + RA(p.a, p.t) + '</b> was never an answer: it is a decoy' + (p.why ? ' (' + RM(p.why) + ')' : '') + '. If they crossed it off, which question did they get ' + RA(p.a, p.t) + ' for?'); });
@@ -2274,7 +2321,7 @@ function fitText(el, box, max, min){
 }
 function renderPresent(){
   const cs = game.cards; if(!cs){ closePresent(); return; }
-  const log = game.play.log, P = C.PATTERNS[game.play.pattern], byKey = new Map(cs.pool.map(p => [p.k, p]));
+  const log = game.play.log, P = curPat(), byKey = new Map(cs.pool.map(p => [p.k, p]));
   const e = ui.view >= 0 && ui.view < log.length ? log[ui.view] : null;
   $('pPat').textContent = 'Bingo · ' + P.name;
   $('pRight').textContent = calledSet().size + ' called';
@@ -2313,10 +2360,90 @@ function renderPresent(){
     strip.hidden = !sp.length;
     strip.innerHTML = sp.map(x => '<span class="' + (x.p.k === latest ? 'latest' : '') + '">' + RA(x.p.a, x.p.t) + '</span>').join('');
   } else strip.hidden = true;
+  renderOverlay();
   $('pBack').disabled = ui.view <= 0;
   $('pReveal').disabled = !(e && e.q) || game.play.reveal;
   $('pReveal').textContent = e && e.q && shownNow(e) && !game.play.reveal ? 'Hide' : 'Reveal';
 }
+/* ---------- the pattern on the projector ----------
+   A small picture of the winning shape in a corner of the full-screen caller (off until the teacher turns it on).
+   game.play.overlay: on, s (size, as % of the shorter side of the screen), fx and fy (where it sits, 0 to 1 of the room
+   it has to move in, so it stays on screen on any projector). Drag it to move it; drag its corner to resize. */
+function overlayBox(){
+  const o = game.play.overlay, W = window.innerWidth, H = window.innerHeight, px = Math.round(o.s / 100 * Math.min(W, H));
+  return { px, left:Math.round(o.fx * Math.max(0, W - px)), top:Math.round(o.fy * Math.max(0, H - px)) };
+}
+function placeOverlay(){
+  const el = $('pOverlay'), b = overlayBox();
+  el.style.width = el.style.height = b.px + 'px'; el.style.padding = Math.round(b.px * 0.07) + 'px';   // not %, which would follow the screen's width
+  el.style.left = b.left + 'px'; el.style.top = b.top + 'px';
+}
+function renderOverlay(){
+  const el = $('pOverlay'), o = game.play.overlay, cs = game.cards;
+  $('pPatBtn').textContent = o.on ? 'Hide pattern' : 'Show pattern';
+  el.hidden = !(o.on && cs && ui.present);
+  if(el.hidden) return;
+  const on = new Set(curShape()), n = cs.size;
+  let cells = ''; for(let i = 0; i < n * n; i++) cells += '<i' + (on.has(i) ? ' class="on"' : '') + '></i>';
+  el.innerHTML = '<div class="og" style="grid-template-columns:repeat(' + n + ',1fr);grid-template-rows:repeat(' + n + ',1fr);gap:' + (n > 4 ? 5 : 7) + '%">' + cells + '</div><span class="rz"></span>';
+  placeOverlay();
+}
+function toggleOverlay(){ game.play.overlay.on = !game.play.overlay.on; changed(); }
+(function(){
+  const el = $('pOverlay'); let m = null;
+  el.addEventListener('pointerdown', e => {
+    if(e.pointerType === 'mouse' && e.button !== 0) return;
+    m = { mode:e.target.closest('.rz') ? 'size' : 'move', x:e.clientX, y:e.clientY, b:overlayBox() };
+    try { el.setPointerCapture(e.pointerId); } catch(err){ /* fine */ }
+    el.classList.add('drag'); e.preventDefault();
+  });
+  el.addEventListener('pointermove', e => {
+    if(!m) return;
+    const o = game.play.overlay, W = window.innerWidth, H = window.innerHeight, dx = e.clientX - m.x, dy = e.clientY - m.y;
+    if(m.mode === 'move'){
+      o.fx = clamp((m.b.left + dx) / Math.max(1, W - m.b.px), 0, 1); o.fy = clamp((m.b.top + dy) / Math.max(1, H - m.b.px), 0, 1);
+    } else {
+      o.s = clamp((m.b.px + Math.max(dx, dy)) / Math.min(W, H) * 100, 8, 40);
+      const px = Math.round(o.s / 100 * Math.min(W, H));   // the top-left corner stays where it was
+      o.fx = clamp(m.b.left / Math.max(1, W - px), 0, 1); o.fy = clamp(m.b.top / Math.max(1, H - px), 0, 1);
+    }
+    placeOverlay();
+  });
+  const end = () => { if(!m) return; m = null; el.classList.remove('drag'); save(); };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+})();
+$('pPatBtn').addEventListener('click', e => { e.currentTarget.blur(); toggleOverlay(); });
+$('ovChk').addEventListener('change', e => { game.play.overlay.on = e.target.checked; changed(); });
+$('ovSize').addEventListener('input', e => { game.play.overlay.s = clamp(+e.target.value || 16, 8, 40); save(); });
+$('ovReset').addEventListener('click', () => { Object.assign(game.play.overlay, { fx:0.985, fy:0.08, s:16 }); changed(); });
+
+/* ---------- designing a winning pattern ---------- */
+let design = null;
+function openDesigner(){
+  const cs = game.cards; if(!cs) return;
+  const n = cs.size, free = cs.free && n % 2 === 1, centre = (n * n - 1) / 2;
+  design = { n, cells:new Set(curShape()) };   // start from the pattern being played, so it can be tweaked
+  let grid = '';
+  for(let i = 0; i < n * n; i++) grid += '<button type="button" data-cell="' + i + '" aria-pressed="' + design.cells.has(i) + '" aria-label="Row ' + (Math.floor(i / n) + 1) + ', column ' + (i % n + 1) + '">' + (free && i === centre ? '★' : '') + '</button>';
+  openModal('<h2>Design your own pattern</h2><p class="hint">Click the squares a card needs called to win. ' + (free ? 'The ★ is the FREE square: it counts as called already. ' : '') + 'Click again to take one off.</p>' +
+    '<div class="pdes" style="grid-template-columns:repeat(' + n + ',54px)">' + grid + '</div>' +
+    '<div class="mfoot"><button class="btn" type="button" data-pclear>Clear</button><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" data-puse>Use this pattern</button></div>');
+}
+function useDesign(){
+  const cs = game.cards, n = design.n, centre = cs.free && n % 2 === 1 ? (n * n - 1) / 2 : -1;
+  const cells = [...design.cells].sort((a, b) => a - b);
+  if(!cells.some(i => i !== centre)){ toast('Pick at least one square. (The FREE star counts as called already.)', 'warn'); return; }
+  game.play.custom = { size:n, cells }; game.play.pattern = 'custom'; design = null;
+  closeModal(null); changed();
+}
+$('modal').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b || !design) return;
+  if(b.dataset.cell !== undefined){ const i = +b.dataset.cell; if(design.cells.has(i)) design.cells.delete(i); else design.cells.add(i); b.setAttribute('aria-pressed', design.cells.has(i)); }
+  else if(b.hasAttribute('data-pclear')){ design.cells.clear(); $('modal').querySelectorAll('[data-cell]').forEach(x => x.setAttribute('aria-pressed', 'false')); }
+  else if(b.hasAttribute('data-puse')) useDesign();
+});
+$('patDesign').addEventListener('click', openDesigner);
+
 [['pNext', advance], ['pBack', back], ['pReveal', revealToggle], ['pFull', toggleFullscreen], ['pClose', closePresent]].forEach(([id, fn]) =>
   $(id).addEventListener('click', e => { e.currentTarget.blur(); fn(); }));
 window.addEventListener('resize', () => { if(ui.present) renderPresent(); });
@@ -2572,6 +2699,7 @@ document.addEventListener('keydown', e => {
     else if(k === 'z' || k === 'Z' || k === 'Backspace'){ e.preventDefault(); undo(); }
     else if(k === 'c' || k === 'C'){ e.preventDefault(); openCheck(0); }
     else if(k === 'f' || k === 'F'){ e.preventDefault(); toggleFullscreen(); }
+    else if(k === 'o' || k === 'O'){ e.preventDefault(); toggleOverlay(); }
     else if(k === 'Escape'){ e.preventDefault(); closePresent(); }
     return;
   }
