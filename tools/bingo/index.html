@@ -206,6 +206,8 @@
   .main{flex:1;display:flex;min-height:0;}
   .panel{width:340px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:14px 16px 20px;}
   .stage{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .startbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 16px;background:var(--accent-soft);border-bottom:1px solid #efcf9c;}
+  .startbar .btn.big{padding:10px 22px;}
   .stage-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--room-bg);}
   .board-scroll{flex:1;overflow:auto;padding:16px;}
   .pblock+.pblock{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
@@ -479,7 +481,9 @@
               <label class="check" id="freeWrap"><input type="checkbox" id="freeChk"> FREE centre</label>
             </div>
             <div class="row">
-              <label class="row" style="gap:6px;margin:0"><span class="lab">Number of cards</span><input type="number" id="cardCount" min="1" max="200"></label>
+              <span class="lab">Number of cards</span>
+              <div class="seg" id="countSeg" role="group" aria-label="Number of cards"><button type="button" data-v="30">30</button><button type="button" data-v="60">60</button></div>
+              <label class="row" style="gap:6px;margin:0"><span class="hint" style="margin:0">or other</span><input type="number" id="cardCount" min="1" max="200" aria-label="Other number of cards"></label>
             </div>
             <div class="slider-row" style="margin-top:12px">
               <div class="sl"><span>Decoys on each card: <b id="dPerVal">0</b> <span id="dPerAuto" class="hint" style="margin:0"></span></span><button type="button" id="dPerReset">Auto</button></div>
@@ -526,6 +530,10 @@
   <!-- ============ PLAY ============ -->
   <section class="view" id="view-play" hidden>
     <div class="page" id="playEmpty" hidden><div class="empty">Make the cards first (<b>Setup</b> → <b>Make cards</b>). Then call the questions here.</div></div>
+    <div class="startbar" id="startBar" hidden>
+      <div><b>Ready to play?</b> <span class="hint" style="margin:0">Start the game to show the first question full-screen. Press Space for each one after that.</span></div>
+      <button class="btn primary big" id="startBtn" type="button"><span class="ic">▶</span>Start game</button>
+    </div>
     <div class="main" id="playMain">
       <aside class="panel">
         <div class="pblock">
@@ -1631,6 +1639,7 @@ function renderSetup(){
   $('freeWrap').classList.toggle('dis', !odd);
   $('freeWrap').title = odd ? 'A free square in the middle that counts as already called' : 'Only odd-sized cards have a centre square';
   setVal($('cardCount'), game.set.count);
+  segSet($('countSeg'), game.set.count);
   const sl = $('dPer');
   sl.disabled = !p.canMake || p.dMax === p.dMin;
   sl.min = p.dMin; sl.max = p.dMax; sl.value = p.d;
@@ -1741,6 +1750,7 @@ $('dAdd').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDef
 $('formulaChk').addEventListener('change', e => { game.formulas = e.target.checked; changed(); });
 $('sizeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; game.set.size = +b.dataset.v; changed(); });
 $('freeChk').addEventListener('change', e => { game.set.free = e.target.checked; changed(); });
+$('countSeg').addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; game.set.count = +b.dataset.v; changed(); });
 $('cardCount').addEventListener('change', e => { const v = parseInt(e.target.value, 10); game.set.count = clamp(v > 0 ? v : 30, 1, MAX_CARDS); e.target.value = game.set.count; changed(); });
 $('dPer').addEventListener('input', e => { game.set.d = +e.target.value; changed(); });
 $('dPerReset').addEventListener('click', () => { game.set.d = null; changed(); });
@@ -2104,7 +2114,9 @@ function renderPlay(){
   if(!cs) return;
   const called = calledSet(), log = game.play.log, total = cs.pool.filter(p => !p.decoy).length;
   const asked = log.filter(e => e.i >= 0).length;
-  $('nextLabel').textContent = hasQuestions() ? 'Next question' : 'Call next answer';
+  const fresh = !log.length;
+  $('nextLabel').textContent = fresh ? '▶ Start game' : hasQuestions() ? 'Next question' : 'Call next answer';
+  $('startBar').hidden = !fresh; $('startBtn').disabled = pickNext() < 0;
   $('nextBtn').disabled = pickNext() < 0;
   $('undoBtn').disabled = !log.length;
   $('calledCount').innerHTML = '<b>' + called.size + '</b> of ' + total + ' answers called' + (hasQuestions() ? ' · ' + plural(asked, 'question') + ' asked of ' + cs.items.length : '');
@@ -2156,6 +2168,7 @@ function renderPlay(){
   $('tiles').innerHTML = sp.real.map(tile).join('') + (game.play.showDecoys ? sp.decoy.map(tile).join('') : '');
 }
 $('nextBtn').addEventListener('click', nextFromPlay);
+$('startBtn').addEventListener('click', nextFromPlay);
 $('undoBtn').addEventListener('click', undo);
 $('presentBtn').addEventListener('click', () => openPresent(false));
 $('newRound').addEventListener('click', newRound);
