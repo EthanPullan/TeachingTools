@@ -158,6 +158,34 @@
     background:var(--panel-2);line-height:1.5;font-family:var(--mono);font-size:13px;}
   .pieces li{padding:6px 6px 6px 10px;}
   .pieces .btn{flex:none;}
+
+  /* student names — one per file, in page order */
+  select{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel-2);width:100%;}
+  .row{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+  .note-warn{color:var(--accent-deep);font-weight:600;}
+  /* file-name builder (same pattern as the EAL Benchmark): the chip order is the name */
+  .fn-drop{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:40px;
+    border:1px dashed var(--line);border-radius:10px;background:var(--panel-2);padding:6px;}
+  .fn-drop.over{border-color:var(--accent);background:var(--accent-soft);}
+  .fn-empty{margin:0;padding:3px 4px;font-size:12px;color:var(--muted);}
+  .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);
+    border-radius:999px;padding:4px 9px;font-size:12.5px;font-weight:600;color:var(--ink);
+    cursor:grab;user-select:none;font-family:inherit;}
+  .chip:active{cursor:grabbing;} .chip.dragging{opacity:.4;}
+  .chip[disabled]{opacity:.38;cursor:not-allowed;}
+  .chip .x{border:none;background:none;padding:0 1px;font-size:14px;line-height:1;cursor:pointer;color:var(--muted);}
+  .fn-drop .chip{background:var(--board);border-color:var(--board);color:#fff;}
+  .fn-drop .chip .x{color:rgba(255,255,255,.75);} .fn-drop .chip .x:hover{color:#fff;}
+  .chip input.chip-text{width:11ch;border:none;border-radius:6px;padding:2px 6px;
+    background:rgba(255,255,255,.2);color:#fff;font-size:12px;font-weight:600;font-family:inherit;}
+  .chip .chip-text::placeholder{color:rgba(255,255,255,.6);}
+  .fn-pal{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .fn-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:10px;}
+  .fn-foot .field-label{margin:0;}
+  .fn-foot select{width:auto;}
+  .fn-foot .check{margin-top:0;}
+  .fn-preview{margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:6px 9px;
+    background:var(--panel-2);font-family:var(--mono);font-size:12px;word-break:break-all;}
 </style>
 </head>
 <body>
@@ -215,8 +243,43 @@
 
       <section class="section">
         <h2 class="section-title">3 · File names</h2>
-        <label class="field-label" for="base">Start every name with</label>
+        <label class="field-label" for="base" id="baseLabel">Start every name with</label>
         <input type="text" id="base" placeholder="name" autocomplete="off" spellcheck="false">
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">4 · Student names <small style="text-transform:none;letter-spacing:0;font-weight:500;">(optional)</small></h2>
+        <div id="classPick" hidden>
+          <label class="field-label" for="classSelect">From a class list</label>
+          <select id="classSelect"></select>
+        </div>
+        <label class="field-label" for="names" style="margin-top:10px;">One name per file, in page order</label>
+        <textarea class="rng" id="names" placeholder="Ada Lovelace&#10;Alan Turing&#10;Grace Hopper" spellcheck="false" autocomplete="off"></textarea>
+        <div class="row">
+          <button class="btn small" id="namesUpload" type="button"><span class="ic">📄</span>Upload list…</button>
+          <button class="btn small" id="namesClear" type="button" hidden>Clear</button>
+          <input type="file" id="namesFile" accept=".txt,.csv,.tsv,text/plain,text/csv" hidden>
+        </div>
+        <p class="hint" id="namesNote">File 1 gets the first name, file 2 the second, and so on. Upload a .txt or .csv, or paste a column from a spreadsheet.</p>
+
+        <div id="builder" hidden style="margin-top:14px;">
+          <span class="field-label">Name each file</span>
+          <div class="fn-drop" id="fnDrop" role="list" aria-label="File name parts, in order"></div>
+          <div class="fn-pal" id="fnPal" aria-label="Parts you can add"></div>
+          <p class="hint">Drag the parts into order. Add <b>Text</b> for words before or after the name, like “Unit 3 Test”. With a part focused, ← and → move it and Delete removes it.</p>
+          <div class="fn-foot">
+            <label class="field-label" for="fnSep">Separator</label>
+            <select id="fnSep">
+              <option value="">none</option>
+              <option value=" ">space</option>
+              <option value="_">underscore</option>
+              <option value="-">hyphen</option>
+              <option value=" - ">spaced hyphen</option>
+            </select>
+            <label class="check"><input type="checkbox" id="fnCaps">CAPITALS for names</label>
+          </div>
+          <div class="fn-preview" id="fnPreview" aria-live="polite"></div>
+        </div>
       </section>
 
       <section class="section">
@@ -309,7 +372,7 @@
   const COLORS = ['#1f3d35', '#2f6f9f', '#b9781f', '#7b5ea7', '#3f9e6b', '#5c7c8a'];
   const BOX = { w:132, h:150 }, THUMB_PX = 2;
   const state = { file:null, mode:'every', n:2, ranges:'', combine:false, cuts:new Set(), base:'', baseTouched:false,
-                  pieces:[], error:'' };
+                  pieces:[], error:'', names:[] };
   const tiles = [];
 
   /* ---------- working out the pieces ---------- */
@@ -361,10 +424,93 @@
     return p.length === 1 ? 'page ' + (p[0] + 1) : contiguous ? 'pages ' + (p[0] + 1) + '-' + (p[p.length - 1] + 1) : 'selected pages';
   };
 
+  /* ---------- student names ----------
+     An optional list of names, one per output file in order: file 1 gets the first name, and so on.
+     When a file has a name, the file-name builder below turns it into the file's name; files past the
+     end of the list fall back to the usual page-range names. */
+
+  // One name per line. A spreadsheet paste brings tabs; ID/ASN-only cells (all digits) are skipped.
+  // "Lovelace, Ada" (a single comma between two single words) is read as Last, First.
+  function parseNames(text){
+    const out = [];
+    for (const line of text.split(/\r?\n/)){
+      const cells = line.split('\t').map(c => c.trim().replace(/^"(.*)"$/, '$1').trim()).filter(c => c && !/^\d+$/.test(c));
+      let name = cells[0] || '';
+      const m = /^([^\s,]+)\s*,\s*([^\s,]+)$/.exec(name);
+      if (m) name = m[2] + ' ' + m[1];
+      name = name.replace(/\s+/g, ' ').trim();
+      if (name) out.push(name);
+    }
+    return out;
+  }
+  // A CSV with a header row (a cell containing "name") is turned into "First Last" lines from its
+  // first/last columns or its name column. Anything else is used as plain lines.
+  function namesFromFile(text){
+    text = text.replace(/^﻿/, '');
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return '';
+    const delim = lines[0].includes('\t') ? '\t' : lines[0].includes(',') ? ',' : null;
+    if (!delim) return lines.join('\n');
+    const split = l => {   // enough CSV for a class list: quoted fields, "" for a quote
+      const cells = []; let cur = '', q = false;
+      for (let i = 0; i < l.length; i++){
+        const ch = l[i];
+        if (q){ if (ch === '"' && l[i + 1] === '"'){ cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+        else if (ch === '"') q = true; else if (ch === delim){ cells.push(cur.trim()); cur = ''; } else cur += ch;
+      }
+      cells.push(cur.trim()); return cells;
+    };
+    const head = split(lines[0]).map(c => c.toLowerCase());
+    const fi = head.findIndex(c => /first|given|preferred/.test(c)), li = head.findIndex(c => /last|surname|family/.test(c));
+    const ni = head.findIndex(c => /name/.test(c));
+    if (fi < 0 && li < 0 && ni < 0) return lines.join('\n');
+    return lines.slice(1).map(split).map(r =>
+      fi >= 0 && li >= 0 ? (r[fi] || '') + ' ' + (r[li] || '') : (r[ni >= 0 ? ni : Math.max(fi, li)] || '')
+    ).map(s => s.trim()).filter(Boolean).join('\n');
+  }
+  function nameParts(full){
+    const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+    return parts.length ? { first:parts[0], last:parts[parts.length - 1] } : null;
+  }
+
+  // The file-name builder: the order of the chips *is* the template. A preference, so it's remembered.
+  const FN_LS = 'teachingtools:pdfSplitter:filename';
+  const FN_PARTS = {
+    first:   { label:'First',   get:np => np.first },
+    last:    { label:'Last',    get:np => np.last },
+    initial: { label:'Initial', get:np => np.first.charAt(0), title:'First letter of the first name' },
+    text:    { label:'Text',    custom:true },
+  };
+  const FN_ORDER = ['first', 'last', 'initial', 'text'];
+  const fn = { parts:[{ id:'first', value:'' }, { id:'last', value:'' }], sep:' ', caps:false };
+  let fnDrag = null;
+  function saveFn(){
+    try { localStorage.setItem(FN_LS, JSON.stringify({ version:1, sep:fn.sep, caps:fn.caps, parts:fn.parts })); }
+    catch(e){ /* storage unavailable — the builder still works for this visit */ }
+  }
+  function loadFn(){
+    try {
+      const d = JSON.parse(localStorage.getItem(FN_LS) || 'null');
+      if (!d || !Array.isArray(d.parts)) return;
+      fn.parts = d.parts.filter(p => p && FN_PARTS[p.id]).map(p => ({ id:p.id, value:typeof p.value === 'string' ? p.value : '' }));
+      fn.sep = typeof d.sep === 'string' ? d.sep : ' ';
+      fn.caps = !!d.caps;
+    } catch(e){ /* unreadable — keep the defaults */ }
+  }
+  // "Ada Lovelace" → e.g. "Unit 3 Test Ada Lovelace", or "" if the template gives nothing.
+  function studentStem(full){
+    const np = nameParts(full); if (!np) return '';
+    const cap = s => fn.caps ? s.toUpperCase() : s;
+    const vals = fn.parts.map(t => FN_PARTS[t.id].custom ? t.value : cap(FN_PARTS[t.id].get(np))).map(safeName).filter(Boolean);
+    return safeName(vals.join(fn.sep));
+  }
+
   function nameThem(pieces){
     const base = safeName(state.base) || 'split', used = new Map();
+    pieces.forEach((pc, k) => { pc.student = state.names[k] || ''; });
     for (const pc of pieces){
-      const stem = pc.title ? base + ' - ' + safeName(pc.title) : pc.combined ? base + ' (extract)' : base + ' (' + pagesLabel(pc.pages) + ')';
+      const stem = (pc.student && studentStem(pc.student))
+        || (pc.title ? base + ' - ' + safeName(pc.title) : pc.combined ? base + ' (extract)' : base + ' (' + pagesLabel(pc.pages) + ')');
       const k = used.get(stem) || 0; used.set(stem, k + 1);
       pc.name = (k ? stem + ' (' + (k + 1) + ')' : stem) + '.pdf';
     }
@@ -433,7 +579,7 @@
       el.classList.toggle('out', k < 0);
       el.style.setProperty('--fc', k < 0 ? 'var(--line)' : COLORS[k % COLORS.length]);
       const lab = el.querySelector('.plabel'), first = pc && pc.pages[0] === i && owner[i] === k;
-      lab.hidden = !first; if (first) lab.textContent = 'File ' + (k + 1);
+      lab.hidden = !first; if (first){ lab.textContent = pc.student || 'File ' + (k + 1); lab.title = lab.textContent; }
       el.classList.toggle('cut', state.mode === 'pick' && state.cuts.has(i));
     });
     $('scroller').classList.toggle('pick', state.mode === 'pick');
@@ -461,7 +607,174 @@
     $('marksHint').textContent = !state.file ? 'Splits wherever the PDF’s own bookmarks start a new section.'
       : state.file.marks.length ? 'Splits at each of this PDF’s ' + state.file.marks.length + ' top-level bookmarks. Each file is named after its bookmark.'
       : 'This PDF has no bookmarks. (The PDF Arranger can add them.)';
+    renderNames();
   }
+
+  function renderNames(){
+    const n = state.names.length, files = state.pieces.length, has = n > 0;
+    $('builder').hidden = !has; $('namesClear').hidden = !has && !$('names').value;
+    $('baseLabel').textContent = has ? 'Files without a student name start with' : 'Start every name with';
+    const note = $('namesNote');
+    let warn = false, msg;
+    if (!has) msg = 'File 1 gets the first name, file 2 the second, and so on. Upload a .txt or .csv, or paste a column from a spreadsheet.';
+    else if (!state.file || !files) msg = n + (n === 1 ? ' name.' : ' names.') + ' Choose a PDF to match them to files.';
+    else if (n === files) msg = n + ' names for ' + files + ' files: one each.';
+    else if (n < files){
+      warn = true;
+      msg = 'Only ' + n + (n === 1 ? ' name' : ' names') + ' for ' + files + ' files. ' +
+        (files - n === 1 ? 'File ' + files + ' keeps' : 'Files ' + (n + 1) + '–' + files + ' keep') + ' the usual page-range name. Check the split and the order of the names.';
+    } else {
+      warn = true;
+      msg = n + ' names for only ' + files + (files === 1 ? ' file' : ' files') + '. The last ' + (n - files === 1 ? 'name' : (n - files) + ' names') +
+        ' (' + state.names.slice(files, files + 3).join(', ') + (n - files > 3 ? '…' : '') + ') won’t be used. Check the split and the order of the names.';
+    }
+    note.textContent = msg; note.classList.toggle('note-warn', warn);
+    if (has){
+      const stem = studentStem(state.names[0]);
+      $('fnPreview').textContent = stem ? stem + '.pdf' : 'Add First, Last or Text to build the name';
+    }
+  }
+
+  /* ---------- file-name builder ---------- */
+
+  function fnCommit(focusIndex){
+    renderFnParts(); renderFnPalette(); saveFn(); render();
+    if (focusIndex != null){ const c = $('fnDrop').querySelectorAll('.chip')[focusIndex]; if (c) c.focus(); }
+  }
+  function addFnPart(id, at){
+    const def = FN_PARTS[id]; if (!def) return;
+    if (!def.custom && fn.parts.some(t => t.id === id)) return;   // one of each name part
+    const i = at == null || at > fn.parts.length ? fn.parts.length : Math.max(0, at);
+    fn.parts.splice(i, 0, { id, value:'' });
+    fnCommit(i);
+    if (def.custom){ const inp = $('fnDrop').querySelectorAll('.chip')[i].querySelector('input'); if (inp) inp.focus(); }
+  }
+  function renderFnParts(){
+    const drop = $('fnDrop'); drop.innerHTML = '';
+    if (!fn.parts.length){
+      const p = document.createElement('p'); p.className = 'fn-empty'; p.textContent = 'Drag a part here, or click one below.';
+      drop.appendChild(p); return;
+    }
+    fn.parts.forEach((t, i) => {
+      const def = FN_PARTS[t.id];
+      const chip = document.createElement('span');
+      chip.className = 'chip'; chip.draggable = true; chip.tabIndex = 0; chip.setAttribute('role', 'listitem');
+      chip.setAttribute('aria-label', def.label + ', position ' + (i + 1) + ' of ' + fn.parts.length);
+      if (def.custom){
+        const inp = document.createElement('input');
+        inp.type = 'text'; inp.className = 'chip-text'; inp.value = t.value; inp.placeholder = 'text'; inp.draggable = false;
+        inp.setAttribute('aria-label', 'File name text'); inp.spellcheck = false;
+        inp.addEventListener('mousedown', () => { chip.draggable = false; });   // let the field take the pointer
+        inp.addEventListener('blur', () => { chip.draggable = true; });
+        inp.addEventListener('input', () => { t.value = inp.value; saveFn(); render(); });
+        chip.appendChild(inp);
+      } else {
+        chip.appendChild(document.createTextNode(def.label));
+        if (def.title) chip.title = def.title;
+      }
+      const x = document.createElement('button');
+      x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'Remove ' + def.label);
+      x.addEventListener('click', e => { e.stopPropagation(); fn.parts.splice(i, 1); fnCommit(); });
+      chip.appendChild(x);
+      chip.addEventListener('dragstart', e => {
+        fnDrag = { from:'template', index:i }; chip.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', t.id); } catch(err){}
+      });
+      chip.addEventListener('dragend', () => { chip.classList.remove('dragging'); fnDrag = null; });
+      chip.addEventListener('keydown', e => {
+        if (e.target.tagName === 'INPUT') return;   // keys type into a Text part, not move it
+        if (e.key === 'ArrowLeft' && i > 0){ e.preventDefault(); fn.parts.splice(i - 1, 0, fn.parts.splice(i, 1)[0]); fnCommit(i - 1); }
+        else if (e.key === 'ArrowRight' && i < fn.parts.length - 1){ e.preventDefault(); fn.parts.splice(i + 1, 0, fn.parts.splice(i, 1)[0]); fnCommit(i + 1); }
+        else if (e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); fn.parts.splice(i, 1); fnCommit(Math.max(0, i - 1)); }
+      });
+      drop.appendChild(chip);
+    });
+  }
+  function renderFnPalette(){
+    const pal = $('fnPal'); pal.innerHTML = '';
+    for (const id of FN_ORDER){
+      const def = FN_PARTS[id], used = !def.custom && fn.parts.some(t => t.id === id);
+      const chip = document.createElement('button');
+      chip.type = 'button'; chip.className = 'chip'; chip.textContent = '+ ' + def.label;
+      chip.disabled = used; chip.draggable = !used;
+      chip.title = used ? def.label + ' is already in the name' : def.title || 'Add ' + def.label;
+      chip.addEventListener('click', () => addFnPart(id));
+      chip.addEventListener('dragstart', e => {
+        if (used){ e.preventDefault(); return; }
+        fnDrag = { from:'palette', id }; e.dataTransfer.effectAllowed = 'copy';
+        try { e.dataTransfer.setData('text/plain', id); } catch(err){}
+      });
+      chip.addEventListener('dragend', () => { fnDrag = null; });
+      pal.appendChild(chip);
+    }
+  }
+  // Chips wrap, so compare against each chip's own line before its horizontal midpoint.
+  function fnDropIndex(x, y){
+    const chips = $('fnDrop').querySelectorAll('.chip');
+    for (let i = 0; i < chips.length; i++){ const r = chips[i].getBoundingClientRect(); if (y < r.bottom && x < r.left + r.width / 2) return i; }
+    return chips.length;
+  }
+  $('fnDrop').addEventListener('dragover', e => {
+    if (!fnDrag) return;
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer.dropEffect = fnDrag.from === 'palette' ? 'copy' : 'move';
+    $('fnDrop').classList.add('over');
+  });
+  $('fnDrop').addEventListener('dragleave', e => { if (!$('fnDrop').contains(e.relatedTarget)) $('fnDrop').classList.remove('over'); });
+  $('fnDrop').addEventListener('drop', e => {
+    if (!fnDrag) return;
+    e.preventDefault(); e.stopPropagation(); $('fnDrop').classList.remove('over');
+    const at = fnDropIndex(e.clientX, e.clientY);
+    if (fnDrag.from === 'palette') addFnPart(fnDrag.id, at);
+    else {
+      const [moved] = fn.parts.splice(fnDrag.index, 1);
+      const to = Math.max(0, Math.min(at > fnDrag.index ? at - 1 : at, fn.parts.length));
+      fn.parts.splice(to, 0, moved); fnCommit(to);
+    }
+    fnDrag = null;
+  });
+  // Dragging a chip back onto the palette takes it out of the name.
+  $('fnPal').addEventListener('dragover', e => { if (fnDrag && fnDrag.from === 'template'){ e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; } });
+  $('fnPal').addEventListener('drop', e => {
+    if (!fnDrag || fnDrag.from !== 'template') return;
+    e.preventDefault(); e.stopPropagation(); fn.parts.splice(fnDrag.index, 1); fnCommit(); fnDrag = null;
+  });
+  $('fnSep').onchange = e => { fn.sep = e.target.value; saveFn(); render(); };
+  $('fnCaps').onchange = e => { fn.caps = e.target.checked; saveFn(); render(); };
+
+  /* ---------- names: typed, uploaded, or from a saved Class List ---------- */
+
+  // Read-only use of the shared Class Lists other tools save in this browser.
+  let rosters = [];
+  function loadRosters(){
+    rosters = [];
+    try {
+      const d = JSON.parse(localStorage.getItem('teachingtools:rosters') || 'null');
+      if (d && Array.isArray(d.classes)) rosters = d.classes.map(c => ({
+        name:c && c.name != null ? String(c.name).trim() : '',
+        students:c && Array.isArray(c.students) ? c.students.map(s => String(s).trim()).filter(Boolean) : [],
+      })).filter(c => c.name && c.students.length);
+    } catch(e){ /* unreadable — no class lists */ }
+    const sel = $('classSelect'); sel.innerHTML = '<option value="">— Choose a class —</option>';
+    rosters.forEach((c, i) => { const o = document.createElement('option'); o.value = i; o.textContent = c.name + ' (' + c.students.length + ')'; sel.appendChild(o); });
+    $('classPick').hidden = !rosters.length;   // with no saved lists it's just "type or upload"
+  }
+  function setNamesText(text){ $('names').value = text; state.names = parseNames(text); render(); }
+  $('names').oninput = e => { state.names = parseNames(e.target.value); $('classSelect').value = ''; render(); };
+  $('classSelect').onchange = e => { const c = rosters[e.target.value]; if (c) setNamesText(c.students.join('\n')); };
+  $('namesClear').onclick = () => { $('classSelect').value = ''; setNamesText(''); };
+  async function loadNamesFile(file){
+    if (!file) return;
+    try {
+      const text = namesFromFile(await file.text());
+      if (!parseNames(text).length){ toast('No names found in ' + file.name + '.', 'err'); return; }
+      $('classSelect').value = ''; setNamesText(text);
+      toast('Loaded ' + state.names.length + ' names from ' + file.name + '.', 'ok');
+    } catch(e){ toast('Couldn’t read ' + file.name + '.', 'err'); }
+  }
+  $('namesUpload').onclick = () => $('namesFile').click();
+  $('namesFile').onchange = e => { loadNamesFile(e.target.files[0]); e.target.value = ''; };
+  const isNameList = f => /\.(txt|csv|tsv)$/i.test(f.name) || /^text\//.test(f.type);
 
   /* ---------- building the output ---------- */
 
@@ -566,9 +879,13 @@
   window.addEventListener('dragleave', e => { if (e.relatedTarget === null) $('drop').classList.remove('over'); });
   window.addEventListener('drop', e => {
     if (!hasFiles(e)) return;
-    e.preventDefault(); $('drop').classList.remove('over'); loadFile(e.dataTransfer.files[0]);
+    e.preventDefault(); $('drop').classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f && isNameList(f)) loadNamesFile(f); else loadFile(f);
   });
 
+  loadFn(); $('fnSep').value = fn.sep; $('fnCaps').checked = fn.caps;
+  renderFnParts(); renderFnPalette(); loadRosters();
   render();
 })();
 </script>
