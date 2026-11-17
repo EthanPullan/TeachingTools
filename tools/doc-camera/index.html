@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Show your document camera (or any webcam) full screen for the class, rotate, mirror, zoom and freeze the picture, save snapshots to a gallery, and compare a saved snapshot side by side with the live feed.">
+<title>Document Camera</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;overflow:hidden;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+  [hidden]{display:none !important;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  /* toolbar */
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex:none;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;white-space:nowrap;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+  .group{display:flex;align-items:center;gap:6px;}
+  .vsep{width:1px;height:24px;background:var(--line);}
+  .field-lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  select{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel-2);max-width:220px;}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;white-space:nowrap;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.danger{color:var(--danger);border-color:var(--danger-soft);background:#fff;}
+  .btn.danger:hover{background:var(--danger-soft);}
+  .btn.small{padding:5px 9px;font-size:12px;border-radius:7px;}
+  .btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:15px;line-height:1;}
+  .btn.icon{padding:7px 9px;min-width:34px;justify-content:center;}
+  .zoom-val{font-family:var(--mono);font-size:12px;min-width:54px;justify-content:center;padding:7px 6px;}
+
+  .live-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.09em;
+    text-transform:uppercase;border:1px solid var(--line);border-radius:20px;padding:3px 10px;background:var(--panel-2);
+    color:var(--muted);white-space:nowrap;}
+  .live-pill i{width:8px;height:8px;border-radius:50%;background:var(--line);}
+  .live-pill.live{color:var(--ink);} .live-pill.live i{background:var(--accent);animation:pulse 1.6s ease-in-out infinite;}
+  .live-pill.frozen{color:var(--together);background:var(--together-soft);border-color:var(--together-soft);}
+  .live-pill.frozen i{background:var(--together);border-radius:1px;}
+  @keyframes pulse{50%{opacity:.35;}}
+
+  /* stage bar (only while viewing or comparing a snapshot) */
+  .stage-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line);flex:none;}
+  .stage-bar .sb-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);}
+  .stage-bar .when{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--board);}
+  .count-pill{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:20px;padding:2px 9px;color:var(--muted);}
+
+  /* stage */
+  .stage{flex:1;min-height:0;position:relative;background:var(--ink);display:grid;grid-template-columns:1fr;
+    grid-template-rows:1fr;gap:6px;padding:0;}
+  .stage.compare{grid-template-columns:1fr 1fr;}
+  @media (max-aspect-ratio:1/1){ .stage.compare{grid-template-columns:1fr;grid-template-rows:1fr 1fr;} }
+  .pane{position:relative;min-width:0;min-height:0;overflow:hidden;}
+  .pane canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+  .pane.zoomed canvas{cursor:grab;} .pane.dragging canvas{cursor:grabbing;}
+  .pane video{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none;}
+  .stage.swap #paneSnap{order:2;}
+  .chip{position:absolute;left:10px;bottom:10px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    background:rgba(22,36,31,.72);color:#fff;border-radius:20px;padding:3px 10px;pointer-events:none;display:none;}
+  .chip .when{font-family:var(--mono);font-weight:600;letter-spacing:0;}
+  .stage.compare .chip{display:block;}
+  .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;}
+  .flash.go{animation:flash .38s ease-out;}
+  @keyframes flash{from{opacity:.75;}to{opacity:0;}}
+
+  .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .msg-card{background:var(--panel);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px 24px;max-width:460px;
+    text-align:center;}
+  .msg-card .big{font-size:30px;line-height:1;margin-bottom:10px;}
+  .msg-card h2{margin:0 0 6px;font-size:16px;}
+  .msg-card p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.55;}
+
+  /* snapshot strip */
+  .strip{flex:none;display:flex;align-items:stretch;gap:12px;background:var(--panel);border-top:1px solid var(--line);
+    padding:9px 16px;height:124px;}
+  .strip-head{flex:none;display:flex;flex-direction:column;gap:6px;width:150px;}
+  .strip-head .section-title{display:flex;align-items:center;gap:7px;}
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0;}
+  .thumbs{flex:1;min-width:0;display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 4px;}
+  .thumb{position:relative;flex:none;width:136px;display:flex;flex-direction:column;gap:3px;}
+  .thumb > button.open{border:1px solid var(--line);border-radius:8px;padding:0;background:var(--ink);cursor:pointer;
+    width:136px;height:78px;overflow:hidden;box-shadow:var(--shadow-sm);transition:border-color .12s;}
+  .thumb > button.open:hover{border-color:var(--board);}
+  .thumb.sel > button.open{box-shadow:0 0 0 2px var(--accent);border-color:var(--accent);}
+  .thumb img{width:100%;height:100%;object-fit:contain;display:block;}
+  .thumb .t{font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--muted);display:flex;gap:6px;}
+  .thumb .acts{position:absolute;top:4px;right:4px;display:flex;gap:3px;opacity:0;transition:opacity .12s;}
+  .thumb:hover .acts,.thumb:focus-within .acts{opacity:1;}
+  .thumb .acts button{border:none;border-radius:6px;background:rgba(255,255,255,.92);color:var(--ink);cursor:pointer;
+    font-size:12px;line-height:1;padding:4px 5px;box-shadow:var(--shadow-sm);}
+  .thumb .acts button:hover{background:#fff;color:var(--board);}
+  .thumb .acts button.x:hover{color:var(--danger);background:var(--danger-soft);}
+  .pop{animation:pop .26s cubic-bezier(.2,.7,.3,1) both;}
+  @keyframes pop{from{opacity:0;transform:translateY(5px) scale(.95);}to{opacity:1;transform:none;}}
+  .empty{flex:1;border:1px dashed var(--line);border-radius:10px;padding:12px 16px;color:var(--muted);font-size:12.5px;
+    line-height:1.55;background:var(--panel-2);display:flex;align-items:center;}
+
+  /* status bar */
+  .statusbar{display:flex;align-items:center;gap:7px;padding:0 16px;height:34px;flex:none;overflow:hidden;white-space:nowrap;
+    border-top:1px solid var(--line);background:var(--panel);font-size:12.5px;color:var(--muted);}
+  .statusbar b{font-family:var(--mono);font-weight:600;color:var(--ink);}
+  .statusbar .cam-name{max-width:260px;overflow:hidden;text-overflow:ellipsis;font-family:var(--sans);}
+  .statusbar .dotline{width:1px;height:16px;background:var(--line);}
+  .statusbar .stamp{margin-left:auto;font-family:var(--mono);font-size:11px;}
+  kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;
+    padding:0 4px;background:var(--panel-2);color:var(--ink);}
+
+  /* clean (projection) mode: only the picture, plus a small floating bar */
+  .mini{position:fixed;right:14px;bottom:14px;z-index:50;display:none;gap:6px;background:rgba(255,255,255,.94);
+    border-radius:12px;padding:6px;box-shadow:0 8px 24px rgba(20,40,33,.25);opacity:.35;transition:opacity .2s;}
+  .mini:hover,.mini:focus-within{opacity:1;}
+  body.clean .toolbar,body.clean .stage-bar,body.clean .strip,body.clean .statusbar{display:none !important;}
+  body.clean .mini{display:flex;}
+
+  /* toasts */
+  .toast-wrap{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:1000;
+    display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;}
+  .toast{background:var(--ink);color:#fff;padding:10px 15px;border-radius:10px;font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,560px);display:flex;align-items:center;gap:12px;
+    border-left:3px solid var(--accent);animation:tin .2s ease both;pointer-events:auto;}
+  .toast.err{border-left-color:var(--danger);} .toast.ok{border-left-color:var(--ok);}
+  .toast button{border:1px solid rgba(255,255,255,.35);background:none;color:#fff;border-radius:7px;padding:3px 9px;
+    font-weight:600;font-size:12px;cursor:pointer;}
+  .toast button:hover{background:rgba(255,255,255,.12);}
+  @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  @media (max-width:1520px){ .brand small{display:none;} }
+  @media (max-width:1320px){ .field-lab,.btn .lab{display:none;} }
+  @media (max-width:880px){
+    .strip-head{width:112px;}
+    .statusbar .stamp,.hide-narrow{display:none;}
+    .btn .lab{display:none;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .pop,.flash.go,.live-pill.live i{animation:none;} .btn:active{transform:none;} *{scroll-behavior:auto;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <div class="brand"><span class="mark"></span>Document Camera <small>live view &amp; snapshots</small></div>
+    <div class="group">
+      <label class="field-lab" for="camSel">Camera</label>
+      <select id="camSel" title="Choose which camera to show"><option>Looking for cameras…</option></select>
+      <select id="qualSel" title="Picture quality. 4K only works if the camera supports it; the status bar shows what the camera actually gives.">
+        <option value="720">720p</option>
+        <option value="1080">1080p</option>
+        <option value="2160">4K</option>
+      </select>
+    </div>
+    <div class="spacer"></div>
+    <span class="live-pill" id="livePill"><i></i><span>Starting</span></span>
+    <div class="group">
+      <button class="btn icon" id="rotBtn" title="Rotate 90° clockwise (R)"><span class="ic">↻</span><span class="lab">Rotate</span></button>
+      <button class="btn icon" id="mirBtn" title="Mirror left–right (M)"><span class="ic">⇋</span><span class="lab">Mirror</span></button>
+    </div>
+    <div class="vsep hide-narrow"></div>
+    <div class="group" title="Zoom: scroll on the picture, or drag to move around when zoomed in">
+      <button class="btn icon" id="zoomOut" title="Zoom out (−)">−</button>
+      <button class="btn zoom-val" id="zoomVal" title="Back to the whole picture (0)">100%</button>
+      <button class="btn icon" id="zoomIn" title="Zoom in (+)">+</button>
+    </div>
+    <div class="vsep hide-narrow"></div>
+    <button class="btn" id="freezeBtn" title="Freeze the picture so you can move the page (P)"><span class="ic">❚❚</span><span class="lab">Freeze</span></button>
+    <button class="btn primary" id="snapBtn" title="Save this moment (Space)"><span class="ic">📸</span>Snapshot</button>
+    <div class="vsep hide-narrow"></div>
+    <button class="btn icon" id="stripBtn" title="Show or hide the snapshots strip"><span class="ic">🖼</span></button>
+    <button class="btn icon" id="cleanBtn" title="Hide the controls, show only the picture (H)"><span class="ic">👁</span></button>
+    <button class="btn icon" id="fsBtn" title="Fullscreen (F)"><span class="ic">⛶</span></button>
+  </header>
+
+  <div class="stage-bar" id="viewBar" hidden>
+    <span class="sb-title" id="vbTitle">Snapshot</span>
+    <span class="when" id="vbWhen"></span>
+    <span class="count-pill" id="vbCount"></span>
+    <button class="btn small" id="vbPrev" title="Newer snapshot (←)">‹</button>
+    <button class="btn small" id="vbNext" title="Older snapshot (→)">›</button>
+    <button class="btn small" id="vbCompare" title="Show this snapshot beside the live picture (C)"><span class="ic">◫</span>Compare with live</button>
+    <button class="btn small" id="vbSwap" title="Swap left and right"><span class="ic">⇄</span>Swap sides</button>
+    <button class="btn small" id="vbDownload"><span class="ic">⭳</span>Download</button>
+    <button class="btn small danger" id="vbDelete"><span class="ic">🗑</span>Delete</button>
+    <div class="spacer"></div>
+    <button class="btn small primary" id="vbBack" title="Back to the live picture (Esc)"><span class="ic">●</span>Back to live</button>
+  </div>
+
+  <main class="stage" id="stage">
+    <section class="pane" id="paneSnap" hidden>
+      <canvas id="cvSnap"></canvas>
+      <span class="chip">Snapshot <span class="when" id="chipWhen"></span></span>
+    </section>
+    <section class="pane" id="paneLive">
+      <video id="video" playsinline muted></video>
+      <canvas id="cvLive"></canvas>
+      <div class="flash" id="flash"></div>
+      <span class="chip" id="liveChip">Live</span>
+      <div class="msg" id="msg" hidden>
+        <div class="msg-card">
+          <div class="big" id="msgIc">📷</div>
+          <h2 id="msgTitle">Starting camera…</h2>
+          <p id="msgText"></p>
+          <button class="btn primary" id="msgBtn" hidden>Try again</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="strip" id="strip">
+    <div class="strip-head">
+      <h3 class="section-title">Snapshots <span class="count-pill" id="snapCount">0</span></h3>
+      <button class="btn small" id="dlAll" title="Download every snapshot in one .zip file"><span class="ic">⭳</span>Download all</button>
+      <button class="btn small danger" id="clearAll"><span class="ic">🗑</span>Clear all</button>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+  </section>
+
+  <footer class="statusbar">
+    <span class="cam-name" id="stCam">No camera</span>
+    <span class="dotline"></span><span><b id="stRes">—</b></span>
+    <span class="dotline"></span><span>Zoom <b id="stZoom">100%</b></span>
+    <span class="dotline"></span><span><b id="stSnaps">0</b> saved <span id="stStore"></span></span>
+    <span class="stamp"><kbd>Space</kbd> snapshot · <kbd>P</kbd> freeze · <kbd>R</kbd> rotate · <kbd>M</kbd> mirror · <kbd>+</kbd><kbd>−</kbd> zoom · <kbd>C</kbd> compare · <kbd>H</kbd> hide · <kbd>F</kbd> fullscreen</span>
+  </footer>
+</div>
+
+<div class="mini" id="mini">
+  <button class="btn primary icon" id="miniSnap" title="Snapshot (Space)">📸</button>
+  <button class="btn icon" id="miniFreeze" title="Freeze (P)">❚❚</button>
+  <button class="btn icon" id="miniOut" title="Zoom out (−)">−</button>
+  <button class="btn icon" id="miniIn" title="Zoom in (+)">+</button>
+  <button class="btn icon" id="miniShow" title="Show the controls (H)">👁</button>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<!-- Pure logic (no DOM): view geometry, file names and the .zip writer. Unit-tested by doc-camera.test.js. -->
+<script id="core">
+const QUALITIES = { '720': { w: 1280, h: 720 }, '1080': { w: 1920, h: 1080 }, '2160': { w: 3840, h: 2160 } };
+const ZMIN = 1, ZMAX = 8;
+
+function normRot(r) { return (((Math.round((+r || 0) / 90) * 90) % 360) + 360) % 360; }
+/* Size of the picture once it is turned: a 90° or 270° turn swaps width and height. */
+function oriented(sw, sh, rot) { return normRot(rot) % 180 ? { w: sh, h: sw } : { w: sw, h: sh }; }
+function clampZoom(z) { return Math.min(ZMAX, Math.max(ZMIN, +z || 1)); }
+/* cx, cy are the centre of what you see, as a fraction of the turned picture. Kept inside the picture. */
+function clampCenter(c, z) { const m = 0.5 / z; return Math.min(1 - m, Math.max(m, c)); }
+function normView(v) {
+  v = v || {}; const zoom = clampZoom(v.zoom);
+  return { rot: normRot(v.rot), flip: !!v.flip, zoom,
+    cx: clampCenter(v.cx == null ? 0.5 : +v.cx, zoom), cy: clampCenter(v.cy == null ? 0.5 : +v.cy, zoom) };
+}
+/* The part of the turned picture that is on screen, in its pixels. */
+function visibleRect(sw, sh, view) {
+  const v = normView(view), o = oriented(sw, sh, v.rot), w = o.w / v.zoom, h = o.h / v.zoom;
+  return { ow: o.w, oh: o.h, x: v.cx * o.w - w / 2, y: v.cy * o.h - h / 2, w, h };
+}
+/* Largest w×h box that fits in W×H, centred. */
+function fitRect(w, h, W, H) {
+  if (!(w > 0 && h > 0 && W > 0 && H > 0)) return { x: 0, y: 0, w: 0, h: 0, s: 0 };
+  const s = Math.min(W / w, H / h), dw = w * s, dh = h * s;
+  return { x: (W - dw) / 2, y: (H - dh) / 2, w: dw, h: dh, s };
+}
+/* Draw src (sw×sh) turned, mirrored and zoomed by view into the dest box. Mirror is left–right as you see it. */
+function drawView(ctx, src, sw, sh, view, dest) {
+  const v = normView(view), r = visibleRect(sw, sh, v), s = dest.w / r.w;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(dest.x, dest.y, dest.w, dest.h); ctx.clip();
+  ctx.translate(dest.x, dest.y); ctx.scale(s, s); ctx.translate(-r.x, -r.y);
+  ctx.translate(r.ow / 2, r.oh / 2);
+  if (v.flip) ctx.scale(-1, 1);
+  ctx.rotate(v.rot * Math.PI / 180);
+  ctx.drawImage(src, -sw / 2, -sh / 2, sw, sh);
+  ctx.restore();
+}
+/* Zoom by factor, keeping the point at (nx, ny) of the visible box (0–1) where it is. */
+function zoomAt(view, factor, nx, ny) {
+  const v = normView(view), z2 = clampZoom(v.zoom * factor);
+  if (nx == null) nx = 0.5; if (ny == null) ny = 0.5;
+  const px = v.cx - 0.5 / v.zoom + nx / v.zoom, py = v.cy - 0.5 / v.zoom + ny / v.zoom;
+  return normView({ ...v, zoom: z2, cx: px - (nx - 0.5) / z2, cy: py - (ny - 0.5) / z2 });
+}
+/* Drag the picture by a fraction of the visible box (dragging right shows more of the left). */
+function panBy(view, dxFrac, dyFrac) {
+  const v = normView(view);
+  return normView({ ...v, cx: v.cx - dxFrac / v.zoom, cy: v.cy - dyFrac / v.zoom });
+}
+/* A snapshot keeps the camera's own pixels for the part you can see. */
+function snapshotSize(sw, sh, view) {
+  const r = visibleRect(sw, sh, view);
+  return { w: Math.max(1, Math.round(r.w)), h: Math.max(1, Math.round(r.h)) };
+}
+/* Built-in laptop cameras, so a plugged-in document camera can be preferred on first use. */
+function looksBuiltIn(label) { return /integrated|built-?in|facetime|front camera|internal|laptop/i.test(label || ''); }
+function pickPreferred(devices, currentLabel) {
+  if (!looksBuiltIn(currentLabel)) return null;
+  const alt = (devices || []).find(d => d.label && !looksBuiltIn(d.label));
+  return alt ? alt.deviceId : null;
+}
+
+const pad2 = n => String(n).padStart(2, '0');
+function stamp(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + '_' + pad2(d.getHours()) + '-' + pad2(d.getMinutes()) + '-' + pad2(d.getSeconds()); }
+function fileName(d) { return 'doc-camera_' + stamp(d) + '.jpg'; }
+/* Names for a set of files, adding -2, -3… when two snapshots share a second. */
+function uniqueNames(names) {
+  const seen = new Map();
+  return names.map(n => {
+    const k = n.toLowerCase(), c = (seen.get(k) || 0) + 1; seen.set(k, c);
+    if (c === 1) return n;
+    const dot = n.lastIndexOf('.');
+    return dot > 0 ? n.slice(0, dot) + '-' + c + n.slice(dot) : n + '-' + c;
+  });
+}
+
+/* Minimal .zip writer (files stored, not compressed — JPEGs do not shrink anyway). Returns Uint8Array parts for a Blob. */
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function dosTime(d) { return ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xFFFF; }
+function dosDate(d) { return (((Math.max(1980, d.getFullYear()) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xFFFF; }
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), data = f.data, crc = crc32(data), t = dosTime(f.date), dt = dosDate(f.date);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, t, true); lh.setUint16(12, dt, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, t, true); ch.setUint16(14, dt, true); ch.setUint32(16, crc, true);
+    ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, name.length, true);
+    ch.setUint32(42, off, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    off += 30 + name.length + data.length;
+  }
+  const cdSize = central.reduce((s, p) => s + p.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, off, true);
+  return [...parts, ...central, new Uint8Array(end.buffer)];
+}
+</script>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const LS_KEY = 'teachingtools:doc-camera';
+  const DEFAULT_PREFS = { quality: '1080', deviceId: null, views: {}, strip: true };
+  let prefs;
+  try { prefs = Object.assign({}, DEFAULT_PREFS, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); } catch (e) { prefs = { ...DEFAULT_PREFS }; }
+  if (!prefs.views || typeof prefs.views !== 'object') prefs.views = {};
+  const hadSavedCamera = !!prefs.deviceId;
+  function savePrefs() { try { localStorage.setItem(LS_KEY, JSON.stringify(prefs)); } catch (e) {} }
+
+  const video = $('#video'), stageEl = $('#stage');
+  const state = {
+    stream: null, track: null, deviceId: null, devices: [], frozen: null,
+    live: normView({}), snapView: normView({}),
+    mode: 'live', snapId: null, snapImg: null, snapImgId: null, swap: false,
+    snaps: [], memoryOnly: false, startToken: 0, autoSwitched: false
+  };
+
+  /* ---------- toasts ---------- */
+  function toast(text, kind, action) {
+    const el = document.createElement('div'); el.className = 'toast' + (kind ? ' ' + kind : '');
+    const span = document.createElement('span'); span.textContent = text; el.appendChild(span);
+    if (action) { const b = document.createElement('button'); b.textContent = action.label; b.onclick = () => { action.run(); el.remove(); }; el.appendChild(b); }
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), action ? 6500 : 3600);
+  }
+
+  /* ---------- storage (IndexedDB: snapshots stay after the page is closed) ---------- */
+  const DB = {
+    db: null,
+    open() {
+      return new Promise((res, rej) => {
+        if (!window.indexedDB) return rej(new Error('no indexedDB'));
+        const r = indexedDB.open('teachingtools-doc-camera', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('snaps', { keyPath: 'id' });
+        r.onsuccess = () => { this.db = r.result; res(); };
+        r.onerror = () => rej(r.error);
+      });
+    },
+    run(mode, fn) {
+      return new Promise((res, rej) => {
+        if (!this.db) return rej(new Error('closed'));
+        const t = this.db.transaction('snaps', mode), req = fn(t.objectStore('snaps'));
+        t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+      });
+    },
+    all() { return this.run('readonly', s => s.getAll()); },
+    put(r) { return this.run('readwrite', s => s.put(r)); },
+    del(id) { return this.run('readwrite', s => s.delete(id)); },
+    clear() { return this.run('readwrite', s => s.clear()); }
+  };
+  async function persist(rec) {
+    if (state.memoryOnly) return;
+    try { await DB.put(rec); }
+    catch (e) {
+      state.memoryOnly = true;
+      toast('This browser would not keep the snapshot after closing — download the ones you need.', 'err');
+    }
+  }
+
+  /* ---------- panes ---------- */
+  const panes = {
+    live: {
+      el: $('#paneLive'), canvas: $('#cvLive'), dirty: true, dest: null,
+      get source() { return state.frozen || (state.stream && video.readyState >= 2 && video.videoWidth ? video : null); },
+      get size() { const s = this.source; return !s ? [0, 0] : s === video ? [video.videoWidth, video.videoHeight] : [s.width, s.height]; },
+      get view() { return state.live; }, set view(v) { state.live = v; }
+    },
+    snap: {
+      el: $('#paneSnap'), canvas: $('#cvSnap'), dirty: true, dest: null,
+      get source() { return state.snapImgId === state.snapId ? state.snapImg : null; },
+      get size() { const s = this.source; return s ? [s.width, s.height] : [0, 0]; },
+      get view() { return state.snapView; }, set view(v) { state.snapView = v; }
+    }
+  };
+  const visiblePanes = () => state.mode === 'live' ? [panes.live] : state.mode === 'view' ? [panes.snap] : [panes.snap, panes.live];
+  const focusPane = () => state.mode === 'view' ? panes.snap : panes.live;
+
+  function drawPane(p) {
+    const c = p.canvas, dpr = window.devicePixelRatio || 1;
+    const W = Math.round(c.clientWidth * dpr), H = Math.round(c.clientHeight * dpr);
+    if (!W || !H) return;
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const ctx = c.getContext('2d'); ctx.clearRect(0, 0, W, H);
+    const src = p.source, [sw, sh] = p.size;
+    if (!src || !sw || !sh) { p.dest = null; return; }
+    const v = normView(p.view), o = oriented(sw, sh, v.rot), d = fitRect(o.w, o.h, W, H);
+    p.dest = { x: d.x / dpr, y: d.y / dpr, w: d.w / dpr, h: d.h / dpr };
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    drawView(ctx, src, sw, sh, v, d);
+  }
+  /* Redraw the live pane once per camera frame where the browser can tell us, else every animation frame. */
+  const hasVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+  let vfcGen = 0;
+  function armFrames() {
+    if (!hasVFC) return;
+    const g = ++vfcGen;
+    const cb = () => { if (g !== vfcGen) return; panes.live.dirty = true; video.requestVideoFrameCallback(cb); };
+    video.requestVideoFrameCallback(cb);
+  }
+  function loop() {
+    for (const p of visiblePanes()) {
+      const liveMoving = p === panes.live && !state.frozen && state.stream && !hasVFC;
+      if (p.dirty || liveMoving) { p.dirty = false; drawPane(p); }
+    }
+    requestAnimationFrame(loop);
+  }
+  const redrawAll = () => { panes.live.dirty = true; panes.snap.dirty = true; };
+  new ResizeObserver(redrawAll).observe(stageEl);
+  window.addEventListener('resize', redrawAll);
+
+  /* ---------- camera ---------- */
+  const MSGS = {
+    starting: ['📷', 'Starting camera…', 'If your browser asks, choose Allow so the tool can show your document camera.', false],
+    denied: ['🔒', 'Camera access is blocked', 'Allow the camera for this page (look for the camera or lock icon in the address bar), then press Try again.', true],
+    notfound: ['🔌', 'No camera found', 'Plug in the document camera — it will start on its own, or press Try again.', true],
+    busy: ['⏳', 'The camera is busy', 'Another app may be using it (Zoom, Teams, or the camera’s own software). Close that app, then press Try again.', true],
+    ended: ['🔌', 'The camera was disconnected', 'Plug it back in — it will start on its own, or press Try again.', true],
+    unsupported: ['⚠️', 'This browser can’t open the camera here', 'Open the tool in Chrome or Edge, or from the Teaching Tools website instead of a downloaded file.', false],
+    failed: ['⚠️', 'The camera didn’t start', 'Check the camera is plugged in and not open in another app, then press Try again.', true]
+  };
+  let msgKind = null;
+  function setMsg(kind, extra) {
+    msgKind = kind;
+    $('#msg').hidden = !kind;
+    if (kind) {
+      const [ic, title, text, retry] = MSGS[kind];
+      $('#msgIc').textContent = ic; $('#msgTitle').textContent = title;
+      $('#msgText').textContent = extra ? (text ? text + ' ' : '') + extra : text;
+      $('#msgBtn').hidden = !retry;
+    }
+    updateUI();
+  }
+  function stopStream() {
+    if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+    state.stream = null; state.track = null; video.srcObject = null;
+  }
+  async function startCamera(deviceId) {
+    const token = ++state.startToken;
+    stopStream(); state.frozen = null; redrawAll();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setMsg('unsupported'); return; }
+    setMsg('starting');
+    const q = QUALITIES[prefs.quality] || QUALITIES['1080'];
+    const vc = { width: { ideal: q.w }, height: { ideal: q.h } };
+    if (deviceId) vc.deviceId = { exact: deviceId }; else if (prefs.deviceId) vc.deviceId = { ideal: prefs.deviceId };
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: vc, audio: false }); }
+    catch (e) {
+      if (token !== state.startToken) return;
+      if (deviceId && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError')) return startCamera(null);
+      const n = e && e.name;
+      setMsg(n === 'NotAllowedError' || n === 'SecurityError' ? 'denied'
+        : n === 'NotFoundError' || n === 'OverconstrainedError' ? 'notfound'
+        : n === 'NotReadableError' || n === 'AbortError' ? 'busy' : 'failed', n === undefined ? '' : '(' + (e.message || n) + ')');
+      refreshDevices();
+      return;
+    }
+    if (token !== state.startToken) { stream.getTracks().forEach(t => t.stop()); return; }
+    state.stream = stream; state.track = stream.getVideoTracks()[0];
+    const settings = state.track.getSettings ? state.track.getSettings() : {};
+    state.deviceId = settings.deviceId || deviceId || null;
+    state.track.addEventListener('ended', () => { if (state.stream === stream) { stopStream(); setMsg('ended'); refreshDevices(); } });
+    video.srcObject = stream;
+    video.onloadedmetadata = () => { panes.live.dirty = true; updateUI(); };
+    try { await video.play(); } catch (e) {}
+    armFrames();
+    const saved = state.deviceId && prefs.views[state.deviceId];
+    state.live = normView({ rot: saved ? saved.rot : 0, flip: saved ? saved.flip : false });
+    if (state.deviceId) { prefs.deviceId = state.deviceId; savePrefs(); }
+    await refreshDevices();
+    if (token !== state.startToken) return;
+    if (!hadSavedCamera && !state.autoSwitched) {
+      state.autoSwitched = true;
+      const alt = pickPreferred(state.devices, state.track.label);
+      if (alt && alt !== state.deviceId) return startCamera(alt);
+    }
+    setMsg(null);
+  }
+  async function refreshDevices() {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      state.devices = all.filter(d => d.kind === 'videoinput');
+    } catch (e) { state.devices = []; }
+    const sel = $('#camSel'); sel.innerHTML = '';
+    if (!state.devices.length) { sel.add(new Option('No camera found', '')); sel.disabled = true; }
+    else {
+      sel.disabled = false;
+      state.devices.forEach((d, i) => sel.add(new Option(d.label || 'Camera ' + (i + 1), d.deviceId)));
+      if (state.deviceId) sel.value = state.deviceId;
+    }
+    updateUI();
+  }
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', async () => {
+      await refreshDevices();
+      if (!state.stream && (msgKind === 'notfound' || msgKind === 'ended') && state.devices.length) startCamera(null);
+    });
+  }
+  $('#camSel').onchange = e => { if (e.target.value) { prefs.deviceId = e.target.value; savePrefs(); startCamera(e.target.value); } };
+  $('#qualSel').value = QUALITIES[prefs.quality] ? prefs.quality : '1080';
+  $('#qualSel').onchange = e => { prefs.quality = e.target.value; savePrefs(); startCamera(state.deviceId); };
+  $('#msgBtn').onclick = () => startCamera(null);
+
+  /* ---------- live controls ---------- */
+  function setLive(v, remember) {
+    state.live = normView(v); panes.live.dirty = true;
+    if (remember && state.deviceId) { prefs.views[state.deviceId] = { rot: state.live.rot, flip: state.live.flip }; savePrefs(); }
+    updateUI();
+  }
+  const rotate = () => setLive({ ...state.live, rot: state.live.rot + 90, cx: 0.5, cy: 0.5 }, true);
+  const mirror = () => setLive({ ...state.live, flip: !state.live.flip, cx: 1 - state.live.cx }, true);
+  function setPaneView(p, v) { p.view = normView(v); p.dirty = true; updateUI(); }
+  const zoomBy = f => { const p = focusPane(); setPaneView(p, zoomAt(p.view, f)); };
+  const zoomReset = () => { const p = focusPane(); setPaneView(p, { ...p.view, zoom: 1 }); };
+  function toggleFreeze() {
+    if (state.frozen) { state.frozen = null; }
+    else {
+      if (!state.stream || !video.videoWidth) { toast('There is no live picture to freeze yet.', 'err'); return; }
+      const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight;
+      c.getContext('2d').drawImage(video, 0, 0); state.frozen = c;
+    }
+    panes.live.dirty = true; updateUI();
+  }
+
+  /* pointer: scroll to zoom, drag to move when zoomed, double-click for 2× / whole picture */
+  function localPoint(p, e) {
+    const r = p.canvas.getBoundingClientRect(), d = p.dest;
+    if (!d) return [0.5, 0.5];
+    return [Math.min(1, Math.max(0, (e.clientX - r.left - d.x) / d.w)), Math.min(1, Math.max(0, (e.clientY - r.top - d.y) / d.h))];
+  }
+  for (const p of [panes.live, panes.snap]) {
+    const c = p.canvas; let drag = null;
+    c.addEventListener('wheel', e => {
+      if (!p.dest) return; e.preventDefault();
+      const [nx, ny] = localPoint(p, e), dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      setPaneView(p, zoomAt(p.view, Math.exp(-dy * 0.0018), nx, ny));
+    }, { passive: false });
+    c.addEventListener('pointerdown', e => {
+      if (!p.dest || p.view.zoom <= 1) return;
+      drag = { x: e.clientX, y: e.clientY }; c.setPointerCapture(e.pointerId); p.el.classList.add('dragging');
+    });
+    c.addEventListener('pointermove', e => {
+      if (!drag || !p.dest) return;
+      const dx = (e.clientX - drag.x) / p.dest.w, dy = (e.clientY - drag.y) / p.dest.h;
+      drag = { x: e.clientX, y: e.clientY }; setPaneView(p, panBy(p.view, dx, dy));
+    });
+    const end = () => { drag = null; p.el.classList.remove('dragging'); };
+    c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+    c.addEventListener('dblclick', e => {
+      if (!p.dest) return;
+      const [nx, ny] = localPoint(p, e);
+      setPaneView(p, p.view.zoom > 1 ? { ...p.view, zoom: 1 } : zoomAt(p.view, 2, nx, ny));
+    });
+  }
+
+  /* ---------- snapshots ---------- */
+  const toBlob = (c, type, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), type, q));
+  function flash() { const f = $('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
+  async function takeSnapshot() {
+    const p = panes.live, src = p.source;
+    if (!src) { toast('There is no camera picture to save yet.', 'err'); return; }
+    const [sw, sh] = p.size, v = normView(state.live), sz = snapshotSize(sw, sh, v);
+    const c = document.createElement('canvas'); c.width = sz.w; c.height = sz.h;
+    const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    drawView(ctx, src, sw, sh, v, { x: 0, y: 0, w: sz.w, h: sz.h });
+    flash();
+    const tf = fitRect(sz.w, sz.h, 320, 180), tc = document.createElement('canvas');
+    tc.width = Math.max(1, Math.round(tf.w)); tc.height = Math.max(1, Math.round(tf.h));
+    const tctx = tc.getContext('2d'); tctx.imageSmoothingQuality = 'high'; tctx.drawImage(c, 0, 0, tc.width, tc.height);
+    const [blob, thumb] = await Promise.all([toBlob(c, 'image/jpeg', 0.92), toBlob(tc, 'image/jpeg', 0.8)]);
+    const rec = { id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8), created: Date.now(), w: sz.w, h: sz.h, blob, thumb };
+    state.snaps.unshift(rec); renderStrip(true); updateUI();
+    await persist(rec);
+    if (navigator.storage && navigator.storage.persist && state.snaps.length === 1) navigator.storage.persist().catch(() => {});
+    updateStorage();
+  }
+  const snapIndex = id => state.snaps.findIndex(s => s.id === id);
+  const getSnap = id => state.snaps.find(s => s.id === id);
+  /* Links to thumbnails live only for this page visit, so they are kept here, not on the saved record. */
+  const thumbUrls = new Map();
+  const thumbUrl = rec => thumbUrls.get(rec.id) || (thumbUrls.set(rec.id, URL.createObjectURL(rec.thumb || rec.blob)), thumbUrls.get(rec.id));
+  const dropThumbUrl = id => { const u = thumbUrls.get(id); if (u) { URL.revokeObjectURL(u); thumbUrls.delete(id); } };
+  async function loadSnapImage(rec) {
+    if (state.snapImgId === rec.id) return;
+    let img;
+    try { img = await createImageBitmap(rec.blob); }
+    catch (e) {
+      img = await new Promise((res, rej) => { const i = new Image(); const u = URL.createObjectURL(rec.blob); i.onload = () => { URL.revokeObjectURL(u); res(i); }; i.onerror = rej; i.src = u; });
+    }
+    if (state.snapId !== rec.id) { if (img.close) img.close(); return; }
+    if (state.snapImg && state.snapImg.close) state.snapImg.close();
+    state.snapImg = img; state.snapImgId = rec.id; panes.snap.dirty = true;
+  }
+  async function showSnap(id, mode) {
+    const rec = getSnap(id); if (!rec) return;
+    if (state.snapId !== id) state.snapView = normView({});
+    state.snapId = id; setMode(mode || (state.mode === 'compare' ? 'compare' : 'view'));
+    await loadSnapImage(rec); updateUI();
+  }
+  function setMode(m) {
+    state.mode = m;
+    if (m === 'live') { state.snapId = null; state.swap = false; }
+    redrawAll(); renderStrip(); updateUI();
+  }
+  function stepSnap(dir) {
+    if (!state.snapId) return;
+    const i = snapIndex(state.snapId), j = i + dir;
+    if (j >= 0 && j < state.snaps.length) showSnap(state.snaps[j].id);
+  }
+  function download(blob, name) {
+    const u = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
+  }
+  const downloadSnap = rec => download(rec.blob, fileName(new Date(rec.created)));
+  async function deleteSnap(id) {
+    const i = snapIndex(id); if (i < 0) return;
+    const [rec] = state.snaps.splice(i, 1);
+    if (state.snapId === id) {
+      const next = state.snaps[Math.min(i, state.snaps.length - 1)];
+      if (next && state.mode === 'view') showSnap(next.id); else setMode('live');
+    }
+    renderStrip(); updateUI();
+    if (!state.memoryOnly) { try { await DB.del(id); } catch (e) {} }
+    updateStorage();
+    toast('Snapshot deleted.', '', { label: 'Undo', run: async () => {
+      state.snaps.push(rec); state.snaps.sort((a, b) => b.created - a.created);
+      renderStrip(); updateUI(); await persist(rec); updateStorage();
+    } });
+  }
+  async function downloadAll() {
+    if (!state.snaps.length) return;
+    if (state.snaps.length === 1) { downloadSnap(state.snaps[0]); return; }
+    const btn = $('#dlAll'); btn.disabled = true;
+    try {
+      const ordered = state.snaps.slice().sort((a, b) => a.created - b.created);
+      const names = uniqueNames(ordered.map(r => fileName(new Date(r.created))));
+      const files = [];
+      for (let i = 0; i < ordered.length; i++) files.push({ name: names[i], date: new Date(ordered[i].created), data: new Uint8Array(await ordered[i].blob.arrayBuffer()) });
+      download(new Blob(makeZip(files), { type: 'application/zip' }), 'doc-camera-snapshots_' + stamp(new Date()).slice(0, 10) + '.zip');
+    } catch (e) { toast('Could not make the .zip file: ' + (e.message || e), 'err'); }
+    btn.disabled = false;
+  }
+  async function clearAll() {
+    if (!state.snaps.length) return;
+    if (!confirm('Delete all ' + state.snaps.length + ' snapshots from this computer? This can’t be undone — download any you want to keep first.')) return;
+    state.snaps.forEach(r => dropThumbUrl(r.id));
+    state.snaps = []; setMode('live');
+    if (!state.memoryOnly) { try { await DB.clear(); } catch (e) {} }
+    renderStrip(); updateUI(); updateStorage();
+  }
+
+  /* ---------- strip ---------- */
+  function fmtTime(ts) { const d = new Date(ts); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
+  function fmtDay(ts) {
+    const d = new Date(ts), now = new Date();
+    if (d.toDateString() === now.toDateString()) return 'today';
+    return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  function renderStrip(popFirst) {
+    const box = $('#thumbs'); box.innerHTML = '';
+    if (!state.snaps.length) {
+      box.innerHTML = '<div class="empty"><span>No snapshots yet. Press <b>Snapshot</b> or <kbd>Space</kbd> to save what is on screen — rotation, mirror and zoom included. Snapshots stay on this computer until you delete them.</span></div>';
+      return;
+    }
+    state.snaps.forEach((rec, i) => {
+      const t = document.createElement('div');
+      t.className = 'thumb' + (rec.id === state.snapId ? ' sel' : '') + (popFirst && i === 0 ? ' pop' : '');
+      const open = document.createElement('button'); open.className = 'open';
+      open.title = 'Show this snapshot'; open.setAttribute('aria-label', 'Snapshot from ' + fmtTime(rec.created) + ' ' + fmtDay(rec.created));
+      const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; img.src = thumbUrl(rec); open.appendChild(img);
+      open.onclick = () => (state.snapId === rec.id && state.mode === 'view') ? setMode('live') : showSnap(rec.id);
+      const lab = document.createElement('div'); lab.className = 't';
+      lab.innerHTML = '<span>' + fmtTime(rec.created) + '</span><span>' + fmtDay(rec.created) + '</span>';
+      const acts = document.createElement('div'); acts.className = 'acts';
+      const mk = (txt, title, fn, cls) => { const b = document.createElement('button'); b.textContent = txt; b.title = title; if (cls) b.className = cls; b.onclick = e => { e.stopPropagation(); fn(); }; acts.appendChild(b); };
+      mk('◫', 'Compare with live', () => showSnap(rec.id, 'compare'));
+      mk('⭳', 'Download', () => downloadSnap(rec));
+      mk('✕', 'Delete', () => deleteSnap(rec.id), 'x');
+      t.append(open, lab, acts); box.appendChild(t);
+    });
+    if (popFirst) box.scrollLeft = 0;
+    const sel = box.querySelector('.thumb.sel'); if (sel && !popFirst) sel.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+  async function updateStorage() {
+    const el = $('#stStore');
+    if (state.memoryOnly) { el.textContent = '(not kept after closing)'; return; }
+    if (!navigator.storage || !navigator.storage.estimate) { el.textContent = ''; return; }
+    try {
+      const { usage } = await navigator.storage.estimate();
+      el.textContent = state.snaps.length && usage ? '· ' + (usage / 1048576 < 10 ? (usage / 1048576).toFixed(1) : Math.round(usage / 1048576)) + ' MB on this computer' : '';
+    } catch (e) { el.textContent = ''; }
+  }
+
+  /* ---------- UI state ---------- */
+  function updateUI() {
+    const m = state.mode;
+    stageEl.classList.toggle('compare', m === 'compare');
+    stageEl.classList.toggle('swap', m === 'compare' && state.swap);
+    panes.snap.el.hidden = m === 'live';
+    panes.live.el.hidden = m === 'view';
+    $('#viewBar').hidden = m === 'live';
+    const rec = state.snapId && getSnap(state.snapId);
+    if (rec) {
+      const i = snapIndex(rec.id);
+      $('#vbTitle').textContent = m === 'compare' ? 'Comparing snapshot' : 'Snapshot';
+      $('#vbWhen').textContent = fmtTime(rec.created) + ' · ' + fmtDay(rec.created);
+      $('#chipWhen').textContent = fmtTime(rec.created);
+      $('#vbCount').textContent = (i + 1) + ' / ' + state.snaps.length;
+      $('#vbPrev').disabled = i <= 0; $('#vbNext').disabled = i >= state.snaps.length - 1;
+    }
+    $('#vbCompare').hidden = m !== 'view'; $('#vbSwap').hidden = m !== 'compare';
+    $('#vbBack').innerHTML = m === 'compare' ? '<span class="ic">✕</span>Close compare' : '<span class="ic">●</span>Back to live';
+
+    const live = !!state.stream;
+    const pill = $('#livePill');
+    pill.className = 'live-pill' + (live ? (state.frozen ? ' frozen' : ' live') : '');
+    pill.querySelector('span').textContent = !live ? (msgKind === 'starting' ? 'Starting' : 'No camera') : state.frozen ? 'Frozen' : 'Live';
+    $('#liveChip').textContent = state.frozen ? 'Frozen' : 'Live';
+    const fb = $('#freezeBtn');
+    fb.classList.toggle('on', !!state.frozen);
+    fb.innerHTML = state.frozen ? '<span class="ic">▶</span><span class="lab">Unfreeze</span>' : '<span class="ic">❚❚</span><span class="lab">Freeze</span>';
+    fb.disabled = !live; $('#miniFreeze').textContent = state.frozen ? '▶' : '❚❚';
+    $('#snapBtn').disabled = !live; $('#miniSnap').disabled = !live;
+    $('#rotBtn').disabled = !live || m === 'view'; $('#mirBtn').disabled = !live || m === 'view';
+    $('#mirBtn').classList.toggle('on', state.live.flip);
+    $('#rotBtn').title = 'Rotate 90° clockwise (R) — now ' + state.live.rot + '°';
+
+    const fp = focusPane(), z = Math.round(fp.view.zoom * 100) + '%';
+    $('#zoomVal').textContent = z; $('#stZoom').textContent = z;
+    $('#zoomOut').disabled = fp.view.zoom <= ZMIN; $('#zoomIn').disabled = fp.view.zoom >= ZMAX;
+    for (const p of [panes.live, panes.snap]) p.el.classList.toggle('zoomed', p.view.zoom > 1);
+
+    $('#stCam').textContent = live ? (state.track.label || 'Camera') : 'No camera';
+    $('#stCam').title = $('#stCam').textContent;
+    $('#stRes').textContent = live && video.videoWidth ? video.videoWidth + '×' + video.videoHeight : '—';
+    $('#stSnaps').textContent = state.snaps.length; $('#snapCount').textContent = state.snaps.length;
+    $('#dlAll').disabled = !state.snaps.length; $('#clearAll').disabled = !state.snaps.length;
+    $('#strip').hidden = !prefs.strip; $('#stripBtn').classList.toggle('on', !!prefs.strip);
+    $('#cleanBtn').classList.toggle('on', document.body.classList.contains('clean'));
+    $('#fsBtn').classList.toggle('on', !!document.fullscreenElement);
+  }
+
+  /* ---------- wiring ---------- */
+  $('#snapBtn').onclick = takeSnapshot; $('#miniSnap').onclick = takeSnapshot;
+  $('#freezeBtn').onclick = toggleFreeze; $('#miniFreeze').onclick = toggleFreeze;
+  $('#rotBtn').onclick = rotate; $('#mirBtn').onclick = mirror;
+  $('#zoomIn').onclick = () => zoomBy(1.25); $('#zoomOut').onclick = () => zoomBy(0.8); $('#zoomVal').onclick = zoomReset;
+  $('#miniIn').onclick = () => zoomBy(1.25); $('#miniOut').onclick = () => zoomBy(0.8);
+  $('#stripBtn').onclick = () => { prefs.strip = !prefs.strip; savePrefs(); updateUI(); };
+  const toggleClean = () => { document.body.classList.toggle('clean'); redrawAll(); updateUI(); };
+  $('#cleanBtn').onclick = toggleClean; $('#miniShow').onclick = toggleClean;
+  function toggleFs() {
+    if (!document.fullscreenElement) { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); }
+    else (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+  }
+  $('#fsBtn').onclick = toggleFs;
+  document.addEventListener('fullscreenchange', () => { redrawAll(); updateUI(); });
+  $('#vbPrev').onclick = () => stepSnap(-1); $('#vbNext').onclick = () => stepSnap(1);
+  $('#vbCompare').onclick = () => setMode('compare');
+  $('#vbSwap').onclick = () => { state.swap = !state.swap; redrawAll(); updateUI(); };
+  $('#vbDownload').onclick = () => { const r = getSnap(state.snapId); if (r) downloadSnap(r); };
+  $('#vbDelete').onclick = () => state.snapId && deleteSnap(state.snapId);
+  $('#vbBack').onclick = () => setMode('live');
+  $('#dlAll').onclick = downloadAll; $('#clearAll').onclick = clearAll;
+
+  /* Clicked buttons don't keep focus, so Space always means "snapshot" after using the mouse. Tab focus still works. */
+  document.addEventListener('mousedown', e => { if (e.target.closest && e.target.closest('button')) e.preventDefault(); });
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;
+    const k = e.key;
+    if (k === ' ' || k === 'Spacebar') {
+      if (tag === 'BUTTON') return; /* keyboard users: Space presses the focused button */
+      e.preventDefault(); takeSnapshot();
+    }
+    else if (k === 'p' || k === 'P') toggleFreeze();
+    else if (k === 'r' || k === 'R') { if (state.stream && state.mode !== 'view') rotate(); }
+    else if (k === 'm' || k === 'M') { if (state.stream && state.mode !== 'view') mirror(); }
+    else if (k === '+' || k === '=') zoomBy(1.25);
+    else if (k === '-' || k === '_') zoomBy(0.8);
+    else if (k === '0') zoomReset();
+    else if (k === 'f' || k === 'F') toggleFs();
+    else if (k === 'h' || k === 'H') toggleClean();
+    else if (k === 'c' || k === 'C') {
+      if (state.mode === 'compare') setMode(state.snapId ? 'view' : 'live');
+      else if (state.snapId) setMode('compare');
+      else if (state.snaps[0]) showSnap(state.snaps[0].id, 'compare');
+    }
+    else if (k === 'Escape') { if (document.body.classList.contains('clean')) toggleClean(); else if (state.mode !== 'live') setMode('live'); }
+    else if (k === 'ArrowLeft' && state.mode !== 'live') { e.preventDefault(); stepSnap(-1); }
+    else if (k === 'ArrowRight' && state.mode !== 'live') { e.preventDefault(); stepSnap(1); }
+  });
+  window.addEventListener('beforeunload', e => { if (state.memoryOnly && state.snaps.length) { e.preventDefault(); e.returnValue = ''; } });
+
+  /* ---------- start ---------- */
+  renderStrip(); updateUI(); requestAnimationFrame(loop);
+  DB.open()
+    .then(() => DB.all())
+    .then(recs => {
+      recs = (recs || []).filter(r => r && r.blob).sort((a, b) => b.created - a.created);
+      state.snaps = recs.concat(state.snaps); renderStrip(); updateUI(); updateStorage();
+    })
+    .catch(() => { state.memoryOnly = true; updateStorage(); });
+  startCamera(null);
+  window.__docCam = { state, panes }; /* for the browser checks in e2e.js */
+})();
+</script>
+</body>
+</html>

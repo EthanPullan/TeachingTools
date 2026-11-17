@@ -14,6 +14,7 @@ works offline, and can be downloaded on its own.
 | [Seating Chart Generator](https://ethanpullan.github.io/TeachingTools/tools/seating-chart/) | Drag-and-drop room, keep-apart / keep-together rules, seatmate rotation, print |
 | [Class Timer](https://ethanpullan.github.io/TeachingTools/tools/timer/) | Countdown & stopwatch with fun fullscreen backgrounds |
 | [Class Board](https://ethanpullan.github.io/TeachingTools/tools/class-board/) | Corkboard with sticky notes, checklists, calendar & day countdown |
+| [Document Camera](https://ethanpullan.github.io/TeachingTools/tools/doc-camera/) | Shows a document camera (or any webcam) big on the screen. Pick the camera and quality (720p / 1080p / 4K), rotate and mirror (remembered per camera), zoom with the scroll wheel or buttons and drag to move around, freeze the picture while you change the page, and hide the controls for a clean projector view. Save snapshots of what is on screen to a gallery that stays on this computer; open one big, compare it side by side with the live picture, download one or all (.zip) |
 | [Name Wheel](https://ethanpullan.github.io/TeachingTools/tools/name-wheel/) | Spin to pick a name — pulls from your shared Class Lists, no repeats |
 | [Name Caller](https://ethanpullan.github.io/TeachingTools/tools/name-caller/) | Pull a name out of a hat — pulls from your shared Class Lists, no repeats |
 | [Movie Picker](https://ethanpullan.github.io/TeachingTools/tools/movie-picker/) | Cinema board with a ballot, votes and a weighted draw |
