@@ -104,9 +104,11 @@
   .msg-card p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.55;}
 
   /* snapshot strip */
-  .strip{flex:none;display:flex;align-items:stretch;gap:12px;background:var(--panel);border-top:1px solid var(--line);
-    padding:9px 16px;height:124px;}
-  .strip-head{flex:none;display:flex;flex-direction:column;gap:6px;width:150px;}
+  .strip{flex:none;display:flex;flex-direction:column;gap:6px;background:var(--panel);border-top:1px solid var(--line);
+    padding:7px 16px 6px;height:146px;}
+  .strip-head{flex:none;display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;}
+  .strip-head .sel-info{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .strip-head select{padding:4px 6px;font-size:12px;}
   .strip-head .section-title{display:flex;align-items:center;gap:7px;}
   .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0;}
   .thumbs{flex:1;min-width:0;display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 4px;}
@@ -117,6 +119,12 @@
   .thumb.sel > button.open{box-shadow:0 0 0 2px var(--accent);border-color:var(--accent);}
   .thumb img{width:100%;height:100%;object-fit:contain;display:block;}
   .thumb .t{font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--muted);display:flex;gap:6px;}
+  .thumb .pick{position:absolute;top:4px;left:4px;width:22px;height:22px;border-radius:6px;border:2px solid #fff;padding:0;
+    background:rgba(22,36,31,.55);color:#fff;font-size:13px;font-weight:800;line-height:1;display:flex;align-items:center;
+    justify-content:center;cursor:pointer;opacity:0;box-shadow:var(--shadow-sm);transition:opacity .12s;}
+  .thumb:hover .pick,.thumb:focus-within .pick,.strip.selecting .thumb .pick,.thumb.picked .pick{opacity:1;}
+  .thumb.picked .pick{background:var(--accent);border-color:var(--accent);}
+  .thumb.picked > button.open{box-shadow:0 0 0 2px var(--accent);border-color:var(--accent);}
   .thumb .acts{position:absolute;top:4px;right:4px;display:flex;gap:3px;opacity:0;transition:opacity .12s;}
   .thumb:hover .acts,.thumb:focus-within .acts{opacity:1;}
   .thumb .acts button{border:none;border-radius:6px;background:rgba(255,255,255,.92);color:var(--ink);cursor:pointer;
@@ -134,7 +142,8 @@
   .statusbar b{font-family:var(--mono);font-weight:600;color:var(--ink);}
   .statusbar .cam-name{max-width:260px;overflow:hidden;text-overflow:ellipsis;font-family:var(--sans);}
   .statusbar .dotline{width:1px;height:16px;background:var(--line);}
-  .statusbar .stamp{margin-left:auto;font-family:var(--mono);font-size:11px;}
+  .statusbar > *{flex:none;}
+  .statusbar .stamp{margin-left:auto;font-family:var(--mono);font-size:11px;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}
   kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;
     padding:0 4px;background:var(--panel-2);color:var(--ink);}
 
@@ -145,6 +154,40 @@
   body.clean .toolbar,body.clean #viewBar,body.clean .strip,body.clean .statusbar{display:none !important;}
   body.clean .stage.is-frozen #liveChip{display:block;}
   body.clean .mini{display:flex;}
+
+  /* compare grid */
+  .grid-view{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;gap:8px;padding:8px;background:var(--ink);}
+  .grid-prompt{color:#fff;font-size:clamp(18px,2.4vw,34px);font-weight:700;text-align:center;line-height:1.25;padding:2px 12px;}
+  .grid-cells{flex:1;min-height:0;display:grid;gap:8px;}
+  .cell{position:relative;min-width:0;min-height:0;background:#0d1714;border-radius:10px;overflow:hidden;touch-action:none;
+    border:3px solid transparent;cursor:grab;}
+  .cell img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;user-select:none;}
+  .cell .lbl{position:absolute;top:10px;left:10px;min-width:48px;height:48px;padding:0 10px;border-radius:12px;background:var(--board);
+    color:#fff;font-size:28px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.3);}
+  .cell .cacts{position:absolute;top:10px;right:10px;display:flex;gap:5px;opacity:0;transition:opacity .12s;}
+  .cell:hover .cacts,.cell:focus-within .cacts{opacity:1;}
+  .cell .cacts button{border:none;border-radius:8px;background:rgba(255,255,255,.92);color:var(--ink);cursor:pointer;font-size:15px;
+    line-height:1;min-width:34px;height:34px;box-shadow:var(--shadow-sm);}
+  .cell .cacts button:hover{background:#fff;color:var(--board);}
+  .cell.drop{border-color:var(--accent);} .cell.dragging{opacity:.55;cursor:grabbing;}
+  body.clean #gridBar{display:none !important;}
+  .grid-bar input{flex:1;min-width:180px;max-width:560px;border:1px solid var(--line);border-radius:8px;padding:6px 9px;background:var(--panel-2);}
+
+  /* timer */
+  .timer-chip{position:absolute;z-index:15;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.96);color:var(--ink);
+    border-radius:14px;padding:6px 8px 6px 16px;box-shadow:0 8px 24px rgba(20,40,33,.3);}
+  .timer-chip.c-tr{top:12px;right:12px;} .timer-chip.c-br{bottom:12px;right:12px;}
+  .timer-chip.c-bl{bottom:12px;left:12px;} .timer-chip.c-tl{top:12px;left:12px;}
+  .timer-chip .tm-time{font-family:var(--mono);font-size:clamp(28px,3.4vw,52px);font-weight:700;line-height:1.1;min-width:3.4ch;text-align:center;}
+  .timer-chip button{border:none;background:var(--panel-2);color:var(--ink);border-radius:8px;min-width:36px;height:36px;cursor:pointer;font-size:15px;}
+  .timer-chip button:hover{background:var(--line);}
+  .timer-chip.paused .tm-time{opacity:.5;}
+  .timer-chip.low{background:var(--accent-soft);}
+  .timer-chip.done{background:var(--accent);}
+  .timer-chip.done .tm-time{font-family:var(--sans);font-size:clamp(22px,2.6vw,38px);animation:tpulse 2s ease-in-out infinite;}
+  @keyframes tpulse{50%{transform:scale(1.05);}}
+  .mini .vonly{display:none;} body[data-mode="view"] .mini .vonly{display:inline-flex;}
+  .mini .mcount{align-items:center;font-family:var(--mono);font-size:12px;color:var(--muted);padding:0 4px;}
 
   /* draw bar */
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none;}
@@ -197,14 +240,16 @@
     select{min-height:44px;} .seg button{min-height:42px;padding:6px 12px;}
     .swatch{width:36px;height:36px;} .thumb .acts button{padding:8px 9px;font-size:14px;}
     .check input{width:22px;height:22px;}
+    .thumb .pick{opacity:1;width:30px;height:30px;} .thumb .acts,.cell .cacts{opacity:1;}
+    .timer-chip button{min-width:44px;height:44px;}
   }
   @media (max-width:880px){
-    .strip-head{width:112px;}
+    .strip-head .slab,.strip-head .sel-info{display:none;}
     .statusbar .stamp,.hide-narrow{display:none;}
     .btn .lab{display:none;}
   }
   @media (prefers-reduced-motion:reduce){
-    .pop,.flash.go,.live-pill.live i{animation:none;} .btn:active{transform:none;} *{scroll-behavior:auto;}
+    .pop,.flash.go,.live-pill.live i,.timer-chip.done .tm-time{animation:none;} .btn:active{transform:none;} *{scroll-behavior:auto;}
   }
 </style>
 </head>
@@ -215,6 +260,7 @@
     <div class="group">
       <label class="field-lab" for="camSel">Camera</label>
       <select id="camSel" title="Choose which camera to show"><option>Looking for cameras…</option></select>
+      <button class="btn icon" id="camSwap" title="Switch to the other camera (S)" hidden>⇄</button>
       <select id="qualSel" title="Picture quality. 4K only works if the camera supports it; the status bar shows what the camera actually gives.">
         <option value="720">720p</option>
         <option value="1080">1080p</option>
@@ -239,6 +285,7 @@
     <div class="vsep hide-narrow"></div>
     <button class="btn" id="drawBtn" title="Draw, highlight and cover (D)"><span class="ic">✏️</span><span class="lab">Draw</span></button>
     <button class="btn" id="adjBtn" title="Picture, viewing aids and camera settings (A)"><span class="ic">🎚</span><span class="lab">Adjust</span></button>
+    <button class="btn icon" id="timerBtn" title="Timer: countdown or stopwatch on the screen (T)"><span class="ic">⏱</span></button>
     <button class="btn icon" id="stripBtn" title="Show or hide the snapshots strip"><span class="ic">🖼</span></button>
     <button class="btn icon" id="cleanBtn" title="Hide the controls, show only the picture (H)"><span class="ic">👁</span></button>
     <button class="btn icon" id="fsBtn" title="Fullscreen (F)"><span class="ic">⛶</span></button>
@@ -252,10 +299,22 @@
     <button class="btn small" id="vbNext" title="Older snapshot (→)">›</button>
     <button class="btn small" id="vbCompare" title="Show this snapshot beside the live picture (C)"><span class="ic">◫</span>Compare with live</button>
     <button class="btn small" id="vbSwap" title="Swap left and right"><span class="ic">⇄</span>Swap sides</button>
+    <button class="btn small" id="vbCopy" title="Copy the picture, to paste into Slides, Docs or an email (Ctrl+C)"><span class="ic">⧉</span>Copy</button>
     <button class="btn small" id="vbDownload"><span class="ic">⭳</span>Download</button>
     <button class="btn small danger" id="vbDelete"><span class="ic">🗑</span>Delete</button>
     <div class="spacer"></div>
     <button class="btn small primary" id="vbBack" title="Back to the live picture (Esc)"><span class="ic">●</span>Back to live</button>
+  </div>
+
+  <div class="stage-bar grid-bar" id="gridBar" hidden>
+    <span class="sb-title">Comparing</span><span class="count-pill" id="gridCount"></span>
+    <input type="text" id="gridPromptIn" maxlength="140" aria-label="Question for the class"
+      placeholder="Question for the class (optional), e.g. How are A and B alike?">
+    <button class="btn small" id="gridShuffle" title="Put the pictures in a new order, so the order says nothing about whose is whose"><span class="ic">🔀</span>Shuffle</button>
+    <button class="btn small" id="gridCopy" title="Copy the comparison as one picture (Ctrl+C)"><span class="ic">⧉</span>Copy</button>
+    <button class="btn small" id="gridSave" title="Save the comparison as one snapshot (Space)"><span class="ic">📸</span>Save as one picture</button>
+    <div class="spacer"></div>
+    <button class="btn small primary" id="gridClose" title="Back to the live picture (Esc)"><span class="ic">✕</span>Close compare</button>
   </div>
 
   <div class="stage-bar draw-bar" id="drawBar" hidden>
@@ -288,6 +347,40 @@
   </div>
 
   <main class="stage" id="stage">
+    <div class="grid-view" id="gridView" hidden>
+      <div class="grid-prompt" id="gridPrompt" hidden></div>
+      <div class="grid-cells" id="gridCells"></div>
+    </div>
+    <div class="timer-chip c-tr" id="timerChip" hidden role="timer" aria-live="off">
+      <span class="tm-time" id="tmTime">0:00</span>
+      <button id="tmPause" title="Pause or carry on">❚❚</button>
+      <button id="tmReset" title="Start again">↺</button>
+      <button id="tmCorner" title="Move to another corner">⤢</button>
+      <button id="tmClose" title="Close the timer">✕</button>
+    </div>
+    <div class="adjust" id="timerPanel" hidden role="dialog" aria-label="Timer">
+      <div class="adj-sec">
+        <h3 class="section-title">Countdown</h3>
+        <div class="seg" id="tmPresets" role="group" aria-label="Minutes">
+          <button data-min="1">1</button><button data-min="2">2</button><button data-min="3">3</button><button data-min="5">5</button><button data-min="10">10</button><button data-min="15">15</button>
+        </div>
+        <span class="hint">&nbsp;minutes</span>
+        <div class="adj-row">
+          <label class="field-lab" for="tmMin">Other</label>
+          <input type="number" id="tmMin" min="0.25" max="180" step="0.25" value="5" style="width:76px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel-2)">
+          <span class="hint">min</span>
+          <button class="btn small primary" id="tmStart">▶ Start</button>
+        </div>
+      </div>
+      <div class="adj-sec">
+        <h3 class="section-title">Stopwatch</h3>
+        <button class="btn small" id="tmWatch">▶ Start stopwatch</button>
+      </div>
+      <div class="adj-sec">
+        <label class="check"><input type="checkbox" id="tmSound">Chime when time is up</label>
+        <p class="hint" style="margin:8px 0 0">The timer stays on screen in projector mode and is never saved in snapshots.</p>
+      </div>
+    </div>
     <div class="adjust" id="adjustPanel" hidden role="dialog" aria-label="Adjust">
       <div class="adj-sec">
         <h3 class="section-title">Picture <span class="hint">saved in snapshots</span></h3>
@@ -335,8 +428,16 @@
   <section class="strip" id="strip">
     <div class="strip-head">
       <h3 class="section-title">Snapshots <span class="count-pill" id="snapCount">0</span></h3>
-      <button class="btn small" id="dlAll" title="Download every snapshot in one .zip file"><span class="ic">⭳</span>Download all</button>
-      <button class="btn small danger" id="clearAll"><span class="ic">🗑</span>Clear all</button>
+      <span class="sel-info" id="selInfo"></span>
+      <button class="btn small" id="selAll">Select all</button>
+      <button class="btn small" id="selNone">Clear selection</button>
+      <div class="spacer"></div>
+      <button class="btn small" id="cmpBtn"><span class="ic">◫</span><span class="slab">Compare</span></button>
+      <button class="btn small" id="showBtn"><span class="ic">▶</span><span class="slab">Slideshow</span></button>
+      <button class="btn small" id="pdfBtn"><span class="ic">📄</span><span class="slab">PDF</span></button>
+      <select id="paperSel" title="Paper size for the PDF"><option value="letter">Letter</option><option value="a4">A4</option></select>
+      <button class="btn small" id="dlAll"><span class="ic">⭳</span><span class="slab" id="dlLab">Download all</span></button>
+      <button class="btn small danger" id="clearAll"><span class="ic">🗑</span><span class="slab" id="delLab">Delete all</span></button>
     </div>
     <div class="thumbs" id="thumbs"></div>
   </section>
@@ -346,11 +447,14 @@
     <span class="dotline"></span><span><b id="stRes">—</b></span>
     <span class="dotline"></span><span>Zoom <b id="stZoom">100%</b></span>
     <span class="dotline"></span><span><b id="stSnaps">0</b> saved <span id="stStore"></span></span>
-    <span class="stamp"><kbd>Space</kbd> snapshot · <kbd>P</kbd> freeze · <kbd>R</kbd> rotate · <kbd>M</kbd> mirror · <kbd>+</kbd><kbd>−</kbd> or pinch zoom · <kbd>C</kbd> compare · <kbd>D</kbd> draw · <kbd>A</kbd> adjust · <kbd>H</kbd> hide · <kbd>F</kbd> fullscreen</span>
+    <span class="stamp"><kbd>Space</kbd> snapshot · <kbd>P</kbd> freeze · <kbd>R</kbd> rotate · <kbd>M</kbd> mirror · <kbd>+</kbd><kbd>−</kbd> or pinch zoom · <kbd>C</kbd> compare · <kbd>D</kbd> draw · <kbd>A</kbd> adjust · <kbd>T</kbd> timer · <kbd>S</kbd> switch camera · <kbd>Ctrl</kbd><kbd>C</kbd> copy · <kbd>H</kbd> hide · <kbd>F</kbd> fullscreen</span>
   </footer>
 </div>
 
 <div class="mini" id="mini">
+  <button class="btn icon vonly" id="miniPrev" title="Previous (← or Page Up)">‹</button>
+  <span class="mcount vonly" id="miniCount"></span>
+  <button class="btn icon vonly" id="miniNext" title="Next (→ or Page Down)">›</button>
   <button class="btn primary icon" id="miniSnap" title="Snapshot (Space)">📸</button>
   <button class="btn icon" id="miniFreeze" title="Freeze (P)">❚❚</button>
   <button class="btn icon" id="miniOut" title="Zoom out (−)">−</button>
@@ -555,6 +659,72 @@ function uniqueNames(names) {
   });
 }
 
+/* ---------- comparing, timer, camera switch ---------- */
+/* Columns × rows for 2–4 pictures side by side, wide screens get a row, narrow ones a column. */
+function gridLayout(n, W, H) {
+  if (n <= 1) return { cols: 1, rows: 1 };
+  if (n === 4) return { cols: 2, rows: 2 };
+  return W >= H ? { cols: n, rows: 1 } : { cols: 1, rows: n };
+}
+const GRID_LABELS = ['A', 'B', 'C', 'D'];
+/* A new order (never the same as before when there is more than one picture). rnd() returns 0 ≤ x < 1. */
+function shuffleOrder(arr, rnd) {
+  const a = arr.slice(); if (a.length < 2) return a;
+  for (let tries = 0; tries < 8; tries++) {
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    if (a.some((v, i) => v !== arr[i])) return a;
+  }
+  return a.slice(1).concat(a[0]);
+}
+/* m:ss (or h:mm:ss). Countdowns round up so 0:00 shows only when time is really up. */
+function fmtClock(ms, countdown) {
+  const t = Math.max(0, countdown ? Math.ceil(ms / 1000) : Math.floor(ms / 1000));
+  const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = t % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(sec).padStart(2, '0');
+}
+/* The camera to switch to: the one used just before, else the next in the list. */
+function nextCamera(devices, cur, prev) {
+  const ids = (devices || []).map(d => d.deviceId).filter(Boolean);
+  if (ids.length < 2) return null;
+  if (prev && prev !== cur && ids.includes(prev)) return prev;
+  return ids[(ids.indexOf(cur) + 1) % ids.length];
+}
+
+/* ---------- PDF writer: each JPEG snapshot on its own page, embedded as-is (DCTDecode) ---------- */
+const PAPER = { letter: { w: 612, h: 792 }, a4: { w: 595.28, h: 841.89 } };
+/* Letter for North America and the Philippines, A4 elsewhere. */
+function defaultPaper(lang) { return /-(US|CA|MX|PH)\b/i.test(lang || '') ? 'letter' : 'a4'; }
+/* Page turned to suit the picture, picture fitted inside the margins and centred. Points (1/72 in). */
+function pdfPageLayout(iw, ih, paper, margin) {
+  margin = margin == null ? 28 : margin;
+  const land = iw > ih, pw = land ? paper.h : paper.w, ph = land ? paper.w : paper.h;
+  const f = fitRect(iw, ih, pw - 2 * margin, ph - 2 * margin);
+  return { pw, ph, x: margin + f.x, y: margin + f.y, w: f.w, h: f.h };
+}
+const isJpeg = b => b && b.length > 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF;
+function makePdf(pages) {
+  const enc = new TextEncoder(), parts = [], offsets = []; let pos = 0;
+  const put = x => { const u = typeof x === 'string' ? enc.encode(x) : x; parts.push(u); pos += u.length; };
+  const num = v => (Math.round(v * 100) / 100).toString();
+  const obj = (id, body) => { offsets[id] = pos; put(id + ' 0 obj\n'); if (Array.isArray(body)) body.forEach(put); else put(body); put('\nendobj\n'); };
+  put('%PDF-1.4\n'); put(new Uint8Array([0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]));
+  const kids = pages.map((_, i) => (3 + 3 * i) + ' 0 R').join(' ');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [' + kids + '] /Count ' + pages.length + ' >>');
+  pages.forEach((pg, i) => {
+    const pid = 3 + 3 * i, cid = pid + 1, iid = pid + 2;
+    obj(pid, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + num(pg.pw) + ' ' + num(pg.ph) + '] /Resources << /XObject << /Im' + i + ' ' + iid + ' 0 R >> >> /Contents ' + cid + ' 0 R >>');
+    const content = 'q ' + num(pg.w) + ' 0 0 ' + num(pg.h) + ' ' + num(pg.x) + ' ' + num(pg.y) + ' cm /Im' + i + ' Do Q';
+    obj(cid, '<< /Length ' + enc.encode(content).length + ' >>\nstream\n' + content + '\nendstream');
+    obj(iid, ['<< /Type /XObject /Subtype /Image /Width ' + pg.iw + ' /Height ' + pg.ih + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + pg.jpeg.length + ' >>\nstream\n', pg.jpeg, '\nendstream']);
+  });
+  const count = 2 + 3 * pages.length, xref = pos;
+  let x = 'xref\n0 ' + (count + 1) + '\n0000000000 65535 f \n';
+  for (let id = 1; id <= count; id++) x += String(offsets[id]).padStart(10, '0') + ' 00000 n \n';
+  put(x + 'trailer\n<< /Size ' + (count + 1) + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+  return parts;
+}
+
 /* Minimal .zip writer (files stored, not compressed — JPEGs do not shrink anyway). Returns Uint8Array parts for a Blob. */
 const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
@@ -591,13 +761,16 @@ function makeZip(files) {
   const LS_KEY = 'teachingtools:doc-camera';
   const DEFAULT_ADJUST = { brightness: 100, contrast: 100, color: 'color' };
   const DEFAULT_PREFS = { quality: '1080', deviceId: null, views: {}, strip: true, adjust: { ...DEFAULT_ADJUST }, aid: 'normal',
-    freezeToDraw: true, inkColor: '#0072B2', hlColor: '#F0E442', inkSize: 'm', camCtl: {} };
+    freezeToDraw: true, inkColor: '#0072B2', hlColor: '#F0E442', inkSize: 'm', camCtl: {},
+    paper: defaultPaper(navigator.language), gridPrompt: '', timerSound: true, timerCorner: 'c-tr', timerMin: 5 };
   let prefs;
   try { prefs = Object.assign({}, DEFAULT_PREFS, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); } catch (e) { prefs = { ...DEFAULT_PREFS }; }
   for (const k of ['views', 'camCtl']) if (!prefs[k] || typeof prefs[k] !== 'object') prefs[k] = {};
   prefs.adjust = Object.assign({}, DEFAULT_ADJUST, prefs.adjust && typeof prefs.adjust === 'object' ? prefs.adjust : {});
   if (!(prefs.aid in AIDS)) prefs.aid = 'normal';
   if (!(prefs.inkSize in INK_SIZES)) prefs.inkSize = 'm';
+  if (!(prefs.paper in PAPER)) prefs.paper = defaultPaper(navigator.language);
+  if (!/^c-(tr|br|bl|tl)$/.test(prefs.timerCorner)) prefs.timerCorner = 'c-tr';
   const hadSavedCamera = !!(prefs.deviceId || prefs.cameraLabel);
   /* Cameras are remembered by name: Chrome gives a camera a new ID on every load of a double-clicked (file://) copy. */
   const camKey = () => (state.track && state.track.label) || state.deviceId || '';
@@ -609,7 +782,8 @@ function makeZip(files) {
     live: normView({}), snapView: normView({}),
     mode: 'live', snapId: null, snapImg: null, snapImgId: null, swap: false,
     snaps: [], memoryOnly: false, startToken: 0, autoSwitched: false,
-    frozenId: 0, drawMode: false, tool: 'pen', penSeen: false, inkPane: null
+    frozenId: 0, drawMode: false, tool: 'pen', penSeen: false, inkPane: null,
+    selected: new Set(), gridIds: [], fromGrid: false, slideIds: null, slideClean: false, slideFs: false, prevDeviceId: null
   };
 
   /* Screen-reader announcements (WCAG 4.1.3) */
@@ -674,7 +848,7 @@ function makeZip(files) {
       get view() { return state.snapView; }, set view(v) { state.snapView = v; }
     }
   };
-  const visiblePanes = () => state.mode === 'live' ? [panes.live] : state.mode === 'view' ? [panes.snap] : [panes.snap, panes.live];
+  const visiblePanes = () => state.mode === 'live' ? [panes.live] : state.mode === 'view' ? [panes.snap] : state.mode === 'grid' ? [] : [panes.snap, panes.live];
   const focusPane = () => state.mode === 'view' ? panes.snap : panes.live;
 
   function drawPane(p) {
@@ -720,7 +894,7 @@ function makeZip(files) {
     requestAnimationFrame(loop);
   }
   const redrawAll = () => { for (const p of [panes.live, panes.snap]) { p.dirty = true; p.gkey = ''; } };
-  new ResizeObserver(redrawAll).observe(stageEl);
+  new ResizeObserver(() => { redrawAll(); if (state.mode === 'grid') layoutGrid(); }).observe(stageEl);
   window.addEventListener('resize', redrawAll);
 
   /* ---------- camera ---------- */
@@ -759,6 +933,7 @@ function makeZip(files) {
   document.addEventListener('visibilitychange', keepAwake);
   async function startCamera(deviceId) {
     const token = ++state.startToken;
+    if (deviceId && state.deviceId && deviceId !== state.deviceId) state.prevDeviceId = state.deviceId;
     stopStream(); state.frozen = null; resetInk(panes.live); redrawAll();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setMsg('unsupported'); return; }
     setMsg('starting');
@@ -814,6 +989,7 @@ function makeZip(files) {
       state.devices.forEach((d, i) => sel.add(new Option(d.label || 'Camera ' + (i + 1), d.deviceId)));
       if (state.deviceId) sel.value = state.deviceId;
     }
+    $('#camSwap').hidden = state.devices.length < 2;
     updateUI();
   }
   if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
@@ -826,6 +1002,15 @@ function makeZip(files) {
   $('#qualSel').value = QUALITIES[prefs.quality] ? prefs.quality : '1080';
   $('#qualSel').onchange = e => { prefs.quality = e.target.value; savePrefs(); startCamera(state.deviceId); };
   $('#msgBtn').onclick = () => startCamera(null);
+  /* One key (S) to go back and forth between two cameras, e.g. the document camera and a webcam. */
+  function switchCamera() {
+    const id = nextCamera(state.devices, state.deviceId, state.prevDeviceId);
+    if (!id) { toast('Only one camera is connected.'); return; }
+    const d = state.devices.find(x => x.deviceId === id);
+    announce('Switching to ' + ((d && d.label) || 'the other camera'));
+    startCamera(id);
+  }
+  $('#camSwap').onclick = switchCamera;
 
   /* ---------- live controls ---------- */
   function setLive(v, remember) {
@@ -1065,6 +1250,7 @@ function makeZip(files) {
     const adj = adjustFilter(prefs.adjust), aid = AIDS[prefs.aid] || '';
     panes.live.canvas.style.filter = [adj === 'none' ? '' : adj, aid].join(' ').trim() || 'none';
     panes.snap.canvas.style.filter = aid || 'none';
+    document.querySelectorAll('#gridCells img').forEach(i => { i.style.filter = aid; });
   }
   function renderAdjust() {
     const a = prefs.adjust;
@@ -1085,6 +1271,7 @@ function makeZip(files) {
   $('#adjReset').onclick = () => setAdjust({ ...DEFAULT_ADJUST });
   function toggleAdjust(force) {
     const panel = $('#adjustPanel'), open = force === undefined ? panel.hidden : force;
+    if (open) $('#timerPanel').hidden = true;
     panel.hidden = !open; if (open) { renderAdjust(); renderCamControls(); } updateUI();
   }
   $('#adjBtn').onclick = () => toggleAdjust();
@@ -1189,10 +1376,8 @@ function makeZip(files) {
   function flash() { const f = $('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
   /* Saves what is on screen: the picture with its Picture adjustments, plus drawing and covers.
      Viewing aids are not saved. On a saved snapshot, it saves a marked-up copy. */
-  async function takeSnapshot() {
-    const p = state.mode === 'view' ? panes.snap : panes.live, src = p.source;
-    if (!src) { toast('There is no camera picture to save yet.', 'err'); return; }
-    if (p === panes.snap && inkEmpty(p.ink)) { toast('This snapshot is already saved. Draw or cover something on it first to save a marked-up copy.'); return; }
+  function composePane(p) {
+    const src = p.source; if (!src) return null;
     const [sw, sh] = p.size, v = normView(p.view), sz = snapshotSize(sw, sh, v);
     const c = document.createElement('canvas'); c.width = sz.w; c.height = sz.h;
     const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
@@ -1201,18 +1386,74 @@ function makeZip(files) {
     drawView(ctx, src, sw, sh, v, box);
     ctx.filter = 'none';
     drawInk(ctx, p.ink, inkMapper(visibleRect(sw, sh, v), box));
-    if (p === panes.live) flash();
+    return c;
+  }
+  /* The comparison grid as one picture: optional question on top, A–D labels on the pictures. */
+  async function composeGrid() {
+    const recs = state.gridIds.map(getSnap).filter(Boolean); if (!recs.length) return null;
+    const W = 2400, H = 1350, pad = 28, gap = 20, prompt = (prefs.gridPrompt || '').trim(), font = getComputedStyle(document.body).fontFamily;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H); ctx.imageSmoothingQuality = 'high';
+    let top = pad;
+    if (prompt) {
+      let fs = 60; ctx.font = '700 ' + fs + 'px ' + font;
+      while (ctx.measureText(prompt).width > W - 2 * pad && fs > 22) { fs -= 2; ctx.font = '700 ' + fs + 'px ' + font; }
+      ctx.fillStyle = '#16241f'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(prompt, W / 2, top + 40); top += 96;
+    }
+    const { cols, rows } = gridLayout(recs.length, W, H - top);
+    const cw = (W - 2 * pad - gap * (cols - 1)) / cols, ch = (H - top - pad - gap * (rows - 1)) / rows;
+    for (let i = 0; i < recs.length; i++) {
+      const bmp = await createImageBitmap(recs[i].blob), x0 = pad + (i % cols) * (cw + gap), y0 = top + Math.floor(i / cols) * (ch + gap);
+      ctx.fillStyle = '#f4f6f8'; ctx.fillRect(x0, y0, cw, ch);
+      const f = fitRect(bmp.width, bmp.height, cw, ch); ctx.drawImage(bmp, x0 + f.x, y0 + f.y, f.w, f.h); if (bmp.close) bmp.close();
+      ctx.fillStyle = '#1f3d35'; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0 + 14, y0 + 14, 76, 76, 16); else ctx.rect(x0 + 14, y0 + 14, 76, 76); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.font = '800 48px ' + font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(GRID_LABELS[i], x0 + 52, y0 + 54);
+    }
+    return c;
+  }
+  /* Saves a canvas as a snapshot. after(rec) runs once it is in the strip, before it is written to storage. */
+  async function saveCanvas(c, after) {
+    const sz = { w: c.width, h: c.height };
     const tf = fitRect(sz.w, sz.h, 320, 180), tc = document.createElement('canvas');
     tc.width = Math.max(1, Math.round(tf.w)); tc.height = Math.max(1, Math.round(tf.h));
     const tctx = tc.getContext('2d'); tctx.imageSmoothingQuality = 'high'; tctx.drawImage(c, 0, 0, tc.width, tc.height);
     const [blob, thumb] = await Promise.all([toBlob(c, 'image/jpeg', 0.92), toBlob(tc, 'image/jpeg', 0.8)]);
     const rec = { id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8), created: Date.now(), w: sz.w, h: sz.h, blob, thumb };
     state.snaps.unshift(rec); renderStrip(true); updateUI(); announce('Snapshot saved');
-    if (p === panes.snap) showSnap(rec.id);
+    if (after) after(rec);
     await persist(rec);
     if (navigator.storage && navigator.storage.persist && state.snaps.length === 1) navigator.storage.persist().catch(() => {});
     updateStorage();
+    return rec;
   }
+  async function takeSnapshot() {
+    if (state.mode === 'grid') {
+      const c = await composeGrid();
+      if (c) { await saveCanvas(c); toast('Saved the comparison as one snapshot.', 'ok'); }
+      return;
+    }
+    const p = state.mode === 'view' ? panes.snap : panes.live;
+    if (!p.source) { toast('There is no camera picture to save yet.', 'err'); return; }
+    if (p === panes.snap && inkEmpty(p.ink)) { toast('This snapshot is already saved. Draw or cover something on it first to save a marked-up copy.'); return; }
+    const c = composePane(p);
+    if (p === panes.live) flash();
+    await saveCanvas(c, rec => { if (p === panes.snap) showSnap(rec.id); });
+  }
+
+  /* ---------- copy to the clipboard (as PNG, to paste into Slides, Docs or an email) ---------- */
+  function copyFrom(makeCanvas) {
+    if (!navigator.clipboard || !navigator.clipboard.write || !window.ClipboardItem) { toast('This browser can’t copy pictures. Use Download instead.', 'err'); return Promise.resolve(false); }
+    /* The clipboard write starts right away (while the click still counts), and the picture follows. */
+    const png = Promise.resolve().then(makeCanvas).then(c => { if (!c) throw new Error('There is nothing to copy yet.'); return toBlob(c, 'image/png'); });
+    return navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).then(
+      () => { toast('Copied. Paste it into Slides, Docs or an email.', 'ok'); announce('Picture copied'); return true; },
+      e => { toast('Could not copy the picture: ' + ((e && e.message) || e), 'err'); return false; });
+  }
+  const copyCurrent = () => copyFrom(() => state.mode === 'grid' ? composeGrid() : composePane(state.mode === 'view' ? panes.snap : panes.live));
+  const copySnap = rec => copyFrom(async () => {
+    const bmp = await createImageBitmap(rec.blob), c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    c.getContext('2d').drawImage(bmp, 0, 0); if (bmp.close) bmp.close(); return c;
+  });
   const snapIndex = id => state.snaps.findIndex(s => s.id === id);
   const getSnap = id => state.snaps.find(s => s.id === id);
   /* Links to thumbnails live only for this page visit, so they are kept here, not on the saved record. */
@@ -1237,14 +1478,22 @@ function makeZip(files) {
     await loadSnapImage(rec); updateUI();
   }
   function setMode(m) {
+    if (m !== 'view') state.slideIds = null;
+    if (state.mode === 'grid' && m === 'view') state.fromGrid = true;
+    if (m === 'live') { state.snapId = null; state.swap = false; state.fromGrid = false; state.gridIds = []; gridUrls.forEach(u => URL.revokeObjectURL(u)); gridUrls.clear(); }
+    if (m === 'grid') { state.snapId = null; state.swap = false; state.fromGrid = false; if (state.drawMode) setDrawMode(false); }
     state.mode = m;
-    if (m === 'live') { state.snapId = null; state.swap = false; }
+    if (m === 'grid') renderGrid();
     redrawAll(); renderStrip(); updateUI();
   }
+  /* Back from a big snapshot: to the comparison grid it was opened from, else to live. */
+  function leaveView() { if (state.fromGrid && state.gridIds.length >= 2) setMode('grid'); else setMode('live'); }
+  /* Next / previous: through the slideshow's pictures, else the strip, left to right. */
+  const navList = () => state.slideIds && state.slideIds.length ? state.slideIds : state.snaps.map(r => r.id);
   function stepSnap(dir) {
     if (!state.snapId) return;
-    const i = snapIndex(state.snapId), j = i + dir;
-    if (j >= 0 && j < state.snaps.length) showSnap(state.snaps[j].id);
+    const L = navList(), i = L.indexOf(state.snapId), j = i + dir;
+    if (i >= 0 && j >= 0 && j < L.length) showSnap(L[j]);
   }
   function download(blob, name) {
     const u = URL.createObjectURL(blob), a = document.createElement('a');
@@ -1255,9 +1504,12 @@ function makeZip(files) {
   async function deleteSnap(id) {
     const i = snapIndex(id); if (i < 0) return;
     const [rec] = state.snaps.splice(i, 1);
+    state.selected.delete(id);
+    if (state.slideIds) state.slideIds = state.slideIds.filter(x => x !== id);
+    if (state.gridIds.includes(id)) { state.gridIds = state.gridIds.filter(x => x !== id); if (state.mode === 'grid') { if (state.gridIds.length < 2) setMode('live'); else renderGrid(); } }
     if (state.snapId === id) {
       const next = state.snaps[Math.min(i, state.snaps.length - 1)];
-      if (next && state.mode === 'view') showSnap(next.id); else setMode('live');
+      if (next && state.mode === 'view') showSnap(next.id); else leaveView();
     }
     renderStrip(); updateUI();
     if (!state.memoryOnly) { try { await DB.del(id); } catch (e) {} }
@@ -1267,12 +1519,15 @@ function makeZip(files) {
       renderStrip(); updateUI(); await persist(rec); updateStorage();
     } });
   }
+  /* The ticked snapshots, in strip order; or all of them when none are ticked. */
+  const pickedRecs = () => state.snaps.filter(r => state.selected.has(r.id));
+  const targetRecs = () => state.selected.size ? pickedRecs() : state.snaps.slice();
   async function downloadAll() {
-    if (!state.snaps.length) return;
-    if (state.snaps.length === 1) { downloadSnap(state.snaps[0]); return; }
+    const recs = targetRecs(); if (!recs.length) return;
+    if (recs.length === 1) { downloadSnap(recs[0]); return; }
     const btn = $('#dlAll'); btn.disabled = true;
     try {
-      const ordered = state.snaps.slice().sort((a, b) => a.created - b.created);
+      const ordered = recs.sort((a, b) => a.created - b.created);
       const names = uniqueNames(ordered.map(r => fileName(new Date(r.created))));
       const files = [];
       for (let i = 0; i < ordered.length; i++) files.push({ name: names[i], date: new Date(ordered[i].created), data: new Uint8Array(await ordered[i].blob.arrayBuffer()) });
@@ -1281,13 +1536,202 @@ function makeZip(files) {
     btn.disabled = false;
   }
   async function clearAll() {
-    if (!state.snaps.length) return;
-    if (!confirm('Delete all ' + state.snaps.length + ' snapshots from this computer? This can’t be undone — download any you want to keep first.')) return;
-    state.snaps.forEach(r => dropThumbUrl(r.id));
-    state.snaps = []; setMode('live');
-    if (!state.memoryOnly) { try { await DB.clear(); } catch (e) {} }
+    const recs = targetRecs(); if (!recs.length) return;
+    const all = recs.length === state.snaps.length, n = recs.length;
+    if (!confirm((all ? 'Delete all ' + n + ' snapshots' : 'Delete the ' + n + ' selected snapshot' + (n === 1 ? '' : 's')) + ' from this computer? This can’t be undone — download any you want to keep first.')) return;
+    const ids = new Set(recs.map(r => r.id));
+    recs.forEach(r => dropThumbUrl(r.id));
+    state.snaps = state.snaps.filter(r => !ids.has(r.id)); state.selected.clear();
+    if ((state.snapId && ids.has(state.snapId)) || state.gridIds.some(id => ids.has(id)) || all) setMode('live');
+    if (!state.memoryOnly) { try { if (all) await DB.clear(); else for (const id of ids) await DB.del(id); } catch (e) {} }
     renderStrip(); updateUI(); updateStorage();
   }
+
+  /* ---------- PDF of the ticked (or all) snapshots, oldest first, one per page ---------- */
+  async function jpegBytes(rec) {
+    const b = new Uint8Array(await rec.blob.arrayBuffer());
+    if (isJpeg(b)) return b;
+    const bmp = await createImageBitmap(rec.blob), c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    c.getContext('2d').drawImage(bmp, 0, 0);
+    return new Uint8Array(await (await toBlob(c, 'image/jpeg', 0.92)).arrayBuffer());
+  }
+  async function makePdfFile() {
+    const recs = targetRecs().sort((a, b) => a.created - b.created); if (!recs.length) return;
+    const btn = $('#pdfBtn'); btn.disabled = true;
+    try {
+      const paper = PAPER[prefs.paper] || PAPER.letter, pages = [];
+      for (const r of recs) {
+        let iw = r.w, ih = r.h;
+        if (!(iw && ih)) { const bmp = await createImageBitmap(r.blob); iw = bmp.width; ih = bmp.height; if (bmp.close) bmp.close(); }
+        pages.push({ jpeg: await jpegBytes(r), iw, ih, ...pdfPageLayout(iw, ih, paper) });
+      }
+      download(new Blob(makePdf(pages), { type: 'application/pdf' }), 'doc-camera_' + stamp(new Date()).slice(0, 10) + '.pdf');
+      toast('PDF with ' + pages.length + ' page' + (pages.length === 1 ? '' : 's') + ' (' + (prefs.paper === 'a4' ? 'A4' : 'Letter') + ') saved to your downloads.', 'ok');
+    } catch (e) { toast('Could not make the PDF: ' + (e.message || e), 'err'); }
+    btn.disabled = false;
+  }
+
+  /* ---------- comparison grid: 2–4 snapshots, labelled A–D, in an order you choose ---------- */
+  const gridUrls = new Map();
+  const gridUrl = rec => gridUrls.get(rec.id) || (gridUrls.set(rec.id, URL.createObjectURL(rec.blob)), gridUrls.get(rec.id));
+  function openGrid(ids) { state.gridIds = ids.slice(0, 4); setMode('grid'); announce('Comparing ' + state.gridIds.length + ' snapshots'); }
+  function layoutGrid() {
+    const box = $('#gridCells'), r = box.getBoundingClientRect();
+    const { cols, rows } = gridLayout(state.gridIds.length, r.width || stageEl.clientWidth, r.height || stageEl.clientHeight);
+    box.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))'; box.style.gridTemplateRows = 'repeat(' + rows + ', minmax(0, 1fr))';
+  }
+  function renderGrid() {
+    const box = $('#gridCells'); box.innerHTML = '';
+    state.gridIds = state.gridIds.filter(id => getSnap(id));
+    const pr = (prefs.gridPrompt || '').trim(); $('#gridPrompt').hidden = !pr; $('#gridPrompt').textContent = pr;
+    $('#gridCount').textContent = state.gridIds.length;
+    state.gridIds.forEach((id, i) => {
+      const rec = getSnap(id), L = GRID_LABELS[i];
+      const cell = document.createElement('div'); cell.className = 'cell'; cell.dataset.i = i;
+      cell.setAttribute('role', 'group'); cell.setAttribute('aria-label', 'Picture ' + L);
+      cell.title = 'Drag onto another picture to swap them. Double-click to open it big.';
+      const img = document.createElement('img'); img.alt = 'Picture ' + L; img.src = gridUrl(rec); img.style.filter = AIDS[prefs.aid] || '';
+      const lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = L;
+      const acts = document.createElement('div'); acts.className = 'cacts';
+      const mk = (txt, title, fn, dis) => { const b = document.createElement('button'); b.textContent = txt; b.title = title; b.setAttribute('aria-label', title); b.disabled = !!dis; b.onclick = e => { e.stopPropagation(); fn(); }; acts.appendChild(b); };
+      mk('‹', 'Move ' + L + ' earlier', () => moveCell(i, i - 1), i === 0);
+      mk('›', 'Move ' + L + ' later', () => moveCell(i, i + 1), i === state.gridIds.length - 1);
+      mk('⤢', 'Open ' + L + ' big, to zoom or draw on it', () => showSnap(id, 'view'));
+      cell.ondblclick = () => showSnap(id, 'view');
+      cell.append(img, lbl, acts); box.appendChild(cell);
+    });
+    layoutGrid();
+  }
+  function moveCell(i, j) {
+    const g = state.gridIds; if (j < 0 || j >= g.length || i === j) return;
+    [g[i], g[j]] = [g[j], g[i]]; renderGrid(); announce('Swapped ' + GRID_LABELS[i] + ' and ' + GRID_LABELS[j]);
+  }
+  (function gridDrag() {
+    const box = $('#gridCells'); let drag = null;
+    box.addEventListener('pointerdown', e => {
+      const cell = e.target.closest('.cell');
+      if (!cell || e.target.closest('button') || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      drag = { from: +cell.dataset.i, x: e.clientX, y: e.clientY, cell, moved: false, over: null };
+      try { cell.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    box.addEventListener('pointermove', e => {
+      if (!drag) return;
+      if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 10) return;
+      drag.moved = true; drag.cell.classList.add('dragging');
+      const t = document.elementFromPoint(e.clientX, e.clientY), over = t && t.closest ? t.closest('.cell') : null;
+      if (drag.over && drag.over !== over) drag.over.classList.remove('drop');
+      drag.over = over && over !== drag.cell ? over : null; if (drag.over) drag.over.classList.add('drop');
+    });
+    const end = () => {
+      if (!drag) return; const d = drag; drag = null; d.cell.classList.remove('dragging');
+      if (d.over) { d.over.classList.remove('drop'); moveCell(d.from, +d.over.dataset.i); }
+    };
+    box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
+  })();
+  $('#gridPromptIn').value = prefs.gridPrompt || '';
+  $('#gridPromptIn').oninput = e => { prefs.gridPrompt = e.target.value; savePrefs(); const pr = prefs.gridPrompt.trim(); $('#gridPrompt').hidden = !pr; $('#gridPrompt').textContent = pr; layoutGrid(); };
+  $('#gridPromptIn').onkeydown = e => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); };
+  $('#gridShuffle').onclick = () => { state.gridIds = shuffleOrder(state.gridIds, Math.random); renderGrid(); announce('New order'); };
+  $('#gridCopy').onclick = () => copyCurrent();
+  $('#gridSave').onclick = () => takeSnapshot();
+  $('#gridClose').onclick = () => setMode('live');
+
+  /* ---------- slideshow: full screen, controls hidden, → / Page Down for the next picture ---------- */
+  function startSlideshow() {
+    const recs = targetRecs(); if (!recs.length) return;
+    if (state.drawMode) setDrawMode(false);
+    const ids = recs.map(r => r.id);
+    showSnap(ids[0], 'view'); state.slideIds = ids;
+    if (!document.body.classList.contains('clean')) { state.slideClean = true; toggleClean(); }
+    if (!document.fullscreenElement) { state.slideFs = true; toggleFs(); }
+    updateUI();
+    toast('Slideshow of ' + ids.length + ': → or Page Down for the next, Esc to stop.');
+  }
+  function endSlideshow() {
+    if (!state.slideIds) return false;
+    state.slideIds = null;
+    if (state.slideClean && document.body.classList.contains('clean')) toggleClean();
+    if (state.slideFs && document.fullscreenElement) toggleFs();
+    state.slideClean = state.slideFs = false;
+    leaveView(); return true;
+  }
+
+  /* ---------- selection in the strip ---------- */
+  function togglePick(id) { if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id); renderStrip(); updateUI(); }
+  $('#selAll').onclick = () => { state.snaps.forEach(r => state.selected.add(r.id)); renderStrip(); updateUI(); };
+  $('#selNone').onclick = () => { state.selected.clear(); renderStrip(); updateUI(); };
+  $('#cmpBtn').onclick = () => {
+    const ids = pickedRecs().map(r => r.id);
+    if (ids.length === 1) showSnap(ids[0], 'compare'); else if (ids.length >= 2 && ids.length <= 4) openGrid(ids);
+  };
+  $('#showBtn').onclick = startSlideshow;
+  $('#pdfBtn').onclick = makePdfFile;
+  $('#paperSel').value = prefs.paper;
+  $('#paperSel').onchange = e => { prefs.paper = e.target.value; savePrefs(); };
+
+  /* ---------- timer: countdown or stopwatch over the picture, never saved in snapshots ---------- */
+  const timer = { kind: null, running: false, total: 0, endAt: 0, left: 0, startAt: 0, acc: 0, done: false };
+  const timerMs = () => timer.kind === 'down' ? (timer.running ? Math.max(0, timer.endAt - Date.now()) : timer.left) : (timer.running ? timer.acc + Date.now() - timer.startAt : timer.acc);
+  let actx = null;
+  function ensureAudio() { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) { actx = null; } }
+  function chime() {
+    if (!prefs.timerSound || !actx) return;
+    try {
+      const t0 = actx.currentTime;
+      [660, 880, 990].forEach((f, i) => {
+        const o = actx.createOscillator(), g = actx.createGain(), t = t0 + i * 0.28;
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+        o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.55);
+      });
+    } catch (e) {}
+  }
+  function startCountdown(min) {
+    min = Math.min(180, Math.max(0.25, +min || 5)); ensureAudio();
+    Object.assign(timer, { kind: 'down', total: min * 60000, left: min * 60000, endAt: Date.now() + min * 60000, running: true, done: false });
+    prefs.timerMin = min; savePrefs(); $('#timerPanel').hidden = true; renderTimer(); announce('Timer started: ' + fmtClock(timer.total, true));
+  }
+  function startStopwatch() {
+    Object.assign(timer, { kind: 'up', acc: 0, startAt: Date.now(), running: true, done: false });
+    $('#timerPanel').hidden = true; renderTimer(); announce('Stopwatch started');
+  }
+  function pauseTimer() {
+    if (!timer.kind || timer.done) return;
+    if (timer.running) { if (timer.kind === 'down') timer.left = timerMs(); else timer.acc = timerMs(); timer.running = false; }
+    else { if (timer.kind === 'down') timer.endAt = Date.now() + timer.left; else timer.startAt = Date.now(); timer.running = true; }
+    renderTimer();
+  }
+  function resetTimer() {
+    if (!timer.kind) return;
+    if (timer.kind === 'down') Object.assign(timer, { left: timer.total, running: false, done: false }); else Object.assign(timer, { acc: 0, running: false });
+    renderTimer();
+  }
+  function renderTimer() {
+    const chip = $('#timerChip'); chip.hidden = !timer.kind;
+    if (timer.kind) {
+      const ms = timerMs();
+      if (timer.kind === 'down' && timer.running && ms <= 0 && !timer.done) { timer.done = true; timer.running = false; timer.left = 0; chime(); announce('Time’s up'); }
+      $('#tmTime').textContent = timer.done ? 'Time’s up' : fmtClock(ms, timer.kind === 'down');
+      chip.className = 'timer-chip ' + prefs.timerCorner + (timer.done ? ' done' : '') + (!timer.running && !timer.done ? ' paused' : '') + (timer.kind === 'down' && !timer.done && ms <= 10000 ? ' low' : '');
+      $('#tmPause').textContent = timer.running ? '❚❚' : '▶'; $('#tmPause').disabled = timer.done;
+    }
+    $('#timerBtn').classList.toggle('on', !!timer.kind || !$('#timerPanel').hidden);
+  }
+  setInterval(() => { if (timer.kind) renderTimer(); }, 200);
+  function toggleTimerPanel(force) {
+    const panel = $('#timerPanel'), open = force === undefined ? panel.hidden : force;
+    if (open) { $('#adjustPanel').hidden = true; $('#tmMin').value = prefs.timerMin; $('#tmSound').checked = !!prefs.timerSound; }
+    panel.hidden = !open; renderTimer(); updateUI();
+  }
+  $('#timerBtn').onclick = () => toggleTimerPanel();
+  $('#tmPresets').onclick = e => { const b = e.target.closest('button[data-min]'); if (b) startCountdown(+b.dataset.min); };
+  $('#tmStart').onclick = () => startCountdown($('#tmMin').value);
+  $('#tmMin').onkeydown = e => { if (e.key === 'Enter') startCountdown(e.target.value); };
+  $('#tmWatch').onclick = startStopwatch;
+  $('#tmSound').onchange = e => { prefs.timerSound = e.target.checked; savePrefs(); };
+  $('#tmPause').onclick = pauseTimer; $('#tmReset').onclick = resetTimer;
+  $('#tmClose').onclick = () => { timer.kind = null; renderTimer(); updateUI(); };
+  $('#tmCorner').onclick = () => { const order = ['c-tr', 'c-br', 'c-bl', 'c-tl']; prefs.timerCorner = order[(order.indexOf(prefs.timerCorner) + 1) % 4]; savePrefs(); renderTimer(); };
 
   /* ---------- strip ---------- */
   function fmtTime(ts) { const d = new Date(ts); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
@@ -1304,7 +1748,8 @@ function makeZip(files) {
     }
     state.snaps.forEach((rec, i) => {
       const t = document.createElement('div');
-      t.className = 'thumb' + (rec.id === state.snapId ? ' sel' : '') + (popFirst && i === 0 ? ' pop' : '');
+      const picked = state.selected.has(rec.id);
+      t.className = 'thumb' + (rec.id === state.snapId ? ' sel' : '') + (picked ? ' picked' : '') + (popFirst && i === 0 ? ' pop' : '');
       const open = document.createElement('button'); open.className = 'open';
       open.title = 'Show this snapshot'; open.setAttribute('aria-label', 'Snapshot from ' + fmtTime(rec.created) + ' ' + fmtDay(rec.created));
       const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; img.src = thumbUrl(rec); open.appendChild(img);
@@ -1314,9 +1759,13 @@ function makeZip(files) {
       const acts = document.createElement('div'); acts.className = 'acts';
       const mk = (txt, title, fn, cls) => { const b = document.createElement('button'); b.textContent = txt; b.title = title; if (cls) b.className = cls; b.onclick = e => { e.stopPropagation(); fn(); }; acts.appendChild(b); };
       mk('◫', 'Compare with live', () => showSnap(rec.id, 'compare'));
+      mk('⧉', 'Copy', () => copySnap(rec));
       mk('⭳', 'Download', () => downloadSnap(rec));
       mk('✕', 'Delete', () => deleteSnap(rec.id), 'x');
-      t.append(open, lab, acts); box.appendChild(t);
+      const pick = document.createElement('button'); pick.className = 'pick'; pick.textContent = picked ? '✓' : '';
+      pick.title = picked ? 'Untick' : 'Tick to compare, show or save together'; pick.setAttribute('aria-pressed', picked);
+      pick.setAttribute('aria-label', 'Select snapshot from ' + fmtTime(rec.created)); pick.onclick = e => { e.stopPropagation(); togglePick(rec.id); };
+      t.append(open, lab, acts, pick); box.appendChild(t);
     });
     if (popFirst) box.scrollLeft = 0;
     const sel = box.querySelector('.thumb.sel'); if (sel && !popFirst) sel.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -1334,22 +1783,28 @@ function makeZip(files) {
   /* ---------- UI state ---------- */
   function updateUI() {
     const m = state.mode;
+    document.body.dataset.mode = m;
+    $('#gridView').hidden = m !== 'grid'; $('#gridBar').hidden = m !== 'grid';
     stageEl.classList.toggle('compare', m === 'compare');
     stageEl.classList.toggle('swap', m === 'compare' && state.swap);
-    panes.snap.el.hidden = m === 'live';
-    panes.live.el.hidden = m === 'view';
-    $('#viewBar').hidden = m === 'live';
+    panes.snap.el.hidden = m === 'live' || m === 'grid';
+    panes.live.el.hidden = m === 'view' || m === 'grid';
+    $('#viewBar').hidden = m === 'live' || m === 'grid';
     const rec = state.snapId && getSnap(state.snapId);
     if (rec) {
       const i = snapIndex(rec.id);
       $('#vbTitle').textContent = m === 'compare' ? 'Comparing snapshot' : 'Snapshot';
       $('#vbWhen').textContent = fmtTime(rec.created) + ' · ' + fmtDay(rec.created);
       $('#chipWhen').textContent = fmtTime(rec.created);
-      $('#vbCount').textContent = (i + 1) + ' / ' + state.snaps.length;
-      $('#vbPrev').disabled = i <= 0; $('#vbNext').disabled = i >= state.snaps.length - 1;
+      const L = navList(), k = L.indexOf(rec.id);
+      $('#vbTitle').textContent = state.slideIds ? 'Slideshow' : $('#vbTitle').textContent;
+      $('#vbCount').textContent = (k + 1) + ' / ' + L.length; $('#miniCount').textContent = (k + 1) + ' / ' + L.length;
+      $('#vbPrev').disabled = $('#miniPrev').disabled = k <= 0; $('#vbNext').disabled = $('#miniNext').disabled = k >= L.length - 1;
     }
     $('#vbCompare').hidden = m !== 'view'; $('#vbSwap').hidden = m !== 'compare';
-    $('#vbBack').innerHTML = m === 'compare' ? '<span class="ic">✕</span>Close compare' : '<span class="ic">●</span>Back to live';
+    $('#vbBack').innerHTML = m === 'compare' ? '<span class="ic">✕</span>Close compare'
+      : state.slideIds ? '<span class="ic">✕</span>End slideshow'
+      : state.fromGrid ? '<span class="ic">◫</span>Back to compare' : '<span class="ic">●</span>Back to live';
 
     const live = !!state.stream;
     const pill = $('#livePill');
@@ -1360,9 +1815,25 @@ function makeZip(files) {
     fb.classList.toggle('on', !!state.frozen);
     fb.innerHTML = state.frozen ? '<span class="ic">▶</span><span class="lab">Unfreeze</span>' : '<span class="ic">❚❚</span><span class="lab">Freeze</span>';
     fb.disabled = !live; $('#miniFreeze').textContent = state.frozen ? '▶' : '❚❚';
-    const canSnap = m === 'view' ? !!panes.snap.source : live;
+    const canSnap = m === 'view' ? !!panes.snap.source : m === 'grid' ? state.gridIds.length > 0 : live;
     $('#snapBtn').disabled = !canSnap; $('#miniSnap').disabled = !canSnap;
-    $('#snapBtn').title = m === 'view' ? 'Save a copy of this snapshot with your drawing and covers (Space)' : 'Save this moment (Space)';
+    $('#snapBtn').title = m === 'view' ? 'Save a copy of this snapshot with your drawing and covers (Space)'
+      : m === 'grid' ? 'Save the comparison as one picture (Space)' : 'Save this moment (Space). Ctrl+C copies it instead.';
+    $('#drawBtn').disabled = $('#miniDraw').disabled = m === 'grid';
+    for (const id of ['#zoomIn', '#zoomOut', '#zoomVal', '#miniIn', '#miniOut']) if (m === 'grid') $(id).disabled = true;
+    const nSel = state.selected.size, nAll = state.snaps.length;
+    $('#strip').classList.toggle('selecting', nSel > 0);
+    $('#selInfo').textContent = nSel ? nSel + ' selected' : (nAll ? 'Tick ✓ snapshots to compare, show or save just those' : '');
+    $('#selAll').hidden = !nAll || nSel === nAll; $('#selNone').hidden = !nSel;
+    $('#cmpBtn').disabled = nSel < 1 || nSel > 4;
+    $('#cmpBtn').title = nSel > 4 ? 'Compare up to 4 snapshots at once' : nSel === 1 ? 'Show the ticked snapshot beside the live picture' : nSel ? 'Show the ' + nSel + ' ticked snapshots side by side, labelled A–' + GRID_LABELS[nSel - 1] : 'Tick 1 snapshot to compare with live, or 2–4 to compare side by side';
+    $('#showBtn').disabled = $('#pdfBtn').disabled = !nAll;
+    $('#showBtn').title = 'Show ' + (nSel ? 'the ' + nSel + ' ticked snapshots' : 'all snapshots') + ' full screen, one at a time (→ / Page Down)';
+    $('#pdfBtn').title = 'Make a PDF of ' + (nSel ? 'the ' + nSel + ' ticked snapshots' : 'all snapshots') + ', one per page';
+    $('#dlLab').textContent = nSel ? 'Download ' + nSel : 'Download all';
+    $('#delLab').textContent = nSel ? 'Delete ' + nSel : 'Delete all';
+    $('#dlAll').title = 'Download ' + (nSel ? 'the ticked snapshots' : 'every snapshot') + ' (one .zip file when there are several)';
+    $('#timerBtn').classList.toggle('on', !!timer.kind || !$('#timerPanel').hidden);
     stageEl.classList.toggle('is-frozen', !!state.frozen);
     $('#drawBtn').classList.toggle('on', state.drawMode); $('#miniDraw').classList.toggle('on', state.drawMode);
     $('#adjBtn').classList.toggle('on', !$('#adjustPanel').hidden);
@@ -1377,20 +1848,21 @@ function makeZip(files) {
     $('#undoBtn').disabled = !vis.some(q => q.hist.length);
     $('#clearInk').disabled = !vis.some(q => q.ink.strokes.length);
     $('#clearCovers').disabled = !vis.some(q => q.ink.masks.length || q.ink.spot || q.ink.curtain != null);
-    $('#rotBtn').disabled = !live || m === 'view'; $('#mirBtn').disabled = !live || m === 'view';
+    $('#rotBtn').disabled = $('#mirBtn').disabled = !live || m === 'view' || m === 'grid';
     $('#mirBtn').classList.toggle('on', state.live.flip);
     $('#rotBtn').title = 'Rotate 90° clockwise (R) — now ' + state.live.rot + '°';
 
     const fp = focusPane(), z = Math.round(fp.view.zoom * 100) + '%';
     $('#zoomVal').textContent = z; $('#stZoom').textContent = z;
-    $('#zoomOut').disabled = fp.view.zoom <= ZMIN; $('#zoomIn').disabled = fp.view.zoom >= ZMAX;
+    $('#zoomOut').disabled = $('#miniOut').disabled = m === 'grid' || fp.view.zoom <= ZMIN;
+    $('#zoomIn').disabled = $('#miniIn').disabled = m === 'grid' || fp.view.zoom >= ZMAX; $('#zoomVal').disabled = m === 'grid';
     for (const p of [panes.live, panes.snap]) p.el.classList.toggle('zoomed', p.view.zoom > 1);
 
     $('#stCam').textContent = live ? (state.track.label || 'Camera') : 'No camera';
     $('#stCam').title = $('#stCam').textContent;
     $('#stRes').textContent = live && video.videoWidth ? video.videoWidth + '×' + video.videoHeight : '—';
     $('#stSnaps').textContent = state.snaps.length; $('#snapCount').textContent = state.snaps.length;
-    $('#dlAll').disabled = !state.snaps.length; $('#clearAll').disabled = !state.snaps.length;
+    $('#dlAll').disabled = $('#clearAll').disabled = !state.snaps.length;
     $('#strip').hidden = !prefs.strip; $('#stripBtn').classList.toggle('on', !!prefs.strip);
     $('#cleanBtn').classList.toggle('on', document.body.classList.contains('clean'));
     $('#fsBtn').classList.toggle('on', !!document.fullscreenElement);
@@ -1417,7 +1889,9 @@ function makeZip(files) {
   $('#vbSwap').onclick = () => { state.swap = !state.swap; redrawAll(); updateUI(); };
   $('#vbDownload').onclick = () => { const r = getSnap(state.snapId); if (r) downloadSnap(r); };
   $('#vbDelete').onclick = () => state.snapId && deleteSnap(state.snapId);
-  $('#vbBack').onclick = () => setMode('live');
+  $('#vbBack').onclick = () => { if (!endSlideshow()) leaveView(); };
+  $('#vbCopy').onclick = () => copyCurrent();
+  $('#miniPrev').onclick = () => stepSnap(-1); $('#miniNext').onclick = () => stepSnap(1);
   $('#dlAll').onclick = downloadAll; $('#clearAll').onclick = clearAll;
 
   /* Clicked buttons don't keep focus, so Space always means "snapshot" after using the mouse. Tab focus still works. */
@@ -1428,6 +1902,7 @@ function makeZip(files) {
     const onSlider = tag === 'INPUT' && e.target.type === 'range' && !/^(Arrow|Page|Home|End)/.test(e.key);
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag) && !onSlider) return;
     if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'c' || e.key === 'C') && !String(window.getSelection ? window.getSelection() : '')) { e.preventDefault(); copyCurrent(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
     if (state.drawMode) {
@@ -1438,7 +1913,10 @@ function makeZip(files) {
     }
     if (k === 'd' || k === 'D') { setDrawMode(!state.drawMode); return; }
     if (k === 'a' || k === 'A') { toggleAdjust(); return; }
+    if (k === 't' || k === 'T') { toggleTimerPanel(); return; }
+    if (k === 's' || k === 'S') { switchCamera(); return; }
     if (k === 'Escape' && !$('#adjustPanel').hidden) { toggleAdjust(false); return; }
+    if (k === 'Escape' && !$('#timerPanel').hidden) { toggleTimerPanel(false); return; }
     if (k === 'Escape' && state.drawMode) { setDrawMode(false); return; }
     if (k === ' ' || k === 'Spacebar') {
       if (tag === 'BUTTON') return; /* keyboard users: Space presses the focused button */
@@ -1453,14 +1931,20 @@ function makeZip(files) {
     else if (k === '0') zoomReset();
     else if (k === 'f' || k === 'F') toggleFs();
     else if (k === 'h' || k === 'H') toggleClean();
-    else if (k === 'c' || k === 'C') {
+    else if ((k === 'c' || k === 'C') && state.mode !== 'grid') {
       if (state.mode === 'compare') setMode(state.snapId ? 'view' : 'live');
       else if (state.snapId) setMode('compare');
       else if (state.snaps[0]) showSnap(state.snaps[0].id, 'compare');
     }
-    else if (k === 'Escape') { if (document.body.classList.contains('clean')) toggleClean(); else if (state.mode !== 'live') setMode('live'); }
-    else if (k === 'ArrowLeft' && state.mode !== 'live') { e.preventDefault(); stepSnap(-1); }
-    else if (k === 'ArrowRight' && state.mode !== 'live') { e.preventDefault(); stepSnap(1); }
+    else if (k === 'Escape') {
+      if (endSlideshow()) return;
+      if (document.body.classList.contains('clean')) toggleClean();
+      else if (state.mode === 'view' || state.mode === 'compare') leaveView();
+      else if (state.mode === 'grid') setMode('live');
+    }
+    /* ← → and a presentation clicker's Page Up / Page Down step through snapshots */
+    else if ((k === 'ArrowLeft' || k === 'PageUp') && (state.mode === 'view' || state.mode === 'compare')) { e.preventDefault(); stepSnap(-1); }
+    else if ((k === 'ArrowRight' || k === 'PageDown') && (state.mode === 'view' || state.mode === 'compare')) { e.preventDefault(); stepSnap(1); }
   });
   window.addEventListener('beforeunload', e => { if (state.memoryOnly && state.snaps.length) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -1475,7 +1959,7 @@ function makeZip(files) {
     })
     .catch(() => { state.memoryOnly = true; updateStorage(); });
   startCamera(null);
-  window.__docCam = { state, panes }; /* for the browser checks in e2e.js */
+  window.__docCam = { state, panes, timer }; /* for the browser checks in e2e.js */
 })();
 </script>
 </body>

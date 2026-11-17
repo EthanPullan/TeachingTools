@@ -467,6 +467,170 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     await b5.close();
   }
 
+  /* ================= Compare grid, slideshow, PDF, copy, camera switch, timer ================= */
+  {
+    const b6 = await pw.chromium.launch({ args: ['--use-fake-device-for-media-stream=device-count=2', '--use-fake-ui-for-media-stream'] });
+    const c6 = await b6.newContext({ acceptDownloads: true, viewport: { width: 1400, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+    const pg = await c6.newPage();
+    const errs6 = [];
+    pg.on('console', m => { if (m.type() === 'error') errs6.push(m.text()); });
+    pg.on('pageerror', e => errs6.push('PAGEERROR ' + e.message));
+    const E = fn => pg.evaluate(fn);
+    const shot6 = async name => { if (shots) await pg.screenshot({ path: path.join(shots, name + '.png') }); };
+    const n = () => E(() => window.__docCam.state.snaps.length);
+    await pg.goto(URL);
+    await pg.waitForFunction(() => window.__docCam.state.stream && window.__docCam.panes.live.mapper, null, { timeout: 10000 });
+    for (let i = 0; i < 4; i++) { const k = await n(); await pg.keyboard.press(' '); await pg.waitForFunction(k => window.__docCam.state.snaps.length === k + 1, k); await wait(150); }
+    const ids = await E(() => window.__docCam.state.snaps.map(r => r.id));
+    const pick = i => pg.click(`#thumbs .thumb:nth-child(${i}) .pick`);
+
+    // --- camera switch ---
+    check('switch-camera button shows with two cameras', await pg.isVisible('#camSwap'));
+    const cam0 = await E(() => window.__docCam.state.track.label);
+    await pg.keyboard.press('s');
+    await pg.waitForFunction(c => window.__docCam.state.track && window.__docCam.state.track.label !== c && window.__docCam.panes.live.mapper, cam0, { timeout: 8000 }).catch(() => {});
+    const cam1 = await E(() => window.__docCam.state.track && window.__docCam.state.track.label);
+    check('S switches to the other camera', cam1 && cam1 !== cam0, [cam0, cam1]);
+    await pg.click('#camSwap');
+    await pg.waitForFunction(c => window.__docCam.state.track && window.__docCam.state.track.label === c, cam0, { timeout: 8000 }).catch(() => {});
+    check('and back again', (await E(() => window.__docCam.state.track && window.__docCam.state.track.label)) === cam0);
+    await pg.waitForFunction(() => window.__docCam.panes.live.mapper, null, { timeout: 8000 });
+
+    // --- selection ---
+    check('selection hint shown', (await pg.textContent('#selInfo')).includes('Tick'));
+    check('Compare needs a tick', await pg.isDisabled('#cmpBtn'));
+    await pick(2);
+    check('ticking a snapshot', (await pg.textContent('#selInfo')) === '1 selected' && (await pg.textContent('#dlLab')) === 'Download 1');
+    await pg.click('#cmpBtn');
+    check('one ticked: compare with live', await E(() => window.__docCam.state.mode === 'compare' && window.__docCam.state.snapId === window.__docCam.state.snaps[1].id));
+    await pg.keyboard.press('Escape');
+    await pick(1); await pick(3);
+    await pg.click('#cmpBtn');
+    check('three ticked: comparison grid', await E(() => window.__docCam.state.mode === 'grid' && window.__docCam.state.gridIds.length === 3));
+    check('grid shows labels A B C', (await pg.$$eval('#gridCells .cell .lbl', l => l.map(x => x.textContent).join(''))) === 'ABC');
+    check('three in a row on a wide screen', (await pg.$eval('#gridCells', el => getComputedStyle(el).gridTemplateColumns.split(' ').length)) === 3);
+    check('live picture hidden while comparing', await pg.isHidden('#paneLive') && await pg.isHidden('#paneSnap'));
+    check('drawing is off while comparing', await pg.isDisabled('#drawBtn'));
+    const order0 = await E(() => window.__docCam.state.gridIds.slice());
+    check('grid order follows the strip', JSON.stringify(order0) === JSON.stringify([ids[0], ids[1], ids[2]]), order0);
+
+    await pg.fill('#gridPromptIn', 'How are A and B alike?');
+    check('the question shows above the pictures', (await pg.textContent('#gridPrompt')) === 'How are A and B alike?' && await pg.isVisible('#gridPrompt'));
+    await pg.hover('#gridCells .cell:nth-child(1)');
+    await pg.click('#gridCells .cell:nth-child(1) .cacts button:nth-child(2)');
+    let order = await E(() => window.__docCam.state.gridIds.slice());
+    check('› moves A later', order[0] === order0[1] && order[1] === order0[0], order);
+    // drag the first picture onto the third
+    const c1 = await pg.locator('#gridCells .cell:nth-child(1)').boundingBox(), c3 = await pg.locator('#gridCells .cell:nth-child(3)').boundingBox();
+    await pg.mouse.move(c1.x + c1.width / 2, c1.y + c1.height / 2); await pg.mouse.down();
+    await pg.mouse.move(c3.x + c3.width / 2, c3.y + c3.height / 2, { steps: 10 }); await pg.mouse.up(); await wait(60);
+    const order2 = await E(() => window.__docCam.state.gridIds.slice());
+    check('drag a picture onto another to swap them', order2[0] === order[2] && order2[2] === order[0] && order2[1] === order[1], order2);
+    await pg.click('#gridShuffle');
+    const order3 = await E(() => window.__docCam.state.gridIds.slice());
+    check('Shuffle changes the order', JSON.stringify(order3) !== JSON.stringify(order2) && [...order3].sort().join() === [...order2].sort().join());
+    await shot6('13-grid');
+
+    await pg.dblclick('#gridCells .cell:nth-child(2)');
+    await pg.waitForFunction(() => window.__docCam.state.mode === 'view');
+    check('double-click opens a picture big', await E(() => window.__docCam.state.snapId === window.__docCam.state.gridIds[1]));
+    check('Back says Back to compare', (await pg.textContent('#vbBack')).includes('Back to compare'));
+    await pg.keyboard.press('Escape');
+    check('Esc goes back to the grid', await E(() => window.__docCam.state.mode === 'grid' && window.__docCam.state.gridIds.length === 3));
+
+    // save the grid as one picture
+    const before = await n();
+    await pg.keyboard.press(' ');
+    await pg.waitForFunction(k => window.__docCam.state.snaps.length === k + 1, before);
+    const gs = await E(async () => { const r = window.__docCam.state.snaps[0], bmp = await createImageBitmap(r.blob), c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; const x = c.getContext('2d'); x.drawImage(bmp, 0, 0);
+      return { w: r.w, h: r.h, label: [...x.getImageData(70, 160, 1, 1).data].slice(0, 3), white: [...x.getImageData(5, 5, 1, 1).data].slice(0, 3) }; });
+    check('Space saves the comparison as one picture', gs.w === 2400 && gs.h === 1350, gs);
+    check('it has the A label in board green and a white background', Math.abs(gs.label[0] - 0x1f) < 25 && Math.abs(gs.label[1] - 0x3d) < 25 && gs.white.every(v => v > 240), gs);
+
+    // copy the grid
+    await pg.click('#gridCopy'); await wait(400);
+    const clipGrid = await E(async () => { const items = await navigator.clipboard.read(); const b = await items[0].getType('image/png'); const bmp = await createImageBitmap(b); return [items[0].types.join(), bmp.width, bmp.height]; });
+    check('Copy puts the comparison on the clipboard as a PNG', clipGrid[0] === 'image/png' && clipGrid[1] === 2400, clipGrid);
+    await pg.click('#gridClose');
+    check('Close compare goes back to live', await E(() => window.__docCam.state.mode === 'live' && !window.__docCam.state.gridIds.length));
+
+    // copy the live picture with Ctrl+C
+    await E(() => navigator.clipboard.writeText('x'));
+    await pg.keyboard.press('Control+c'); await wait(500);
+    const clipLive = await E(async () => { const items = await navigator.clipboard.read(); if (!items[0].types.includes('image/png')) return items[0].types; const bmp = await createImageBitmap(await items[0].getType('image/png')); return [bmp.width, bmp.height, document.querySelector('#video').videoWidth, document.querySelector('#video').videoHeight]; });
+    check('Ctrl+C copies the live picture', Array.isArray(clipLive) && clipLive[0] === clipLive[2] && clipLive[1] === clipLive[3], clipLive);
+
+    // --- slideshow ---
+    await pg.click('#selNone');
+    await pick(2); await pick(4);
+    await pg.click('#showBtn'); await wait(200);
+    let ss = await E(() => ({ mode: window.__docCam.state.mode, n: (window.__docCam.state.slideIds || []).length, clean: document.body.classList.contains('clean'), id: window.__docCam.state.snapId, want: window.__docCam.state.snaps[1].id }));
+    check('Slideshow shows the ticked snapshots with the controls hidden', ss.mode === 'view' && ss.n === 2 && ss.clean && ss.id === ss.want, ss);
+    check('mini bar shows position and next/previous', (await pg.textContent('#miniCount')) === '1 / 2' && await pg.isVisible('#miniNext'));
+    await shot6('14-slideshow');
+    await pg.keyboard.press('PageDown'); await wait(100);
+    check('Page Down goes to the next one', await E(() => window.__docCam.state.snapId === window.__docCam.state.snaps[3].id) && (await pg.textContent('#miniCount')) === '2 / 2');
+    await pg.keyboard.press('PageDown'); await wait(50);
+    check('and stops at the last', await E(() => window.__docCam.state.snapId === window.__docCam.state.snaps[3].id));
+    await pg.keyboard.press('PageUp'); await wait(50);
+    check('Page Up goes back', await E(() => window.__docCam.state.snapId === window.__docCam.state.snaps[1].id));
+    await pg.keyboard.press('Escape'); await wait(100);
+    check('Esc ends the slideshow', await E(() => window.__docCam.state.mode === 'live' && !window.__docCam.state.slideIds && !document.body.classList.contains('clean')));
+
+    // --- PDF ---
+    await pg.selectOption('#paperSel', 'a4');
+    const [dp] = await Promise.all([pg.waitForEvent('download'), pg.click('#pdfBtn')]);
+    const pdfPath = await dp.path();
+    check('PDF file name', /^doc-camera_\d{4}-\d\d-\d\d\.pdf$/.test(dp.suggestedFilename()), dp.suggestedFilename());
+    try {
+      const info = require('node:child_process').execFileSync('pdfinfo', [pdfPath]).toString();
+      check('PDF has the 2 ticked snapshots, on landscape A4', /Pages:\s+2/.test(info) && /Page size:\s+841\.89 x 595\.28 pts/.test(info), info);
+    } catch (e) { check('pdfinfo reads the PDF', false, e.message); }
+    try {
+      const out = require('node:child_process').execFileSync('python3', ['-I', '-c', 'import sys,pypdf; r=pypdf.PdfReader(sys.argv[1], strict=True); print(sum(len(p.images) for p in r.pages))', pdfPath]).toString().trim();
+      check('each PDF page holds its picture', out === '2', out);
+    } catch (e) { if (!/No module named/.test(String(e.stderr || ''))) check('pypdf reads the PDF', false, String(e.stderr || e.message)); }
+    check('paper size remembered', await E(() => JSON.parse(localStorage.getItem('teachingtools:doc-camera')).paper === 'a4'));
+
+    // --- delete the ticked ones ---
+    const k0 = await n();
+    pg.once('dialog', d => d.accept());
+    await pg.click('#clearAll'); await wait(150);
+    check('Delete 2 removes only the ticked snapshots', (await n()) === k0 - 2 && await E(() => window.__docCam.state.selected.size === 0));
+
+    // --- timer ---
+    await pg.keyboard.press('t');
+    check('T opens the timer', await pg.isVisible('#timerPanel'));
+    await pg.click('#tmPresets button[data-min="1"]');
+    check('a 1-minute countdown starts on screen', await pg.isVisible('#timerChip') && /^(1:00|0:59)$/.test(await pg.textContent('#tmTime')) && await pg.isHidden('#timerPanel'));
+    await pg.click('#tmPause'); const tp1 = await pg.textContent('#tmTime'); await wait(1300);
+    check('pause holds the time', (await pg.textContent('#tmTime')) === tp1 && await E(() => document.querySelector('#timerChip').classList.contains('paused')));
+    await pg.click('#tmPause');
+    await E(() => { window.__docCam.timer.endAt = Date.now() + 8000; });
+    await wait(300);
+    check('last 10 seconds are highlighted', await E(() => document.querySelector('#timerChip').classList.contains('low')));
+    await E(() => { window.__docCam.timer.endAt = Date.now() + 200; });
+    await wait(700);
+    check('Time’s up', (await pg.textContent('#tmTime')) === 'Time’s up' && await E(() => document.querySelector('#timerChip').classList.contains('done')));
+    await pg.keyboard.press('h');
+    check('timer stays visible with the controls hidden', await pg.isVisible('#timerChip'));
+    await pg.keyboard.press('h');
+    await pg.click('#tmCorner');
+    check('⤢ moves the timer to another corner', await E(() => document.querySelector('#timerChip').classList.contains('c-br')));
+    await pg.click('#tmReset');
+    check('↺ starts again from 1:00, paused', (await pg.textContent('#tmTime')) === '1:00');
+    await pg.click('#timerBtn'); await pg.click('#tmWatch'); await wait(1450);
+    check('stopwatch counts up', (await pg.textContent('#tmTime')) === '0:01');
+    await shot6('15-timer');
+    const snapsBefore = await n(); await pg.keyboard.press(' '); await pg.waitForFunction(k => window.__docCam.state.snaps.length === k + 1, snapsBefore);
+    const tpx = await E(async () => { const r = window.__docCam.state.snaps[0], bmp = await createImageBitmap(r.blob), c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; const x = c.getContext('2d'); x.drawImage(bmp, 0, 0); return [...x.getImageData(bmp.width - 40, bmp.height - 40, 1, 1).data].slice(0, 3); });
+    check('the timer is not saved in snapshots', !(tpx[0] > 230 && tpx[1] > 230 && tpx[2] > 230), tpx);
+    await pg.click('#tmClose');
+    check('✕ closes the timer', await pg.isHidden('#timerChip'));
+    check('no errors in compare/slideshow/PDF/timer checks', errs6.length === 0, errs6);
+    await b6.close();
+  }
+
   console.log(`\n${passed} passed, ${fails.length} failed`);
   if (fails.length) { console.log(fails.join('\n')); process.exit(1); }
 })().catch(e => { console.error(e); process.exit(1); });

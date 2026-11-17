@@ -12,7 +12,8 @@ const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const G = vm.runInNewContext(core + `;({ normRot, oriented, normView, visibleRect, fitRect, drawView, zoomAt, panBy, pinchStep, snapshotSize,
   looksBuiltIn, pickPreferred, stamp, fileName, uniqueNames, crc32, makeZip, ZMIN, ZMAX,
-  newInk, inkEmpty, inkMapper, rectBox, rectFrom, clampRect, transformInk, drawInk, adjustFilter, AIDS, INK_COLORS, MASK_FILL })`, { TextEncoder });
+  newInk, inkEmpty, inkMapper, rectBox, rectFrom, clampRect, transformInk, drawInk, adjustFilter, AIDS, INK_COLORS, MASK_FILL,
+  gridLayout, GRID_LABELS, shuffleOrder, fmtClock, nextCamera, PAPER, defaultPaper, pdfPageLayout, makePdf, isJpeg })`, { TextEncoder });
 const near = (a, b, e = 1e-9) => assert.ok(Math.abs(a - b) <= e, a + ' vs ' + b);
 
 test('rotation is kept to 0/90/180/270', () => {
@@ -258,4 +259,81 @@ test('adjustFilter: only what differs from normal', () => {
 
 test('ink colours are the four Okabe–Ito picks, all distinct', () => {
   assert.deepEqual(plain(G.INK_COLORS.map(c => c.hex)), ['#1b1b1b', '#0072B2', '#D55E00', '#F0E442']);
+});
+
+/* ---------- comparing, timer, camera switch ---------- */
+test('gridLayout: a row on wide screens, a column on tall ones, 2×2 for four', () => {
+  assert.deepEqual(plain(G.gridLayout(2, 1600, 900)), { cols: 2, rows: 1 });
+  assert.deepEqual(plain(G.gridLayout(3, 900, 1600)), { cols: 1, rows: 3 });
+  assert.deepEqual(plain(G.gridLayout(4, 1600, 900)), { cols: 2, rows: 2 });
+  assert.equal(G.GRID_LABELS.join(''), 'ABCD');
+});
+
+test('shuffleOrder always changes the order and keeps every picture', () => {
+  let seed = 1; const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  for (let i = 0; i < 200; i++) {
+    const a = ['a', 'b', 'c', 'd'].slice(0, 2 + (i % 3)), b = G.shuffleOrder(a, rnd);
+    assert.deepEqual([...b].sort(), [...a].sort()); assert.notDeepEqual(plain(b), a);
+  }
+  // even a "random" source that never moves anything
+  assert.notDeepEqual(plain(G.shuffleOrder(['a', 'b', 'c'], () => 0.999999)), ['a', 'b', 'c']);
+  assert.deepEqual(plain(G.shuffleOrder(['a'], Math.random)), ['a']);
+});
+
+test('fmtClock', () => {
+  assert.equal(G.fmtClock(300000, true), '5:00');
+  assert.equal(G.fmtClock(299001, true), '5:00', 'a countdown rounds up');
+  assert.equal(G.fmtClock(1, true), '0:01');
+  assert.equal(G.fmtClock(0, true), '0:00');
+  assert.equal(G.fmtClock(61999, false), '1:01', 'a stopwatch rounds down');
+  assert.equal(G.fmtClock(3723000, false), '1:02:03');
+});
+
+test('nextCamera goes back to the previous camera, else the next one', () => {
+  const d = [{ deviceId: 'a' }, { deviceId: 'b' }, { deviceId: 'c' }];
+  assert.equal(G.nextCamera(d, 'c', 'a'), 'a');
+  assert.equal(G.nextCamera(d, 'c', null), 'a');
+  assert.equal(G.nextCamera(d, 'a', 'gone'), 'b');
+  assert.equal(G.nextCamera([{ deviceId: 'a' }], 'a', null), null);
+});
+
+test('paper size follows the language region', () => {
+  assert.equal(G.defaultPaper('en-US'), 'letter'); assert.equal(G.defaultPaper('fr-CA'), 'letter');
+  assert.equal(G.defaultPaper('en-GB'), 'a4'); assert.equal(G.defaultPaper('de'), 'a4'); assert.equal(G.defaultPaper(undefined), 'a4');
+});
+
+test('pdfPageLayout turns the page for wide pictures and centres inside the margins', () => {
+  const l = G.pdfPageLayout(1920, 1080, G.PAPER.letter);
+  assert.equal(l.pw, 792); assert.equal(l.ph, 612);
+  near(l.w, 792 - 56); near(l.x, 28); near(l.y + l.h / 2, 306);
+  const p = G.pdfPageLayout(1080, 1920, G.PAPER.a4);
+  assert.equal(p.pw, 595.28); near(p.x + p.w / 2, 595.28 / 2); assert.ok(p.h <= 841.89 - 56 + 1e-9);
+});
+
+test('makePdf builds a valid PDF that pdf readers accept', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doccam-pdf-'));
+  // two real JPEGs (made with Pillow when available), one landscape and one portrait
+  const jp = (w, h, name, color) => {
+    const f = path.join(dir, name);
+    execFileSync('python3', ['-I', '-c', 'import sys; from PIL import Image; Image.new("RGB",(int(sys.argv[1]),int(sys.argv[2])),sys.argv[4]).save(sys.argv[3],"JPEG")', String(w), String(h), f, color]);
+    return new Uint8Array(fs.readFileSync(f));
+  };
+  let a, b;
+  try { a = jp(320, 180, 'a.jpg', 'red'); b = jp(120, 200, 'b.jpg', 'blue'); } catch (e) { return; } // no Pillow here
+  assert.ok(G.isJpeg(a));
+  const pages = [{ jpeg: a, iw: 320, ih: 180, ...G.pdfPageLayout(320, 180, G.PAPER.letter) }, { jpeg: b, iw: 120, ih: 200, ...G.pdfPageLayout(120, 200, G.PAPER.letter) }];
+  const parts = G.makePdf(pages);
+  const buf = Buffer.concat(parts.map(p => Buffer.from(p.buffer, p.byteOffset, p.byteLength)));
+  const fp = path.join(dir, 't.pdf'); fs.writeFileSync(fp, buf);
+  // xref offsets point at the objects
+  const text = buf.toString('latin1'), xs = text.slice(text.lastIndexOf('xref\n')).split('\n').slice(3).filter(l => / n $/.test(l)).map(l => +l.slice(0, 10));
+  xs.forEach((off, i) => assert.equal(text.slice(off, off + String(i + 1).length + 6), (i + 1) + ' 0 obj'));
+  try {
+    const info = execFileSync('pdfinfo', [fp]).toString();
+    assert.match(info, /Pages:\s+2/); assert.match(info, /Page size:\s+792 x 612 pts/);
+  } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  try {
+    const out = execFileSync('python3', ['-I', '-c', 'import sys,pypdf; r=pypdf.PdfReader(sys.argv[1], strict=True); print(len(r.pages), [ (round(float(p.mediabox.width)), round(float(p.mediabox.height))) for p in r.pages], [len(p.images) for p in r.pages])', fp]).toString().trim();
+    assert.equal(out, '2 [(792, 612), (612, 792)] [1, 1]');
+  } catch (e) { if (!/No module named/.test(String(e.stderr || ''))) throw e; }
 });
