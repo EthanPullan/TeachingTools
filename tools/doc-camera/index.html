@@ -186,7 +186,7 @@
       <button class="btn icon" id="mirBtn" title="Mirror left–right (M)"><span class="ic">⇋</span><span class="lab">Mirror</span></button>
     </div>
     <div class="vsep hide-narrow"></div>
-    <div class="group" title="Zoom: scroll on the picture, or drag to move around when zoomed in">
+    <div class="group" title="Zoom: scroll or pinch on the picture, and drag to move around when zoomed in">
       <button class="btn icon" id="zoomOut" title="Zoom out (−)">−</button>
       <button class="btn zoom-val" id="zoomVal" title="Back to the whole picture (0)">100%</button>
       <button class="btn icon" id="zoomIn" title="Zoom in (+)">+</button>
@@ -249,7 +249,7 @@
     <span class="dotline"></span><span><b id="stRes">—</b></span>
     <span class="dotline"></span><span>Zoom <b id="stZoom">100%</b></span>
     <span class="dotline"></span><span><b id="stSnaps">0</b> saved <span id="stStore"></span></span>
-    <span class="stamp"><kbd>Space</kbd> snapshot · <kbd>P</kbd> freeze · <kbd>R</kbd> rotate · <kbd>M</kbd> mirror · <kbd>+</kbd><kbd>−</kbd> zoom · <kbd>C</kbd> compare · <kbd>H</kbd> hide · <kbd>F</kbd> fullscreen</span>
+    <span class="stamp"><kbd>Space</kbd> snapshot · <kbd>P</kbd> freeze · <kbd>R</kbd> rotate · <kbd>M</kbd> mirror · <kbd>+</kbd><kbd>−</kbd> or pinch zoom · <kbd>C</kbd> compare · <kbd>H</kbd> hide · <kbd>F</kbd> fullscreen</span>
   </footer>
 </div>
 
@@ -313,6 +313,14 @@ function zoomAt(view, factor, nx, ny) {
 function panBy(view, dxFrac, dyFrac) {
   const v = normView(view);
   return normView({ ...v, cx: v.cx - dxFrac / v.zoom, cy: v.cy - dyFrac / v.zoom });
+}
+/* Two-finger pinch: fingers moved from a0,b0 to a1,b1 (pixels inside a w×h picture box).
+   The picture follows the midpoint and scales by the change in finger spread, around the new midpoint. */
+function pinchStep(view, a0, b0, a1, b1, w, h) {
+  const d0 = Math.hypot(b0.x - a0.x, b0.y - a0.y), d1 = Math.hypot(b1.x - a1.x, b1.y - a1.y);
+  const m0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 }, m1 = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 };
+  const moved = panBy(view, (m1.x - m0.x) / w, (m1.y - m0.y) / h);
+  return d0 > 0 && d1 > 0 ? zoomAt(moved, d1 / d0, m1.x / w, m1.y / h) : moved;
 }
 /* A snapshot keeps the camera's own pixels for the part you can see. */
 function snapshotSize(sw, sh, view) {
@@ -596,30 +604,40 @@ function makeZip(files) {
     panes.live.dirty = true; updateUI();
   }
 
-  /* pointer: scroll to zoom, drag to move when zoomed, double-click for 2× / whole picture */
+  /* pointer: scroll or pinch to zoom, drag (one finger) to move when zoomed, double-click / double-tap for 2× / whole picture */
   function localPoint(p, e) {
     const r = p.canvas.getBoundingClientRect(), d = p.dest;
     if (!d) return [0.5, 0.5];
     return [Math.min(1, Math.max(0, (e.clientX - r.left - d.x) / d.w)), Math.min(1, Math.max(0, (e.clientY - r.top - d.y) / d.h))];
   }
   for (const p of [panes.live, panes.snap]) {
-    const c = p.canvas; let drag = null;
+    const c = p.canvas, pts = new Map(); /* pointerId → last position in the picture box, in CSS px */
+    const boxPoint = e => { const r = c.getBoundingClientRect(), d = p.dest; return { x: e.clientX - r.left - d.x, y: e.clientY - r.top - d.y }; };
     c.addEventListener('wheel', e => {
       if (!p.dest) return; e.preventDefault();
       const [nx, ny] = localPoint(p, e), dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
       setPaneView(p, zoomAt(p.view, Math.exp(-dy * 0.0018), nx, ny));
     }, { passive: false });
     c.addEventListener('pointerdown', e => {
-      if (!p.dest || p.view.zoom <= 1) return;
-      drag = { x: e.clientX, y: e.clientY }; c.setPointerCapture(e.pointerId); p.el.classList.add('dragging');
+      if (!p.dest || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      pts.set(e.pointerId, boxPoint(e));
+      try { c.setPointerCapture(e.pointerId); } catch (err) {}
+      p.el.classList.toggle('dragging', pts.size > 1 || p.view.zoom > 1);
     });
     c.addEventListener('pointermove', e => {
-      if (!drag || !p.dest) return;
-      const dx = (e.clientX - drag.x) / p.dest.w, dy = (e.clientY - drag.y) / p.dest.h;
-      drag = { x: e.clientX, y: e.clientY }; setPaneView(p, panBy(p.view, dx, dy));
+      if (!pts.has(e.pointerId) || !p.dest) return;
+      const prev = new Map(pts); pts.set(e.pointerId, boxPoint(e));
+      const { w, h } = p.dest;
+      if (pts.size >= 2) {
+        const [ia, ib] = [...pts.keys()];
+        setPaneView(p, pinchStep(p.view, prev.get(ia), prev.get(ib), pts.get(ia), pts.get(ib), w, h));
+      } else if (p.view.zoom > 1) {
+        const a = prev.get(e.pointerId), b = pts.get(e.pointerId);
+        setPaneView(p, panBy(p.view, (b.x - a.x) / w, (b.y - a.y) / h));
+      }
     });
-    const end = () => { drag = null; p.el.classList.remove('dragging'); };
-    c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+    const end = e => { pts.delete(e.pointerId); if (!pts.size) p.el.classList.remove('dragging'); };
+    c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end); c.addEventListener('lostpointercapture', end);
     c.addEventListener('dblclick', e => {
       if (!p.dest) return;
       const [nx, ny] = localPoint(p, e);

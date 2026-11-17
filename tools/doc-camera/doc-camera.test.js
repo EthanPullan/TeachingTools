@@ -10,7 +10,7 @@ const { execFileSync } = require('node:child_process');
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
-const G = vm.runInNewContext(core + `;({ normRot, oriented, normView, visibleRect, fitRect, drawView, zoomAt, panBy, snapshotSize,
+const G = vm.runInNewContext(core + `;({ normRot, oriented, normView, visibleRect, fitRect, drawView, zoomAt, panBy, pinchStep, snapshotSize,
   looksBuiltIn, pickPreferred, stamp, fileName, uniqueNames, crc32, makeZip, ZMIN, ZMAX })`, { TextEncoder });
 const near = (a, b, e = 1e-9) => assert.ok(Math.abs(a - b) <= e, a + ' vs ' + b);
 
@@ -49,6 +49,24 @@ test('dragging pans the opposite way and stops at the edge', () => {
   near(v.cx, 0.45);
   const edge = G.panBy(G.normView({ zoom: 2 }), 5, 5);
   near(edge.cx, 0.25); near(edge.cy, 0.25);
+});
+
+test('pinch: spreading fingers zooms around their midpoint, sliding them moves the picture', () => {
+  const v0 = G.normView({});
+  // fingers spread from 100 apart to 200 apart around the point (250, 150) of a 1000×500 box
+  const v1 = G.pinchStep(v0, { x: 200, y: 150 }, { x: 300, y: 150 }, { x: 150, y: 150 }, { x: 350, y: 150 }, 1000, 500);
+  near(v1.zoom, 2);
+  // the picture point under the midpoint (0.25, 0.3) stays under it
+  near(v1.cx - 0.5 / v1.zoom + 0.25 / v1.zoom, 0.25); near(v1.cy - 0.5 / v1.zoom + 0.3 / v1.zoom, 0.3);
+  // two fingers sliding 100px right together (no spread change) at 2×: pans left by 0.1 / 2 of the picture
+  const v2 = G.pinchStep(v1, { x: 150, y: 150 }, { x: 350, y: 150 }, { x: 250, y: 150 }, { x: 450, y: 150 }, 1000, 500);
+  near(v2.zoom, 2); near(v2.cx, v1.cx - 0.05);
+  // pinching in past 100% stops at the whole picture
+  const v3 = G.pinchStep(v2, { x: 0, y: 0 }, { x: 900, y: 0 }, { x: 400, y: 0 }, { x: 500, y: 0 }, 1000, 500);
+  assert.equal(v3.zoom, 1); assert.equal(v3.cx, 0.5);
+  // fingers on the same spot do not break anything
+  const v4 = G.pinchStep(v0, { x: 5, y: 5 }, { x: 5, y: 5 }, { x: 5, y: 5 }, { x: 5, y: 5 }, 1000, 500);
+  assert.deepEqual({ ...v4 }, { ...v0 });
 });
 
 test('snapshot keeps the camera pixels of what you see', () => {

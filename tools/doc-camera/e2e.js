@@ -153,6 +153,43 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   await page.waitForFunction(() => window.__docCam.state.snaps.length === 2);
   check('undo restores', true);
 
+  // Two-finger pinch on a touch screen (smart board)
+  {
+    const tctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, hasTouch: true });
+    const tp = await tctx.newPage();
+    tp.on('pageerror', e => errors.push('PAGEERROR ' + e.message));
+    await tp.goto(URL);
+    await tp.waitForFunction(() => window.__docCam.state.stream && window.__docCam.panes.live.dest, null, { timeout: 10000 });
+    const cdp = await tctx.newCDPSession(tp);
+    const tb = await tp.locator('#cvLive').boundingBox();
+    const cx = tb.x + tb.width * 0.3, cy = tb.y + tb.height * 0.4;
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p[0], y: p[1], id: i })) });
+    await touch('touchStart', [[cx - 50, cy], [cx + 50, cy]]);
+    for (let s = 1; s <= 10; s++) await touch('touchMove', [[cx - 50 - s * 10, cy], [cx + 50 + s * 10, cy]]);
+    await touch('touchEnd', []);
+    await wait(100);
+    const pv = await tp.evaluate(() => window.__docCam.state.live);
+    check('pinch out zooms in about 3×', Math.abs(pv.zoom - 3) < 0.05, pv);
+    check('pinch zooms toward the fingers', pv.cx < 0.5 && pv.cy < 0.5, pv);
+    check('zoom readout follows pinch', (await tp.textContent('#zoomVal')) === Math.round(pv.zoom * 100) + '%');
+    // one finger drag pans
+    await touch('touchStart', [[cx, cy]]);
+    for (let s = 1; s <= 5; s++) await touch('touchMove', [[cx + s * 20, cy]]);
+    await touch('touchEnd', []);
+    await wait(100);
+    const dv = await tp.evaluate(() => window.__docCam.state.live);
+    check('one-finger drag pans when zoomed', dv.cx < pv.cx && Math.abs(dv.zoom - pv.zoom) < 1e-9, { before: pv, after: dv });
+    // pinch back in to the whole picture
+    await touch('touchStart', [[cx - 300, cy], [cx + 300, cy]]);
+    for (let s = 1; s <= 10; s++) await touch('touchMove', [[cx - 300 + s * 28, cy], [cx + 300 - s * 28, cy]]);
+    await touch('touchEnd', []);
+    await wait(100);
+    check('pinch in returns to 100%', await tp.evaluate(() => window.__docCam.state.live.zoom === 1));
+    // the page itself did not zoom or scroll
+    check('page did not zoom', await tp.evaluate(() => (window.visualViewport ? window.visualViewport.scale : 1) === 1 && window.scrollX === 0 && window.scrollY === 0));
+    await tctx.close();
+  }
+
   // Clean mode
   await page.keyboard.press('h');
   check('clean mode hides toolbar', await page.isHidden('.toolbar'));
