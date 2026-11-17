@@ -82,18 +82,21 @@
   @media (max-aspect-ratio:1/1){ .stage.compare{grid-template-columns:1fr;grid-template-rows:1fr 1fr;} }
   .pane{position:relative;min-width:0;min-height:0;overflow:hidden;}
   .pane canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+  .pane canvas.ink{z-index:1;}
+  body.drawing .pane canvas.ink{cursor:crosshair;}
+  body.drawing[data-tool="move"] .pane canvas.ink{cursor:grab;}
   .pane.zoomed canvas{cursor:grab;} .pane.dragging canvas{cursor:grabbing;}
   .pane video{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none;}
   .stage.swap #paneSnap{order:2;}
-  .chip{position:absolute;left:10px;bottom:10px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  .chip{position:absolute;z-index:2;left:10px;bottom:10px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
     background:rgba(22,36,31,.72);color:#fff;border-radius:20px;padding:3px 10px;pointer-events:none;display:none;}
   .chip .when{font-family:var(--mono);font-weight:600;letter-spacing:0;}
   .stage.compare .chip{display:block;}
-  .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;}
+  .flash{position:absolute;z-index:2;inset:0;background:#fff;opacity:0;pointer-events:none;}
   .flash.go{animation:flash .38s ease-out;}
   @keyframes flash{from{opacity:.75;}to{opacity:0;}}
 
-  .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .msg{position:absolute;z-index:3;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;}
   .msg-card{background:var(--panel);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px 24px;max-width:460px;
     text-align:center;}
   .msg-card .big{font-size:30px;line-height:1;margin-bottom:10px;}
@@ -139,8 +142,39 @@
   .mini{position:fixed;right:14px;bottom:14px;z-index:50;display:none;gap:6px;background:rgba(255,255,255,.94);
     border-radius:12px;padding:6px;box-shadow:0 8px 24px rgba(20,40,33,.25);opacity:.35;transition:opacity .2s;}
   .mini:hover,.mini:focus-within{opacity:1;}
-  body.clean .toolbar,body.clean .stage-bar,body.clean .strip,body.clean .statusbar{display:none !important;}
+  body.clean .toolbar,body.clean #viewBar,body.clean .strip,body.clean .statusbar{display:none !important;}
+  body.clean .stage.is-frozen #liveChip{display:block;}
   body.clean .mini{display:flex;}
+
+  /* draw bar */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none;}
+  .seg button{border:none;border-left:1px solid var(--line);background:#fff;padding:6px 10px;cursor:pointer;font-size:12.5px;
+    font-weight:600;color:var(--muted);display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+  .seg button:first-child{border-left:none;}
+  .seg button:hover{color:var(--ink);background:var(--panel-2);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .seg button .gl{font-size:14px;line-height:1;}
+  .draw-bar{gap:7px;}
+  .swatches{display:inline-flex;gap:5px;}
+  .swatch{width:26px;height:26px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0;}
+  .swatch.active{box-shadow:0 0 0 2px var(--accent);}
+  .check{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;user-select:none;color:var(--ink);white-space:nowrap;}
+  .check input{width:16px;height:16px;accent-color:var(--board);}
+
+  /* adjust panel */
+  .adjust{position:absolute;z-index:20;top:8px;right:8px;width:340px;max-width:calc(100% - 16px);max-height:calc(100% - 16px);
+    overflow:auto;background:var(--panel);border-radius:var(--radius);box-shadow:0 8px 24px rgba(20,40,33,.25);padding:14px 16px;}
+  .adj-sec + .adj-sec{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
+  .adj-sec .section-title{margin-bottom:10px;display:flex;align-items:baseline;gap:8px;}
+  .adj-sec .section-title .hint{text-transform:none;letter-spacing:0;font-weight:400;}
+  .adj-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .adj-row > .field-lab{min-width:64px;}
+  .slider-row{margin-top:10px;}
+  .slider-row .lab{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px;}
+  .slider-row .lab b{font-family:var(--mono);font-weight:600;color:var(--board);}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
 
   /* toasts */
   .toast-wrap{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:1000;
@@ -154,8 +188,16 @@
   .toast button:hover{background:rgba(255,255,255,.12);}
   @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 
-  @media (max-width:1520px){ .brand small{display:none;} }
-  @media (max-width:1320px){ .field-lab,.btn .lab{display:none;} }
+  @media (max-width:1700px){ .brand small{display:none;} }
+  @media (max-width:1560px){ .toolbar .field-lab,.btn .lab{display:none;} }
+  @media (max-width:1760px){ #toolSeg .tl,#coverSeg .tl{display:none;} }
+  /* touch screens and smart boards: bigger targets (WCAG 2.5.5) */
+  @media (pointer:coarse){
+    .btn{min-height:44px;min-width:44px;justify-content:center;} .btn.small{min-height:40px;}
+    select{min-height:44px;} .seg button{min-height:42px;padding:6px 12px;}
+    .swatch{width:36px;height:36px;} .thumb .acts button{padding:8px 9px;font-size:14px;}
+    .check input{width:22px;height:22px;}
+  }
   @media (max-width:880px){
     .strip-head{width:112px;}
     .statusbar .stamp,.hide-narrow{display:none;}
@@ -195,6 +237,8 @@
     <button class="btn" id="freezeBtn" title="Freeze the picture so you can move the page (P)"><span class="ic">❚❚</span><span class="lab">Freeze</span></button>
     <button class="btn primary" id="snapBtn" title="Save this moment (Space)"><span class="ic">📸</span>Snapshot</button>
     <div class="vsep hide-narrow"></div>
+    <button class="btn" id="drawBtn" title="Draw, highlight and cover (D)"><span class="ic">✏️</span><span class="lab">Draw</span></button>
+    <button class="btn" id="adjBtn" title="Picture, viewing aids and camera settings (A)"><span class="ic">🎚</span><span class="lab">Adjust</span></button>
     <button class="btn icon" id="stripBtn" title="Show or hide the snapshots strip"><span class="ic">🖼</span></button>
     <button class="btn icon" id="cleanBtn" title="Hide the controls, show only the picture (H)"><span class="ic">👁</span></button>
     <button class="btn icon" id="fsBtn" title="Fullscreen (F)"><span class="ic">⛶</span></button>
@@ -214,14 +258,67 @@
     <button class="btn small primary" id="vbBack" title="Back to the live picture (Esc)"><span class="ic">●</span>Back to live</button>
   </div>
 
+  <div class="stage-bar draw-bar" id="drawBar" hidden>
+    <div class="seg" id="toolSeg" role="group" aria-label="Drawing tool">
+      <button data-tool="move" title="Move and zoom the picture (V)"><span class="gl">✋</span><span class="tl">Move</span></button>
+      <button data-tool="pen" title="Pen"><span class="gl">✏️</span><span class="tl">Pen</span></button>
+      <button data-tool="hl" title="Highlighter"><span class="gl">🖍</span><span class="tl">Highlight</span></button>
+      <button data-tool="arrow" title="Arrow"><span class="gl">➚</span><span class="tl">Arrow</span></button>
+      <button data-tool="box" title="Box"><span class="gl">▭</span><span class="tl">Box</span></button>
+    </div>
+    <div class="swatches" id="swatches" role="group" aria-label="Colour"></div>
+    <div class="seg" id="sizeSeg" role="group" aria-label="Line size">
+      <button data-size="s" title="Thin">S</button><button data-size="m" title="Medium">M</button><button data-size="l" title="Thick">L</button>
+    </div>
+    <div class="vsep"></div>
+    <div class="seg" id="coverSeg" role="group" aria-label="Cover tool">
+      <button data-tool="mask" title="Cover: hide names, grades or answers. Drag to draw a cover; drag a cover to move it, its corner to resize."><span class="gl">⬛</span><span class="tl">Cover</span></button>
+      <button data-tool="spot" title="Spotlight: dim everything except one part"><span class="gl">◎</span><span class="tl">Spotlight</span></button>
+      <button data-tool="curtain" title="Curtain: hide the lower part and reveal it bit by bit (↑ ↓)"><span class="gl">▤</span><span class="tl">Curtain</span></button>
+    </div>
+    <button class="btn small" id="addMask" data-for="mask" title="Add a cover over the top-left corner, where names usually are"><span class="ic">＋</span>Name cover</button>
+    <button class="btn small" id="curLess" data-for="curtain" title="Hide more (↑)">▲ Less</button>
+    <button class="btn small" id="curMore" data-for="curtain" title="Reveal more (↓)">▼ More</button>
+    <div class="spacer"></div>
+    <label class="check" title="Freeze the picture when you start drawing on the live camera, so the drawing stays on the page"><input type="checkbox" id="freezeToDraw">Freeze to draw</label>
+    <button class="btn small" id="undoBtn" title="Undo (Ctrl+Z)"><span class="ic">↶</span>Undo</button>
+    <button class="btn small" id="clearInk" title="Remove the pen, highlighter, arrows and boxes">Clear drawing</button>
+    <button class="btn small" id="clearCovers" title="Remove covers, spotlight and curtain">Remove covers</button>
+    <button class="btn small primary" id="drawDone" title="Close the drawing tools (Esc). What you drew stays.">Done</button>
+  </div>
+
   <main class="stage" id="stage">
+    <div class="adjust" id="adjustPanel" hidden role="dialog" aria-label="Adjust">
+      <div class="adj-sec">
+        <h3 class="section-title">Picture <span class="hint">saved in snapshots</span></h3>
+        <div class="slider-row"><div class="lab"><label for="adjBri">Brightness</label><b id="adjBriVal">100%</b></div><input type="range" id="adjBri" min="50" max="160" step="5"></div>
+        <div class="slider-row"><div class="lab"><label for="adjCon">Contrast</label><b id="adjConVal">100%</b></div><input type="range" id="adjCon" min="50" max="220" step="5"></div>
+        <div class="adj-row"><span class="field-lab">Colour</span>
+          <div class="seg" id="colorSeg"><button data-v="color">Colour</button><button data-v="gray">Grey</button><button data-v="bw" title="Black and white with strong contrast: makes faint pencil easier to read">Pencil boost</button></div></div>
+        <div class="adj-row"><span class="field-lab">Turn</span>
+          <div class="seg" id="rotSeg"><button data-rot="0">0°</button><button data-rot="90">90°</button><button data-rot="180">180°</button><button data-rot="270">270°</button></div>
+          <button class="btn small" id="adjMirror"><span class="ic">⇋</span>Mirror</button></div>
+        <div class="adj-row"><button class="btn small" id="adjReset">Reset picture</button></div>
+      </div>
+      <div class="adj-sec">
+        <h3 class="section-title">Viewing aid <span class="hint">screen only, not saved</span></h3>
+        <div class="seg" id="aidSeg"><button data-v="normal">Normal</button><button data-v="invert">Light on dark</button><button data-v="yellow">Yellow on black</button></div>
+        <p class="hint" style="margin:8px 0 0">For students who read light text on a dark background more easily.</p>
+      </div>
+      <div class="adj-sec">
+        <h3 class="section-title">Camera</h3>
+        <div id="camCtl"></div>
+      </div>
+    </div>
     <section class="pane" id="paneSnap" hidden>
-      <canvas id="cvSnap"></canvas>
+      <canvas id="cvSnap" class="img"></canvas>
+      <canvas id="inkSnap" class="ink"></canvas>
       <span class="chip">Snapshot <span class="when" id="chipWhen"></span></span>
     </section>
     <section class="pane" id="paneLive">
       <video id="video" playsinline muted></video>
-      <canvas id="cvLive"></canvas>
+      <canvas id="cvLive" class="img"></canvas>
+      <canvas id="inkLive" class="ink"></canvas>
       <div class="flash" id="flash"></div>
       <span class="chip" id="liveChip">Live</span>
       <div class="msg" id="msg" hidden>
@@ -249,7 +346,7 @@
     <span class="dotline"></span><span><b id="stRes">—</b></span>
     <span class="dotline"></span><span>Zoom <b id="stZoom">100%</b></span>
     <span class="dotline"></span><span><b id="stSnaps">0</b> saved <span id="stStore"></span></span>
-    <span class="stamp"><kbd>Space</kbd> snapshot · <kbd>P</kbd> freeze · <kbd>R</kbd> rotate · <kbd>M</kbd> mirror · <kbd>+</kbd><kbd>−</kbd> or pinch zoom · <kbd>C</kbd> compare · <kbd>H</kbd> hide · <kbd>F</kbd> fullscreen</span>
+    <span class="stamp"><kbd>Space</kbd> snapshot · <kbd>P</kbd> freeze · <kbd>R</kbd> rotate · <kbd>M</kbd> mirror · <kbd>+</kbd><kbd>−</kbd> or pinch zoom · <kbd>C</kbd> compare · <kbd>D</kbd> draw · <kbd>A</kbd> adjust · <kbd>H</kbd> hide · <kbd>F</kbd> fullscreen</span>
   </footer>
 </div>
 
@@ -258,10 +355,19 @@
   <button class="btn icon" id="miniFreeze" title="Freeze (P)">❚❚</button>
   <button class="btn icon" id="miniOut" title="Zoom out (−)">−</button>
   <button class="btn icon" id="miniIn" title="Zoom in (+)">+</button>
+  <button class="btn icon" id="miniDraw" title="Draw (D)">✏️</button>
   <button class="btn icon" id="miniShow" title="Show the controls (H)">👁</button>
 </div>
 
-<div class="toast-wrap" id="toasts"></div>
+<div class="toast-wrap" id="toasts" role="status" aria-live="polite"></div>
+<div class="sr-only" id="sr" role="status" aria-live="polite"></div>
+<!-- "Yellow on black" viewing aid: dark marks become bright yellow, paper becomes black -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="aidYellow" color-interpolation-filters="sRGB">
+    <feColorMatrix type="matrix" values="-0.2126 -0.7152 -0.0722 0 1  -0.2126 -0.7152 -0.0722 0 1  0 0 0 0 0  0 0 0 1 0"/>
+    <feComponentTransfer><feFuncR type="linear" slope="1.5" intercept="-0.25"/><feFuncG type="linear" slope="1.5" intercept="-0.25"/></feComponentTransfer>
+  </filter>
+</svg>
 
 <!-- Pure logic (no DOM): view geometry, file names and the .zip writer. Unit-tested by doc-camera.test.js. -->
 <script id="core">
@@ -322,6 +428,106 @@ function pinchStep(view, a0, b0, a1, b1, w, h) {
   const moved = panBy(view, (m1.x - m0.x) / w, (m1.y - m0.y) / h);
   return d0 > 0 && d1 > 0 ? zoomAt(moved, d1 / d0, m1.x / w, m1.y / h) : moved;
 }
+/* ---------- drawing and covers ----------
+   Everything drawn is kept in page coordinates: fractions (0–1) of the turned picture, so it stays on the paper
+   when you zoom or move around. Line widths are fractions of the picture's diagonal. */
+/* Okabe–Ito colours, chosen to stay distinct for the common colour-vision differences. */
+const INK_COLORS = [
+  { id: 'black', hex: '#1b1b1b', name: 'Black' },
+  { id: 'blue', hex: '#0072B2', name: 'Blue' },
+  { id: 'red', hex: '#D55E00', name: 'Red-orange' },
+  { id: 'yellow', hex: '#F0E442', name: 'Yellow' }
+];
+const INK_SIZES = { s: 0.0016, m: 0.0028, l: 0.005 };
+const MASK_FILL = '#5d6964', CURTAIN_FILL = '#1d2a26', SPOT_DIM = 0.8;
+function newInk() { return { strokes: [], masks: [], spot: null, curtain: null }; }
+function inkEmpty(k) { return !k || (!k.strokes.length && !k.masks.length && !k.spot && k.curtain == null); }
+const clamp01 = x => Math.min(1, Math.max(0, x));
+/* Maps page coordinates to pixels of a box d that shows the visible part r of the picture, and back. */
+function inkMapper(r, d) {
+  const s = d.w / r.w;
+  return { s, ow: r.ow, oh: r.oh, diag: Math.hypot(r.ow, r.oh), d,
+    x: u => d.x + (u * r.ow - r.x) * s, y: v => d.y + (v * r.oh - r.y) * s,
+    u: x => (r.x + (x - d.x) / s) / r.ow, v: y => (r.y + (y - d.y) / s) / r.oh };
+}
+function rectBox(k, m) { return [m.x(k.x), m.y(k.y), k.w * m.ow * m.s, k.h * m.oh * m.s]; }
+function rectFrom(u0, v0, u1, v1) {
+  const x0 = clamp01(Math.min(u0, u1)), y0 = clamp01(Math.min(v0, v1)), x1 = clamp01(Math.max(u0, u1)), y1 = clamp01(Math.max(v0, v1));
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+function clampRect(k) {
+  const w = clamp01(k.w), h = clamp01(k.h);
+  return { x: Math.min(1 - w, Math.max(0, k.x)), y: Math.min(1 - h, Math.max(0, k.y)), w, h };
+}
+/* A quarter turn clockwise ('rot') or a left–right mirror ('flip') of everything drawn, matching the picture. */
+function transformInk(k, op) {
+  const pt = op === 'rot' ? ([u, v]) => [1 - v, u] : ([u, v]) => [1 - u, v];
+  const rect = op === 'rot' ? r => ({ x: 1 - (r.y + r.h), y: r.x, w: r.h, h: r.w }) : r => ({ x: 1 - (r.x + r.w), y: r.y, w: r.w, h: r.h });
+  return { strokes: k.strokes.map(s => ({ ...s, p: s.p.map(pt) })), masks: k.masks.map(rect),
+    spot: k.spot ? rect(k.spot) : null, curtain: op === 'rot' ? null : k.curtain };
+}
+function drawStroke(ctx, st, m) {
+  const P = st.p.map(([u, v]) => [m.x(u), m.y(v)]), lw = Math.max(1, st.w * m.diag * m.s);
+  ctx.save(); ctx.strokeStyle = st.c; ctx.fillStyle = st.c; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (st.t === 'hl') ctx.globalAlpha = 0.4;
+  ctx.beginPath();
+  const a = P[0], b = P[P.length - 1];
+  if (st.t === 'box') { ctx.rect(a[0], a[1], b[0] - a[0], b[1] - a[1]); ctx.stroke(); }
+  else if (st.t === 'arrow') {
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), hl = Math.min(lw * 4 + 6, Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.6);
+    ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+    ctx.moveTo(b[0] - hl * Math.cos(ang - 0.5), b[1] - hl * Math.sin(ang - 0.5)); ctx.lineTo(b[0], b[1]);
+    ctx.lineTo(b[0] - hl * Math.cos(ang + 0.5), b[1] - hl * Math.sin(ang + 0.5));
+    ctx.stroke();
+  } else if (P.length === 1) { ctx.arc(a[0], a[1], lw / 2, 0, Math.PI * 2); ctx.fill(); }
+  else {
+    ctx.moveTo(a[0], a[1]);
+    for (let i = 1; i < P.length - 1; i++) ctx.quadraticCurveTo(P[i][0], P[i][1], (P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2);
+    ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+  ctx.restore();
+}
+function selBox(ctx, x, y, w, h, k) {
+  ctx.save(); ctx.strokeStyle = '#e0982e'; ctx.lineWidth = 3 * k; ctx.setLineDash([8 * k, 5 * k]); ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]); ctx.fillStyle = '#e0982e'; const hs = 16 * k; ctx.fillRect(x + w - hs / 2, y + h - hs / 2, hs, hs); ctx.restore();
+}
+/* Strokes, then name covers, then the spotlight's dimming, then the curtain. o.screen adds the on-screen-only
+   selection outlines and the curtain's grip; snapshots leave them out. */
+function drawInk(ctx, ink, m, o) {
+  o = o || {}; const d = m.d, k = o.dpr || 1;
+  ctx.save(); ctx.beginPath(); ctx.rect(d.x, d.y, d.w, d.h); ctx.clip();
+  for (const st of ink.strokes) drawStroke(ctx, st, m);
+  ink.masks.forEach((r, i) => {
+    const [x, y, w, h] = rectBox(r, m); ctx.fillStyle = MASK_FILL; ctx.fillRect(x, y, w, h);
+    if (o.screen && o.sel === i) selBox(ctx, x, y, w, h, k);
+  });
+  if (ink.spot) {
+    const [x, y, w, h] = rectBox(ink.spot, m);
+    ctx.fillStyle = 'rgba(0,0,0,' + SPOT_DIM + ')'; ctx.beginPath(); ctx.rect(d.x, d.y, d.w, d.h); ctx.rect(x, y, w, h); ctx.fill('evenodd');
+    if (o.screen && o.spotSel) selBox(ctx, x, y, w, h, k);
+  }
+  if (ink.curtain != null) {
+    const y = Math.max(d.y, m.y(ink.curtain));
+    if (y < d.y + d.h) {
+      ctx.fillStyle = CURTAIN_FILL; ctx.fillRect(d.x, y, d.w, d.y + d.h - y);
+      if (o.screen) { ctx.fillStyle = '#e0982e'; ctx.fillRect(d.x + d.w / 2 - 42 * k, y, 84 * k, 7 * k); }
+    }
+  }
+  ctx.restore();
+}
+
+/* Picture adjustments (saved into snapshots) and viewing aids (screen only), as CSS / canvas filter strings. */
+const AIDS = { normal: '', invert: 'invert(1) hue-rotate(180deg)', yellow: 'url(#aidYellow)' };
+function adjustFilter(a) {
+  a = a || {}; const f = [];
+  if (a.color === 'gray') f.push('grayscale(1)');
+  if (a.color === 'bw') f.push('grayscale(1)', 'contrast(1.9)', 'brightness(1.1)');
+  const b = +a.brightness || 100, c = +a.contrast || 100;
+  if (b !== 100) f.push('brightness(' + b / 100 + ')');
+  if (c !== 100) f.push('contrast(' + c / 100 + ')');
+  return f.length ? f.join(' ') : 'none';
+}
+
 /* A snapshot keeps the camera's own pixels for the part you can see. */
 function snapshotSize(sw, sh, view) {
   const r = visibleRect(sw, sh, view);
@@ -383,11 +589,18 @@ function makeZip(files) {
 (function () {
   const $ = s => document.querySelector(s);
   const LS_KEY = 'teachingtools:doc-camera';
-  const DEFAULT_PREFS = { quality: '1080', deviceId: null, views: {}, strip: true };
+  const DEFAULT_ADJUST = { brightness: 100, contrast: 100, color: 'color' };
+  const DEFAULT_PREFS = { quality: '1080', deviceId: null, views: {}, strip: true, adjust: { ...DEFAULT_ADJUST }, aid: 'normal',
+    freezeToDraw: true, inkColor: '#0072B2', hlColor: '#F0E442', inkSize: 'm', camCtl: {} };
   let prefs;
   try { prefs = Object.assign({}, DEFAULT_PREFS, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); } catch (e) { prefs = { ...DEFAULT_PREFS }; }
-  if (!prefs.views || typeof prefs.views !== 'object') prefs.views = {};
-  const hadSavedCamera = !!prefs.deviceId;
+  for (const k of ['views', 'camCtl']) if (!prefs[k] || typeof prefs[k] !== 'object') prefs[k] = {};
+  prefs.adjust = Object.assign({}, DEFAULT_ADJUST, prefs.adjust && typeof prefs.adjust === 'object' ? prefs.adjust : {});
+  if (!(prefs.aid in AIDS)) prefs.aid = 'normal';
+  if (!(prefs.inkSize in INK_SIZES)) prefs.inkSize = 'm';
+  const hadSavedCamera = !!(prefs.deviceId || prefs.cameraLabel);
+  /* Cameras are remembered by name: Chrome gives a camera a new ID on every load of a double-clicked (file://) copy. */
+  const camKey = () => (state.track && state.track.label) || state.deviceId || '';
   function savePrefs() { try { localStorage.setItem(LS_KEY, JSON.stringify(prefs)); } catch (e) {} }
 
   const video = $('#video'), stageEl = $('#stage');
@@ -395,8 +608,12 @@ function makeZip(files) {
     stream: null, track: null, deviceId: null, devices: [], frozen: null,
     live: normView({}), snapView: normView({}),
     mode: 'live', snapId: null, snapImg: null, snapImgId: null, swap: false,
-    snaps: [], memoryOnly: false, startToken: 0, autoSwitched: false
+    snaps: [], memoryOnly: false, startToken: 0, autoSwitched: false,
+    frozenId: 0, drawMode: false, tool: 'pen', penSeen: false, inkPane: null
   };
+
+  /* Screen-reader announcements (WCAG 4.1.3) */
+  function announce(text) { const el = $('#sr'); el.textContent = ''; setTimeout(() => { el.textContent = text; }, 30); }
 
   /* ---------- toasts ---------- */
   function toast(text, kind, action) {
@@ -443,13 +660,15 @@ function makeZip(files) {
   /* ---------- panes ---------- */
   const panes = {
     live: {
-      el: $('#paneLive'), canvas: $('#cvLive'), dirty: true, dest: null,
+      el: $('#paneLive'), canvas: $('#cvLive'), inkCanvas: $('#inkLive'), dirty: true, dest: null,
+      ink: newInk(), hist: [], sel: -1, spotSel: false, inkDirty: true, mapper: null, gkey: '',
       get source() { return state.frozen || (state.stream && video.readyState >= 2 && video.videoWidth ? video : null); },
       get size() { const s = this.source; return !s ? [0, 0] : s === video ? [video.videoWidth, video.videoHeight] : [s.width, s.height]; },
       get view() { return state.live; }, set view(v) { state.live = v; }
     },
     snap: {
-      el: $('#paneSnap'), canvas: $('#cvSnap'), dirty: true, dest: null,
+      el: $('#paneSnap'), canvas: $('#cvSnap'), inkCanvas: $('#inkSnap'), dirty: true, dest: null,
+      ink: newInk(), hist: [], sel: -1, spotSel: false, inkDirty: true, mapper: null, gkey: '',
       get source() { return state.snapImgId === state.snapId ? state.snapImg : null; },
       get size() { const s = this.source; return s ? [s.width, s.height] : [0, 0]; },
       get view() { return state.snapView; }, set view(v) { state.snapView = v; }
@@ -465,11 +684,23 @@ function makeZip(files) {
     if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
     const ctx = c.getContext('2d'); ctx.clearRect(0, 0, W, H);
     const src = p.source, [sw, sh] = p.size;
-    if (!src || !sw || !sh) { p.dest = null; return; }
-    const v = normView(p.view), o = oriented(sw, sh, v.rot), d = fitRect(o.w, o.h, W, H);
+    if (!src || !sw || !sh) { p.dest = null; if (p.mapper) { p.mapper = null; drawInkPane(p); } return; }
+    const v = normView(p.view), o = oriented(sw, sh, v.rot), d = fitRect(o.w, o.h, W, H), r = visibleRect(sw, sh, v);
     p.dest = { x: d.x / dpr, y: d.y / dpr, w: d.w / dpr, h: d.h / dpr };
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     drawView(ctx, src, sw, sh, v, d);
+    const key = [r.x, r.y, r.w, r.ow, d.x, d.y, d.w, W, H].join();
+    if (key !== p.gkey) { p.gkey = key; p.mapper = inkMapper(r, d); p.inkDirty = true; }
+    if (p.inkDirty) drawInkPane(p);
+  }
+  function drawInkPane(p) {
+    p.inkDirty = false;
+    const c = p.inkCanvas, dpr = window.devicePixelRatio || 1;
+    const W = Math.round(c.clientWidth * dpr), H = Math.round(c.clientHeight * dpr);
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const ctx = c.getContext('2d'); ctx.clearRect(0, 0, W, H);
+    if (!p.mapper) return;
+    drawInk(ctx, p.ink, p.mapper, { screen: true, dpr, sel: state.drawMode ? p.sel : -1, spotSel: state.drawMode && p.spotSel });
   }
   /* Redraw the live pane once per camera frame where the browser can tell us, else every animation frame. */
   const hasVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
@@ -484,10 +715,11 @@ function makeZip(files) {
     for (const p of visiblePanes()) {
       const liveMoving = p === panes.live && !state.frozen && state.stream && !hasVFC;
       if (p.dirty || liveMoving) { p.dirty = false; drawPane(p); }
+      else if (p.inkDirty) drawInkPane(p);
     }
     requestAnimationFrame(loop);
   }
-  const redrawAll = () => { panes.live.dirty = true; panes.snap.dirty = true; };
+  const redrawAll = () => { for (const p of [panes.live, panes.snap]) { p.dirty = true; p.gkey = ''; } };
   new ResizeObserver(redrawAll).observe(stageEl);
   window.addEventListener('resize', redrawAll);
 
@@ -516,10 +748,18 @@ function makeZip(files) {
   function stopStream() {
     if (state.stream) state.stream.getTracks().forEach(t => t.stop());
     state.stream = null; state.track = null; video.srcObject = null;
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
   }
+  /* Keep the screen and projector awake while the camera is on. */
+  let wakeLock = null;
+  async function keepAwake() {
+    if (!('wakeLock' in navigator) || !state.stream || document.visibilityState !== 'visible' || wakeLock) return;
+    try { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', keepAwake);
   async function startCamera(deviceId) {
     const token = ++state.startToken;
-    stopStream(); state.frozen = null; redrawAll();
+    stopStream(); state.frozen = null; resetInk(panes.live); redrawAll();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setMsg('unsupported'); return; }
     setMsg('starting');
     const q = QUALITIES[prefs.quality] || QUALITIES['1080'];
@@ -543,20 +783,24 @@ function makeZip(files) {
     state.deviceId = settings.deviceId || deviceId || null;
     state.track.addEventListener('ended', () => { if (state.stream === stream) { stopStream(); setMsg('ended'); refreshDevices(); } });
     video.srcObject = stream;
-    video.onloadedmetadata = () => { panes.live.dirty = true; updateUI(); };
+    video.onloadedmetadata = () => { panes.live.dirty = true; updateUI(); restoreCam(); renderCamControls(); };
     try { await video.play(); } catch (e) {}
     armFrames();
-    const saved = state.deviceId && prefs.views[state.deviceId];
+    const saved = prefs.views[camKey()] || (state.deviceId && prefs.views[state.deviceId]);
     state.live = normView({ rot: saved ? saved.rot : 0, flip: saved ? saved.flip : false });
-    if (state.deviceId) { prefs.deviceId = state.deviceId; savePrefs(); }
     await refreshDevices();
     if (token !== state.startToken) return;
-    if (!hadSavedCamera && !state.autoSwitched) {
+    /* First start of this visit: go to the camera used last time (by name), or on first ever use prefer a plugged-in camera. */
+    if (!deviceId && !state.autoSwitched) {
       state.autoSwitched = true;
-      const alt = pickPreferred(state.devices, state.track.label);
+      const want = prefs.cameraLabel && state.track.label !== prefs.cameraLabel && state.devices.find(d => d.label === prefs.cameraLabel);
+      const alt = want ? want.deviceId : hadSavedCamera ? null : pickPreferred(state.devices, state.track.label);
       if (alt && alt !== state.deviceId) return startCamera(alt);
     }
-    setMsg(null);
+    if (state.deviceId) prefs.deviceId = state.deviceId;
+    if (state.track.label) prefs.cameraLabel = state.track.label;
+    savePrefs();
+    setMsg(null); keepAwake(); renderCamControls();
   }
   async function refreshDevices() {
     try {
@@ -586,23 +830,41 @@ function makeZip(files) {
   /* ---------- live controls ---------- */
   function setLive(v, remember) {
     state.live = normView(v); panes.live.dirty = true;
-    if (remember && state.deviceId) { prefs.views[state.deviceId] = { rot: state.live.rot, flip: state.live.flip }; savePrefs(); }
+    if (remember && camKey()) { prefs.views[camKey()] = { rot: state.live.rot, flip: state.live.flip }; savePrefs(); }
     updateUI();
   }
-  const rotate = () => setLive({ ...state.live, rot: state.live.rot + 90, cx: 0.5, cy: 0.5 }, true);
-  const mirror = () => setLive({ ...state.live, flip: !state.live.flip, cx: 1 - state.live.cx }, true);
+  /* The picture is turned, then mirrored. With the mirror on, a turn of the picture runs the other way on screen,
+     so the drawing turns three quarter-turns to stay on the paper. */
+  function moveLiveInk(op, times) { const p = panes.live; for (let i = 0; i < times; i++) p.ink = transformInk(p.ink, op); p.hist = []; p.inkDirty = true; }
+  const rotate = () => { moveLiveInk('rot', state.live.flip ? 3 : 1); setLive({ ...state.live, rot: state.live.rot + 90, cx: 0.5, cy: 0.5 }, true); };
+  const mirror = () => { moveLiveInk('flip', 1); setLive({ ...state.live, flip: !state.live.flip, cx: 1 - state.live.cx }, true); };
+  function setOrientation(rot, flip) {
+    if (flip !== state.live.flip) mirror();
+    let guard = 0; while (state.live.rot !== normRot(rot) && guard++ < 4) rotate();
+  }
   function setPaneView(p, v) { p.view = normView(v); p.dirty = true; updateUI(); }
   const zoomBy = f => { const p = focusPane(); setPaneView(p, zoomAt(p.view, f)); };
   const zoomReset = () => { const p = focusPane(); setPaneView(p, { ...p.view, zoom: 1 }); };
-  function toggleFreeze() {
-    if (state.frozen) { state.frozen = null; }
-    else {
-      if (!state.stream || !video.videoWidth) { toast('There is no live picture to freeze yet.', 'err'); return; }
-      const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight;
-      c.getContext('2d').drawImage(video, 0, 0); state.frozen = c;
-    }
-    panes.live.dirty = true; updateUI();
+  function freeze() {
+    if (state.frozen) return true;
+    if (!state.stream || !video.videoWidth) { toast('There is no live picture to freeze yet.', 'err'); return false; }
+    const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video, 0, 0); state.frozen = c; state.frozenId++;
+    panes.live.dirty = true; announce('Picture frozen'); updateUI(); return true;
   }
+  /* Going back to live clears what was drawn on the frozen page (it belonged to that page). Covers stay. */
+  function unfreeze() {
+    if (!state.frozen) return;
+    const fid = state.frozenId, p = panes.live; state.frozen = null;
+    const gone = p.ink.strokes.filter(st => st.f === fid);
+    if (gone.length) {
+      pushHist(p, JSON.stringify(p.ink));
+      p.ink.strokes = p.ink.strokes.filter(st => st.f !== fid); p.inkDirty = true;
+      toast('The drawing on the frozen picture was cleared.', '', { label: 'Undo', run: () => { panes.live.ink.strokes.push(...gone); panes.live.inkDirty = true; updateUI(); } });
+    }
+    p.dirty = true; announce('Live picture'); updateUI();
+  }
+  const toggleFreeze = () => state.frozen ? unfreeze() : freeze();
 
   /* pointer: scroll or pinch to zoom, drag (one finger) to move when zoomed, double-click / double-tap for 2× / whole picture */
   function localPoint(p, e) {
@@ -610,19 +872,113 @@ function makeZip(files) {
     if (!d) return [0.5, 0.5];
     return [Math.min(1, Math.max(0, (e.clientX - r.left - d.x) / d.w)), Math.min(1, Math.max(0, (e.clientY - r.top - d.y) / d.h))];
   }
+  /* ---------- drawing and covers ---------- */
+  const DRAW_TOOLS = ['pen', 'hl', 'arrow', 'box'];
+  function resetInk(p) { p.ink = newInk(); p.hist = []; p.sel = -1; p.spotSel = false; p.inkDirty = true; }
+  function pushHist(p, before) { p.hist.push(before); if (p.hist.length > 60) p.hist.shift(); state.inkPane = p; }
+  function editInk(p, fn) {
+    const before = JSON.stringify(p.ink); fn(p.ink);
+    if (JSON.stringify(p.ink) !== before) pushHist(p, before);
+    p.inkDirty = true; updateUI();
+  }
+  function undo() {
+    const p = state.inkPane && state.inkPane.hist.length ? state.inkPane : [focusPane(), panes.live, panes.snap].find(q => q.hist.length);
+    if (!p) return;
+    p.ink = JSON.parse(p.hist.pop()); p.sel = -1; p.spotSel = false; p.inkDirty = true; updateUI(); announce('Undone');
+  }
+  function select(p, what, i) { p.sel = what === 'mask' ? i : -1; p.spotSel = what === 'spot'; p.inkDirty = true; }
+  const getRect = (p, what, i) => what === 'mask' ? p.ink.masks[i] : p.ink.spot;
+  function setRect(p, what, i, r) { if (what === 'mask') p.ink.masks[i] = r; else p.ink.spot = r; p.inkDirty = true; }
+
+  function startOp(p, pt) {
+    const t = state.tool, dpr = window.devicePixelRatio || 1;
+    if (DRAW_TOOLS.includes(t) && p === panes.live && prefs.freezeToDraw && !state.frozen && state.stream) freeze();
+    const m = p.mapper, u = m.u(pt[0]), v = m.v(pt[1]), before = JSON.stringify(p.ink);
+    state.inkPane = p;
+    if (DRAW_TOOLS.includes(t)) {
+      const hl = t === 'hl';
+      const st = { t, c: hl ? prefs.hlColor : prefs.inkColor, w: INK_SIZES[prefs.inkSize] * (hl ? 6 : t === 'pen' ? 1 : 1.2), p: [[u, v]] };
+      if (p === panes.live && state.frozen) st.f = state.frozenId;
+      if (t === 'arrow' || t === 'box') st.p.push([u, v]);
+      p.ink.strokes.push(st); select(p, null); p.inkDirty = true;
+      return { kind: 'stroke', st, before, last: pt };
+    }
+    if (t === 'mask' || t === 'spot') {
+      const list = t === 'mask' ? p.ink.masks : (p.ink.spot ? [p.ink.spot] : []);
+      for (let i = list.length - 1; i >= 0; i--) {
+        const [x, y, w, h] = rectBox(list[i], m), hs = 22 * dpr;
+        const onHandle = Math.abs(pt[0] - (x + w)) <= hs && Math.abs(pt[1] - (y + h)) <= hs;
+        const inside = pt[0] >= x && pt[0] <= x + w && pt[1] >= y && pt[1] <= y + h;
+        if (onHandle || inside) { select(p, t, i); return { kind: onHandle ? 'size' : 'move', what: t, i, orig: { ...list[i] }, u0: u, v0: v, before }; }
+      }
+      const r = { x: clamp01(u), y: clamp01(v), w: 0, h: 0 };
+      let i = 0;
+      if (t === 'mask') { p.ink.masks.push(r); i = p.ink.masks.length - 1; } else p.ink.spot = r;
+      select(p, t, i);
+      return { kind: 'new', what: t, i, u0: u, v0: v, before };
+    }
+    if (t === 'curtain') { p.ink.curtain = clamp01(v); p.inkDirty = true; return { kind: 'curtain', before }; }
+    return null;
+  }
+  function moveOp(p, op, pt) {
+    const m = p.mapper, u = m.u(pt[0]), v = m.v(pt[1]);
+    if (op.kind === 'stroke') {
+      const st = op.st;
+      if (st.t === 'arrow' || st.t === 'box') st.p[1] = [u, v];
+      else if (Math.hypot(pt[0] - op.last[0], pt[1] - op.last[1]) >= 1.5) { st.p.push([u, v]); op.last = pt; }
+    } else if (op.kind === 'move') setRect(p, op.what, op.i, clampRect({ ...op.orig, x: op.orig.x + u - op.u0, y: op.orig.y + v - op.v0 }));
+    else if (op.kind === 'size') setRect(p, op.what, op.i, { ...op.orig, w: Math.min(1 - op.orig.x, Math.max(0.01, u - op.orig.x)), h: Math.min(1 - op.orig.y, Math.max(0.01, v - op.orig.y)) });
+    else if (op.kind === 'new') setRect(p, op.what, op.i, rectFrom(op.u0, op.v0, u, v));
+    else if (op.kind === 'curtain') p.ink.curtain = clamp01(v);
+    p.inkDirty = true;
+  }
+  function finishOp(p, op) {
+    const m = p.mapper, dpr = window.devicePixelRatio || 1;
+    if (op.kind === 'stroke' && (op.st.t === 'arrow' || op.st.t === 'box')) {
+      const [a, b] = op.st.p;
+      if (Math.hypot((b[0] - a[0]) * m.ow * m.s, (b[1] - a[1]) * m.oh * m.s) < 6 * dpr) p.ink.strokes.splice(p.ink.strokes.indexOf(op.st), 1);
+    }
+    if (op.kind === 'new') {
+      const [, , w, h] = rectBox(getRect(p, op.what, op.i), m);
+      if (w < 14 * dpr || h < 14 * dpr) { p.ink = JSON.parse(op.before); select(p, null); } /* a tap, not a drag */
+    }
+    if (JSON.stringify(p.ink) !== op.before) pushHist(p, op.before);
+    p.inkDirty = true; updateUI();
+  }
+
+  /* pointer: scroll or pinch to zoom; drag to move when zoomed (or with the Move tool). With the drawing tools on,
+     one finger, a pen or the mouse draws or places covers. Once a pen has been used, fingers only move and zoom
+     (simple palm rejection), and very large touches are ignored. Double-click / double-tap: 2× or the whole picture. */
+  function localPoint(p, e) {
+    const r = p.canvas.getBoundingClientRect(), d = p.dest;
+    if (!d) return [0.5, 0.5];
+    return [Math.min(1, Math.max(0, (e.clientX - r.left - d.x) / d.w)), Math.min(1, Math.max(0, (e.clientY - r.top - d.y) / d.h))];
+  }
+  const isPalm = e => e.pointerType === 'touch' && (e.width > 60 || e.height > 60);
+  const drawsHere = e => state.drawMode && state.tool !== 'move' && !(e.pointerType === 'touch' && state.penSeen);
   for (const p of [panes.live, panes.snap]) {
-    const c = p.canvas, pts = new Map(); /* pointerId → last position in the picture box, in CSS px */
+    const c = p.inkCanvas, pts = new Map(); /* pointerId → last position in the picture box, in CSS px */
+    let op = null;
     const boxPoint = e => { const r = c.getBoundingClientRect(), d = p.dest; return { x: e.clientX - r.left - d.x, y: e.clientY - r.top - d.y }; };
+    const devPoint = e => { const r = c.getBoundingClientRect(), k = window.devicePixelRatio || 1; return [(e.clientX - r.left) * k, (e.clientY - r.top) * k]; };
     c.addEventListener('wheel', e => {
       if (!p.dest) return; e.preventDefault();
       const [nx, ny] = localPoint(p, e), dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
       setPaneView(p, zoomAt(p.view, Math.exp(-dy * 0.0018), nx, ny));
     }, { passive: false });
     c.addEventListener('pointerdown', e => {
-      if (!p.dest || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      if (!p.dest || !p.mapper || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      if (e.pointerType === 'pen') state.penSeen = true;
+      if (isPalm(e)) return;
       pts.set(e.pointerId, boxPoint(e));
       try { c.setPointerCapture(e.pointerId); } catch (err) {}
-      p.el.classList.toggle('dragging', pts.size > 1 || p.view.zoom > 1);
+      if (pts.size >= 2) { /* a second finger: stop drawing, start pinching */
+        if (op && op.before !== undefined) { p.ink = JSON.parse(op.before); p.inkDirty = true; }
+        op = null; p.el.classList.add('dragging'); return;
+      }
+      op = drawsHere(e) ? startOp(p, devPoint(e)) : { kind: 'pan' };
+      if (op) op.id = e.pointerId;
+      if (op && op.kind === 'pan') p.el.classList.toggle('dragging', p.view.zoom > 1);
     });
     c.addEventListener('pointermove', e => {
       if (!pts.has(e.pointerId) || !p.dest) return;
@@ -631,37 +987,228 @@ function makeZip(files) {
       if (pts.size >= 2) {
         const [ia, ib] = [...pts.keys()];
         setPaneView(p, pinchStep(p.view, prev.get(ia), prev.get(ib), pts.get(ia), pts.get(ib), w, h));
-      } else if (p.view.zoom > 1) {
-        const a = prev.get(e.pointerId), b = pts.get(e.pointerId);
-        setPaneView(p, panBy(p.view, (b.x - a.x) / w, (b.y - a.y) / h));
+      } else if (op && op.id === e.pointerId) {
+        if (op.kind === 'pan') {
+          if (p.view.zoom > 1) { const a = prev.get(e.pointerId), b = pts.get(e.pointerId); setPaneView(p, panBy(p.view, (b.x - a.x) / w, (b.y - a.y) / h)); }
+        } else {
+          const evs = (op.kind === 'stroke' && e.getCoalescedEvents && e.getCoalescedEvents()) || [];
+          for (const ev of (evs.length ? evs : [e])) moveOp(p, op, devPoint(ev));
+        }
       }
     });
-    const end = e => { pts.delete(e.pointerId); if (!pts.size) p.el.classList.remove('dragging'); };
+    const end = e => {
+      if (op && op.id === e.pointerId) { if (op.kind !== 'pan') finishOp(p, op); op = null; }
+      pts.delete(e.pointerId); if (!pts.size) p.el.classList.remove('dragging');
+    };
     c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end); c.addEventListener('lostpointercapture', end);
     c.addEventListener('dblclick', e => {
-      if (!p.dest) return;
+      if (!p.dest || (state.drawMode && state.tool !== 'move')) return;
       const [nx, ny] = localPoint(p, e);
       setPaneView(p, p.view.zoom > 1 ? { ...p.view, zoom: 1 } : zoomAt(p.view, 2, nx, ny));
     });
   }
 
+  function setDrawMode(on) {
+    state.drawMode = !!on; $('#drawBar').hidden = !state.drawMode;
+    document.body.classList.toggle('drawing', state.drawMode);
+    for (const p of [panes.live, panes.snap]) p.inkDirty = true;
+    redrawAll(); updateUI(); announce(state.drawMode ? 'Drawing tools on' : 'Drawing tools off');
+  }
+  function setTool(t) {
+    state.tool = t; document.body.dataset.tool = t;
+    const p = focusPane();
+    if (t === 'spot' && !p.ink.spot) editInk(p, k => { k.spot = { x: 0.3, y: 0.3, w: 0.4, h: 0.4 }; });
+    if (t === 'curtain' && p.ink.curtain == null) editInk(p, k => { k.curtain = 0.25; });
+    for (const q of [panes.live, panes.snap]) { if (t !== 'mask') q.sel = -1; if (t !== 'spot') q.spotSel = false; else if (q.ink.spot) q.spotSel = true; q.inkDirty = true; }
+    updateUI();
+  }
+  /* Arrow keys move the selected cover (Shift+arrows resize it); with the curtain, ↑ ↓ move its edge. */
+  function nudge(dx, dy, resize) {
+    const p = focusPane();
+    if (state.tool === 'curtain' && p.ink.curtain != null) { if (dy) editInk(p, k => { k.curtain = clamp01(k.curtain + dy * 2.5); }); return true; }
+    const what = state.tool === 'mask' && p.sel >= 0 ? 'mask' : state.tool === 'spot' && p.spotSel && p.ink.spot ? 'spot' : null;
+    if (!what) return false;
+    editInk(p, () => {
+      const r = getRect(p, what, p.sel);
+      setRect(p, what, p.sel, clampRect(resize ? { ...r, w: Math.max(0.02, r.w + dx), h: Math.max(0.02, r.h + dy) } : { ...r, x: r.x + dx, y: r.y + dy }));
+    });
+    return true;
+  }
+  function deleteSelected() {
+    const p = focusPane();
+    if (state.tool === 'mask' && p.sel >= 0) { editInk(p, k => { k.masks.splice(p.sel, 1); }); p.sel = -1; return true; }
+    if (state.tool === 'spot' && p.spotSel && p.ink.spot) { editInk(p, k => { k.spot = null; }); p.spotSel = false; return true; }
+    return false;
+  }
+  const visibleInkPanes = () => visiblePanes();
+  $('#toolSeg').onclick = $('#coverSeg').onclick = e => { const b = e.target.closest('button[data-tool]'); if (b) setTool(b.dataset.tool); };
+  $('#sizeSeg').onclick = e => { const b = e.target.closest('button[data-size]'); if (b) { prefs.inkSize = b.dataset.size; savePrefs(); if (!DRAW_TOOLS.includes(state.tool)) setTool('pen'); updateUI(); } };
+  INK_COLORS.forEach(col => {
+    const b = document.createElement('button'); b.className = 'swatch'; b.style.background = col.hex; b.title = col.name; b.setAttribute('aria-label', col.name); b.dataset.hex = col.hex;
+    b.onclick = () => {
+      if (state.tool === 'hl') prefs.hlColor = col.hex; else { prefs.inkColor = col.hex; if (!DRAW_TOOLS.includes(state.tool)) setTool('pen'); }
+      savePrefs(); updateUI();
+    };
+    $('#swatches').appendChild(b);
+  });
+  $('#addMask').onclick = () => { const p = focusPane(); editInk(p, k => { k.masks.push({ x: 0.03, y: 0.03, w: 0.34, h: 0.1 }); }); setTool('mask'); select(p, 'mask', p.ink.masks.length - 1); updateUI(); };
+  $('#curLess').onclick = () => { setTool('curtain'); nudge(0, -0.04); };
+  $('#curMore').onclick = () => { setTool('curtain'); nudge(0, 0.04); };
+  $('#freezeToDraw').onchange = e => { prefs.freezeToDraw = e.target.checked; savePrefs(); };
+  $('#undoBtn').onclick = undo;
+  $('#clearInk').onclick = () => { for (const p of visibleInkPanes()) editInk(p, k => { k.strokes = []; }); announce('Drawing cleared'); };
+  $('#clearCovers').onclick = () => { for (const p of visibleInkPanes()) { editInk(p, k => { k.masks = []; k.spot = null; k.curtain = null; }); p.sel = -1; p.spotSel = false; } announce('Covers removed'); };
+  $('#drawDone').onclick = () => setDrawMode(false);
+
+  /* ---------- adjust: picture (saved), viewing aid (screen only), camera ---------- */
+  function applyFilters() {
+    const adj = adjustFilter(prefs.adjust), aid = AIDS[prefs.aid] || '';
+    panes.live.canvas.style.filter = [adj === 'none' ? '' : adj, aid].join(' ').trim() || 'none';
+    panes.snap.canvas.style.filter = aid || 'none';
+  }
+  function renderAdjust() {
+    const a = prefs.adjust;
+    $('#adjBri').value = a.brightness; $('#adjBriVal').textContent = a.brightness + '%';
+    $('#adjCon').value = a.contrast; $('#adjConVal').textContent = a.contrast + '%';
+    document.querySelectorAll('#colorSeg button').forEach(b => b.classList.toggle('active', b.dataset.v === a.color));
+    document.querySelectorAll('#aidSeg button').forEach(b => b.classList.toggle('active', b.dataset.v === prefs.aid));
+    document.querySelectorAll('#rotSeg button').forEach(b => { b.classList.toggle('active', +b.dataset.rot === state.live.rot); b.disabled = !state.stream; });
+    $('#adjMirror').classList.toggle('on', state.live.flip); $('#adjMirror').disabled = !state.stream;
+  }
+  function setAdjust(patch) { Object.assign(prefs.adjust, patch); savePrefs(); applyFilters(); renderAdjust(); }
+  $('#adjBri').oninput = e => setAdjust({ brightness: +e.target.value });
+  $('#adjCon').oninput = e => setAdjust({ contrast: +e.target.value });
+  $('#colorSeg').onclick = e => { const b = e.target.closest('button'); if (b) setAdjust({ color: b.dataset.v }); };
+  $('#aidSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.aid = b.dataset.v; savePrefs(); applyFilters(); renderAdjust(); } };
+  $('#rotSeg').onclick = e => { const b = e.target.closest('button'); if (b && state.stream) { setOrientation(+b.dataset.rot, state.live.flip); renderAdjust(); } };
+  $('#adjMirror').onclick = () => { if (state.stream) { mirror(); renderAdjust(); } };
+  $('#adjReset').onclick = () => setAdjust({ ...DEFAULT_ADJUST });
+  function toggleAdjust(force) {
+    const panel = $('#adjustPanel'), open = force === undefined ? panel.hidden : force;
+    panel.hidden = !open; if (open) { renderAdjust(); renderCamControls(); } updateUI();
+  }
+  $('#adjBtn').onclick = () => toggleAdjust();
+
+  /* Hardware camera settings. Which ones exist depends on the camera and its driver, so only what the camera
+     reports through getCapabilities() is shown. Choices are remembered per camera. */
+  const camCaps = () => { try { return state.track && state.track.getCapabilities ? state.track.getCapabilities() || {} : {}; } catch (e) { return {}; } };
+  const camSettings = () => { try { return state.track && state.track.getSettings ? state.track.getSettings() || {} : {}; } catch (e) { return {}; } };
+  const hasMode = (caps, k, v) => Array.isArray(caps[k]) && caps[k].includes(v);
+  const isRange = r => r && typeof r.min === 'number' && typeof r.max === 'number' && r.max > r.min;
+  const camPrefs = () => camKey() ? (prefs.camCtl[camKey()] || (prefs.camCtl[camKey()] = {})) : {};
+  async function applyCam(c, quiet) {
+    if (!state.track || !state.track.applyConstraints) return false;
+    try { await state.track.applyConstraints({ advanced: [c] }); return true; }
+    catch (e) { if (!quiet) toast('The camera did not accept that setting.', 'err'); return false; }
+  }
+  async function setFocus(mode, quiet) {
+    const caps = camCaps(), cp = camPrefs();
+    if (mode === 'locked') {
+      const c = {};
+      if (hasMode(caps, 'focusMode', 'manual')) { c.focusMode = 'manual'; const d = camSettings().focusDistance; if (isRange(caps.focusDistance) && d != null) c.focusDistance = d; }
+      else if (hasMode(caps, 'focusMode', 'single-shot')) c.focusMode = 'single-shot';
+      else return;
+      if (await applyCam(c, quiet)) { cp.focus = 'locked'; cp.focusDistance = camSettings().focusDistance; savePrefs(); if (!quiet) announce('Focus locked'); }
+    } else {
+      if (hasMode(caps, 'focusMode', 'continuous')) await applyCam({ focusMode: 'continuous' }, quiet);
+      cp.focus = 'auto'; delete cp.focusDistance; savePrefs();
+    }
+    renderCamControls();
+  }
+  /* Refocus once on whatever is under the camera now, then lock again. */
+  async function refocus() { await setFocus('auto', true); toast('Refocusing…'); setTimeout(() => setFocus('locked'), 1800); }
+  async function setLockable(kind, mode) {
+    const caps = camCaps(), cp = camPrefs(), key = kind === 'exposure' ? 'exposureMode' : 'whiteBalanceMode';
+    const val = kind === 'exposure' ? 'exposureTime' : 'colorTemperature';
+    const c = { [key]: mode === 'locked' ? 'manual' : 'continuous' };
+    if (mode === 'locked') { const cur = camSettings()[val]; if (isRange(caps[val]) && cur != null) c[val] = cur; }
+    if (await applyCam(c)) { cp[kind] = mode; cp[val] = mode === 'locked' ? camSettings()[val] : undefined; savePrefs(); }
+    renderCamControls();
+  }
+  async function setCamValue(name, value, extra) {
+    if (await applyCam({ ...(extra || {}), [name]: value }, true)) { camPrefs()[name] = value; savePrefs(); }
+  }
+  /* Put back the settings remembered for this camera. */
+  async function restoreCam() {
+    const cp = camPrefs(), caps = camCaps();
+    if (cp.focus === 'locked') {
+      if (hasMode(caps, 'focusMode', 'manual') && cp.focusDistance != null && isRange(caps.focusDistance)) await applyCam({ focusMode: 'manual', focusDistance: cp.focusDistance }, true);
+      else setTimeout(() => setFocus('locked', true), 1800);
+    }
+    if (cp.exposure === 'locked' && hasMode(caps, 'exposureMode', 'manual')) await applyCam({ exposureMode: 'manual', ...(cp.exposureTime != null && isRange(caps.exposureTime) ? { exposureTime: cp.exposureTime } : {}) }, true);
+    if (cp.exposureCompensation != null && isRange(caps.exposureCompensation)) await applyCam({ exposureCompensation: cp.exposureCompensation }, true);
+    if (cp.wb === 'locked' && hasMode(caps, 'whiteBalanceMode', 'manual')) await applyCam({ whiteBalanceMode: 'manual', ...(cp.colorTemperature != null && isRange(caps.colorTemperature) ? { colorTemperature: cp.colorTemperature } : {}) }, true);
+  }
+  function renderCamControls() {
+    const box = $('#camCtl'); if (!box || $('#adjustPanel').hidden) return;
+    box.innerHTML = '';
+    if (!state.stream) { box.innerHTML = '<p class="hint" style="margin:0">Start a camera to see its settings.</p>'; return; }
+    const caps = camCaps(), st = camSettings(), cp = camPrefs();
+    const seg = (label, opts, cur, onPick) => {
+      const row = document.createElement('div'); row.className = 'adj-row';
+      row.innerHTML = '<span class="field-lab">' + label + '</span>';
+      const sg = document.createElement('div'); sg.className = 'seg';
+      for (const [v, t] of opts) { const b = document.createElement('button'); b.textContent = t; b.classList.toggle('active', v === cur); b.onclick = () => onPick(v); sg.appendChild(b); }
+      row.appendChild(sg); box.appendChild(row); return row;
+    };
+    const slider = (label, r, val, fmt, onSet) => {
+      const row = document.createElement('div'); row.className = 'slider-row';
+      const step = r.step > 0 ? r.step : (r.max - r.min) / 100;
+      row.innerHTML = '<div class="lab"><span>' + label + '</span><b></b></div><input type="range">';
+      const inp = row.querySelector('input'), out = row.querySelector('b');
+      Object.assign(inp, { min: r.min, max: r.max, step, value: val != null ? val : (r.min + r.max) / 2 }); inp.setAttribute('aria-label', label);
+      out.textContent = fmt(+inp.value); inp.oninput = () => { out.textContent = fmt(+inp.value); onSet(+inp.value); };
+      box.appendChild(row);
+    };
+    let any = false;
+    const canLockFocus = hasMode(caps, 'focusMode', 'manual') || hasMode(caps, 'focusMode', 'single-shot');
+    if (canLockFocus) {
+      any = true;
+      const locked = cp.focus === 'locked';
+      const row = seg('Focus', [['auto', 'Auto'], ['locked', 'Locked']], locked ? 'locked' : 'auto', v => setFocus(v));
+      if (locked) { const b = document.createElement('button'); b.className = 'btn small'; b.textContent = 'Refocus'; b.title = 'Focus once on what is under the camera now, then lock again'; b.onclick = refocus; row.appendChild(b); }
+      if (locked && hasMode(caps, 'focusMode', 'manual') && isRange(caps.focusDistance)) slider('Focus distance', caps.focusDistance, st.focusDistance, v => v.toFixed(2), v => setCamValue('focusDistance', v, { focusMode: 'manual' }));
+    }
+    if (hasMode(caps, 'exposureMode', 'manual')) {
+      any = true;
+      seg('Exposure', [['auto', 'Auto'], ['locked', 'Locked']], cp.exposure === 'locked' ? 'locked' : 'auto', v => setLockable('exposure', v));
+      if (cp.exposure === 'locked' && isRange(caps.exposureTime)) slider('Exposure time', caps.exposureTime, st.exposureTime, v => Math.round(v), v => setCamValue('exposureTime', v, { exposureMode: 'manual' }));
+    }
+    if (isRange(caps.exposureCompensation)) { any = true; slider('Camera brightness', caps.exposureCompensation, st.exposureCompensation, v => (v > 0 ? '+' : '') + v.toFixed(1), v => setCamValue('exposureCompensation', v)); }
+    if (hasMode(caps, 'whiteBalanceMode', 'manual')) {
+      any = true;
+      seg('Colour', [['auto', 'Auto'], ['locked', 'Locked']], cp.wb === 'locked' ? 'locked' : 'auto', v => setLockable('wb', v));
+      if (cp.wb === 'locked' && isRange(caps.colorTemperature)) slider('Colour temperature', caps.colorTemperature, st.colorTemperature, v => Math.round(v) + ' K', v => setCamValue('colorTemperature', v, { whiteBalanceMode: 'manual' }));
+    }
+    if (!any) box.innerHTML = '<p class="hint" style="margin:0">This camera doesn’t let the browser change its focus, exposure or colour. Use the Picture sliders above instead, or the camera’s own buttons.</p>';
+    else { const h = document.createElement('p'); h.className = 'hint'; h.style.margin = '10px 0 0'; h.textContent = 'Lock the focus so the camera stops refocusing on your hand. Remembered for this camera.'; box.appendChild(h); }
+  }
+
   /* ---------- snapshots ---------- */
   const toBlob = (c, type, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), type, q));
   function flash() { const f = $('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
+  /* Saves what is on screen: the picture with its Picture adjustments, plus drawing and covers.
+     Viewing aids are not saved. On a saved snapshot, it saves a marked-up copy. */
   async function takeSnapshot() {
-    const p = panes.live, src = p.source;
+    const p = state.mode === 'view' ? panes.snap : panes.live, src = p.source;
     if (!src) { toast('There is no camera picture to save yet.', 'err'); return; }
-    const [sw, sh] = p.size, v = normView(state.live), sz = snapshotSize(sw, sh, v);
+    if (p === panes.snap && inkEmpty(p.ink)) { toast('This snapshot is already saved. Draw or cover something on it first to save a marked-up copy.'); return; }
+    const [sw, sh] = p.size, v = normView(p.view), sz = snapshotSize(sw, sh, v);
     const c = document.createElement('canvas'); c.width = sz.w; c.height = sz.h;
     const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-    drawView(ctx, src, sw, sh, v, { x: 0, y: 0, w: sz.w, h: sz.h });
-    flash();
+    const box = { x: 0, y: 0, w: sz.w, h: sz.h };
+    if (p === panes.live && 'filter' in ctx) ctx.filter = adjustFilter(prefs.adjust);
+    drawView(ctx, src, sw, sh, v, box);
+    ctx.filter = 'none';
+    drawInk(ctx, p.ink, inkMapper(visibleRect(sw, sh, v), box));
+    if (p === panes.live) flash();
     const tf = fitRect(sz.w, sz.h, 320, 180), tc = document.createElement('canvas');
     tc.width = Math.max(1, Math.round(tf.w)); tc.height = Math.max(1, Math.round(tf.h));
     const tctx = tc.getContext('2d'); tctx.imageSmoothingQuality = 'high'; tctx.drawImage(c, 0, 0, tc.width, tc.height);
     const [blob, thumb] = await Promise.all([toBlob(c, 'image/jpeg', 0.92), toBlob(tc, 'image/jpeg', 0.8)]);
     const rec = { id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8), created: Date.now(), w: sz.w, h: sz.h, blob, thumb };
-    state.snaps.unshift(rec); renderStrip(true); updateUI();
+    state.snaps.unshift(rec); renderStrip(true); updateUI(); announce('Snapshot saved');
+    if (p === panes.snap) showSnap(rec.id);
     await persist(rec);
     if (navigator.storage && navigator.storage.persist && state.snaps.length === 1) navigator.storage.persist().catch(() => {});
     updateStorage();
@@ -685,7 +1232,7 @@ function makeZip(files) {
   }
   async function showSnap(id, mode) {
     const rec = getSnap(id); if (!rec) return;
-    if (state.snapId !== id) state.snapView = normView({});
+    if (state.snapId !== id) { state.snapView = normView({}); resetInk(panes.snap); }
     state.snapId = id; setMode(mode || (state.mode === 'compare' ? 'compare' : 'view'));
     await loadSnapImage(rec); updateUI();
   }
@@ -752,7 +1299,7 @@ function makeZip(files) {
   function renderStrip(popFirst) {
     const box = $('#thumbs'); box.innerHTML = '';
     if (!state.snaps.length) {
-      box.innerHTML = '<div class="empty"><span>No snapshots yet. Press <b>Snapshot</b> or <kbd>Space</kbd> to save what is on screen — rotation, mirror and zoom included. Snapshots stay on this computer until you delete them.</span></div>';
+      box.innerHTML = '<div class="empty"><span>No snapshots yet. Press <b>Snapshot</b> or <kbd>Space</kbd> to save what is on screen — with rotation, zoom, brightness, drawing and covers. Snapshots stay on this computer until you delete them.</span></div>';
       return;
     }
     state.snaps.forEach((rec, i) => {
@@ -813,7 +1360,23 @@ function makeZip(files) {
     fb.classList.toggle('on', !!state.frozen);
     fb.innerHTML = state.frozen ? '<span class="ic">▶</span><span class="lab">Unfreeze</span>' : '<span class="ic">❚❚</span><span class="lab">Freeze</span>';
     fb.disabled = !live; $('#miniFreeze').textContent = state.frozen ? '▶' : '❚❚';
-    $('#snapBtn').disabled = !live; $('#miniSnap').disabled = !live;
+    const canSnap = m === 'view' ? !!panes.snap.source : live;
+    $('#snapBtn').disabled = !canSnap; $('#miniSnap').disabled = !canSnap;
+    $('#snapBtn').title = m === 'view' ? 'Save a copy of this snapshot with your drawing and covers (Space)' : 'Save this moment (Space)';
+    stageEl.classList.toggle('is-frozen', !!state.frozen);
+    $('#drawBtn').classList.toggle('on', state.drawMode); $('#miniDraw').classList.toggle('on', state.drawMode);
+    $('#adjBtn').classList.toggle('on', !$('#adjustPanel').hidden);
+    document.querySelectorAll('#toolSeg button, #coverSeg button').forEach(b => b.classList.toggle('active', b.dataset.tool === state.tool));
+    document.querySelectorAll('#sizeSeg button').forEach(b => b.classList.toggle('active', b.dataset.size === prefs.inkSize));
+    const curCol = state.tool === 'hl' ? prefs.hlColor : prefs.inkColor;
+    document.querySelectorAll('#swatches .swatch').forEach(b => { const on = b.dataset.hex === curCol; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); });
+    /* Tool-specific buttons keep their space when hidden, so the bar never re-wraps and the picture never jumps. */
+    document.querySelectorAll('#drawBar [data-for]').forEach(b => { b.style.visibility = b.dataset.for === state.tool ? '' : 'hidden'; });
+    $('#freezeToDraw').checked = !!prefs.freezeToDraw;
+    const vis = visiblePanes();
+    $('#undoBtn').disabled = !vis.some(q => q.hist.length);
+    $('#clearInk').disabled = !vis.some(q => q.ink.strokes.length);
+    $('#clearCovers').disabled = !vis.some(q => q.ink.masks.length || q.ink.spot || q.ink.curtain != null);
     $('#rotBtn').disabled = !live || m === 'view'; $('#mirBtn').disabled = !live || m === 'view';
     $('#mirBtn').classList.toggle('on', state.live.flip);
     $('#rotBtn').title = 'Rotate 90° clockwise (R) — now ' + state.live.rot + '°';
@@ -840,6 +1403,7 @@ function makeZip(files) {
   $('#zoomIn').onclick = () => zoomBy(1.25); $('#zoomOut').onclick = () => zoomBy(0.8); $('#zoomVal').onclick = zoomReset;
   $('#miniIn').onclick = () => zoomBy(1.25); $('#miniOut').onclick = () => zoomBy(0.8);
   $('#stripBtn').onclick = () => { prefs.strip = !prefs.strip; savePrefs(); updateUI(); };
+  $('#drawBtn').onclick = () => setDrawMode(!state.drawMode); $('#miniDraw').onclick = () => setDrawMode(!state.drawMode);
   const toggleClean = () => { document.body.classList.toggle('clean'); redrawAll(); updateUI(); };
   $('#cleanBtn').onclick = toggleClean; $('#miniShow').onclick = toggleClean;
   function toggleFs() {
@@ -857,14 +1421,28 @@ function makeZip(files) {
   $('#dlAll').onclick = downloadAll; $('#clearAll').onclick = clearAll;
 
   /* Clicked buttons don't keep focus, so Space always means "snapshot" after using the mouse. Tab focus still works. */
-  document.addEventListener('mousedown', e => { if (e.target.closest && e.target.closest('button')) e.preventDefault(); });
+  document.addEventListener('mousedown', e => { if (e.target.closest && e.target.closest('button, label.check')) e.preventDefault(); });
   document.addEventListener('keydown', e => {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
-    if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;
+    /* A slider keeps only the keys that move it; Space and the other shortcuts still work after using one. */
+    const onSlider = tag === 'INPUT' && e.target.type === 'range' && !/^(Arrow|Page|Home|End)/.test(e.key);
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag) && !onSlider) return;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
+    if (state.drawMode) {
+      const step = 0.02, arrows = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (arrows[k] && nudge(arrows[k][0], arrows[k][1], e.shiftKey)) { e.preventDefault(); return; }
+      if ((k === 'Delete' || k === 'Backspace') && deleteSelected()) { e.preventDefault(); return; }
+      if (k === 'v' || k === 'V') { setTool('move'); return; }
+    }
+    if (k === 'd' || k === 'D') { setDrawMode(!state.drawMode); return; }
+    if (k === 'a' || k === 'A') { toggleAdjust(); return; }
+    if (k === 'Escape' && !$('#adjustPanel').hidden) { toggleAdjust(false); return; }
+    if (k === 'Escape' && state.drawMode) { setDrawMode(false); return; }
     if (k === ' ' || k === 'Spacebar') {
       if (tag === 'BUTTON') return; /* keyboard users: Space presses the focused button */
+      if (onSlider) e.target.blur();
       e.preventDefault(); takeSnapshot();
     }
     else if (k === 'p' || k === 'P') toggleFreeze();
@@ -887,7 +1465,8 @@ function makeZip(files) {
   window.addEventListener('beforeunload', e => { if (state.memoryOnly && state.snaps.length) { e.preventDefault(); e.returnValue = ''; } });
 
   /* ---------- start ---------- */
-  renderStrip(); updateUI(); requestAnimationFrame(loop);
+  document.body.dataset.tool = state.tool;
+  applyFilters(); renderStrip(); updateUI(); requestAnimationFrame(loop);
   DB.open()
     .then(() => DB.all())
     .then(recs => {

@@ -226,6 +226,247 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   if (shots) await p2.screenshot({ path: path.join(shots, '07-denied.png') });
   await b2.close();
 
+  /* ================= Drawing, covers, adjustments, camera controls ================= */
+  {
+    const b3 = await pw.chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
+    const ctx3 = await b3.newContext({ acceptDownloads: true, viewport: { width: 1400, height: 900 } });
+    // A camera that reports focus / exposure / white balance controls, and a wake lock that counts requests.
+    await ctx3.addInitScript(() => {
+      window.__applied = []; window.__wake = 0;
+      const extra = { focusMode: ['continuous', 'manual', 'single-shot'], focusDistance: { min: 0, max: 1, step: 0.01 },
+        exposureMode: ['continuous', 'manual'], exposureTime: { min: 1, max: 1000, step: 1 }, exposureCompensation: { min: -2, max: 2, step: 0.5 },
+        whiteBalanceMode: ['continuous', 'manual'], colorTemperature: { min: 2800, max: 6500, step: 100 } };
+      const vals = { focusMode: 'continuous', focusDistance: 0.42, exposureMode: 'continuous', exposureTime: 120, exposureCompensation: 0, whiteBalanceMode: 'continuous', colorTemperature: 4500 };
+      const P = MediaStreamTrack.prototype, gc = P.getCapabilities, gs = P.getSettings;
+      P.getCapabilities = function () { const c = gc.call(this); return this.kind === 'video' ? { ...c, ...extra } : c; };
+      P.getSettings = function () { const c = gs.call(this); return this.kind === 'video' ? { ...c, ...vals } : c; };
+      P.applyConstraints = function (c) { const a = (c && c.advanced && c.advanced[0]) || c; window.__applied.push(a); Object.assign(vals, a); return Promise.resolve(); };
+      Object.defineProperty(navigator, 'wakeLock', { value: { request: async () => { window.__wake++; return { release: async () => {}, addEventListener() {} }; } } });
+    });
+    const pg = await ctx3.newPage();
+    const errs3 = [];
+    pg.on('console', m => { if (m.type() === 'error') errs3.push(m.text()); });
+    pg.on('pageerror', e => errs3.push('PAGEERROR ' + e.message));
+    const E = fn => pg.evaluate(fn);
+    const shot3 = async name => { if (shots) await pg.screenshot({ path: path.join(shots, name + '.png') }); };
+    await pg.goto(URL);
+    await pg.waitForFunction(() => window.__docCam.state.stream && window.__docCam.panes.live.mapper, null, { timeout: 10000 });
+    check('wake lock requested while the camera runs', await E(() => window.__wake >= 1));
+
+    // pixel of the newest snapshot at a fraction of its size
+    const snapPx = (fx, fy) => pg.evaluate(async ([fx, fy]) => {
+      const s = window.__docCam.state.snaps[0]; const bmp = await createImageBitmap(s.blob);
+      const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; const x = c.getContext('2d'); x.drawImage(bmp, 0, 0);
+      return [...x.getImageData(Math.round(fx * (bmp.width - 1)), Math.round(fy * (bmp.height - 1)), 1, 1).data].slice(0, 3);
+    }, [fx, fy]);
+    const snapCount = () => E(() => window.__docCam.state.snaps.length);
+    const snapNow = async () => { const n = await snapCount(); await pg.keyboard.press(' '); await pg.waitForFunction(n => window.__docCam.state.snaps.length === n + 1, n); };
+    const box = async () => { const d = await E(() => window.__docCam.panes.live.dest); const r = await pg.locator('#inkLive').boundingBox(); return { x: r.x + d.x, y: r.y + d.y, w: d.w, h: d.h }; };
+    const at = (b, fx, fy) => [b.x + b.w * fx, b.y + b.h * fy];
+    const drag = async (b0, f0, f1) => { const b = b0.fresh === false ? b0 : await box(); await pg.mouse.move(...at(b, ...f0)); await pg.mouse.down(); await pg.mouse.move(...at(b, ...f1), { steps: 8 }); await pg.mouse.up(); await wait(60); };
+    const near = (px, hex, tol = 30) => { const t = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); return px.every((v, i) => Math.abs(v - t[i]) <= tol); };
+
+    // --- drawing ---
+    await pg.keyboard.press('d');
+    check('D opens the drawing tools', await pg.isVisible('#drawBar') && await E(() => document.body.classList.contains('drawing')));
+    await wait(150); /* the stage shrinks under the drawing bar; let the picture settle */
+    let b = await box();
+    await drag(b, [0.3, 0.5], [0.7, 0.5]);
+    check('drawing on live freezes the picture first', await E(() => !!window.__docCam.state.frozen));
+    check('a pen stroke is recorded', await E(() => window.__docCam.panes.live.ink.strokes.length === 1 && window.__docCam.panes.live.ink.strokes[0].t === 'pen'));
+    check('the stroke is drawn on screen', await E(() => { const c = document.querySelector('#inkLive'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; for (let i = 3; i < d.length; i += 4) if (d[i]) return true; return false; }));
+    await pg.click('#sizeSeg button[data-size="l"]');
+    await drag(b, [0.3, 0.6], [0.7, 0.6]);
+    await snapNow();
+    const strokePx = await snapPx(0.5, 0.6);
+    check('the snapshot includes the drawing (blue line)', near(strokePx, '#0072B2', 45), strokePx);
+    await wait(80);
+    check('aria-live says Snapshot saved', (await pg.textContent('#sr')) === 'Snapshot saved');
+    await shot3('08-drawing');
+
+    await pg.keyboard.press('Control+z');
+    check('Ctrl+Z undoes the last stroke', await E(() => window.__docCam.panes.live.ink.strokes.length === 1));
+    await pg.click('#toolSeg button[data-tool="arrow"]'); await drag(b, [0.2, 0.2], [0.4, 0.3]);
+    await pg.click('#toolSeg button[data-tool="box"]'); await drag(b, [0.5, 0.2], [0.6, 0.3]);
+    await pg.click('#toolSeg button[data-tool="hl"]'); await drag(b, [0.2, 0.8], [0.5, 0.8]);
+    check('arrow, box and highlighter recorded', await E(() => window.__docCam.panes.live.ink.strokes.map(s => s.t).join() === 'pen,arrow,box,hl'));
+    check('highlighter uses yellow by default', await E(() => window.__docCam.panes.live.ink.strokes[3].c === '#F0E442'));
+    await pg.click('#toolSeg button[data-tool="arrow"]'); await pg.mouse.click(...at(b, 0.9, 0.9)); await wait(50);
+    check('a tap with the arrow tool adds nothing', await E(() => window.__docCam.panes.live.ink.strokes.length === 4));
+
+    // unfreeze clears the drawing on the frozen page, with undo
+    await pg.keyboard.press('p'); await wait(100);
+    check('going live clears the frozen-page drawing', await E(() => !window.__docCam.state.frozen && window.__docCam.panes.live.ink.strokes.length === 0));
+    await pg.click('.toast button');
+    check('toast Undo brings the drawing back', await E(() => window.__docCam.panes.live.ink.strokes.length === 4));
+    await pg.click('#clearInk');
+    check('Clear drawing', await E(() => window.__docCam.panes.live.ink.strokes.length === 0));
+
+    // freeze-to-draw off: drawing on the live picture stays live
+    await pg.click('#freezeToDraw'); await pg.click('#toolSeg button[data-tool="pen"]');
+    await drag(b, [0.3, 0.3], [0.4, 0.4]);
+    check('with Freeze to draw off, drawing does not freeze', await E(() => !window.__docCam.state.frozen && window.__docCam.panes.live.ink.strokes.length === 1));
+    await pg.click('#freezeToDraw'); await pg.click('#clearInk');
+
+    // --- covers ---
+    await pg.click('#coverSeg button[data-tool="mask"]');
+    await drag(b, [0.6, 0.1], [0.9, 0.25]);
+    let masks = await E(() => window.__docCam.panes.live.ink.masks);
+    check('drag draws a cover', masks.length === 1 && Math.abs(masks[0].x - 0.6) < 0.01 && Math.abs(masks[0].w - 0.3) < 0.01, masks);
+    check('covering does not freeze the picture', await E(() => !window.__docCam.state.frozen));
+    await drag(b, [0.75, 0.17], [0.65, 0.37]);
+    masks = await E(() => window.__docCam.panes.live.ink.masks);
+    check('drag a cover to move it', masks.length === 1 && Math.abs(masks[0].x - 0.5) < 0.01 && Math.abs(masks[0].y - 0.3) < 0.01, masks);
+    await pg.keyboard.press('ArrowRight'); await pg.keyboard.press('Shift+ArrowDown');
+    masks = await E(() => window.__docCam.panes.live.ink.masks);
+    check('arrow keys move and Shift+arrows resize the selected cover', Math.abs(masks[0].x - 0.52) < 0.005 && Math.abs(masks[0].h - 0.17) < 0.005, masks);
+    await pg.click('#addMask');
+    check('Name cover adds a cover top-left', await E(() => { const m = window.__docCam.panes.live.ink.masks; return m.length === 2 && m[1].x < 0.1 && m[1].y < 0.1; }));
+    await snapNow();
+    let px = await snapPx(0.15, 0.08);
+    check('the cover is baked into the snapshot', near(px, '#5d6964', 20), px);
+    await pg.keyboard.press('Delete');
+    check('Delete removes the selected cover', await E(() => window.__docCam.panes.live.ink.masks.length === 1));
+    await pg.click('#clearCovers');
+
+    // spotlight
+    await pg.click('#coverSeg button[data-tool="spot"]');
+    check('choosing Spotlight places one in the middle', await E(() => !!window.__docCam.panes.live.ink.spot));
+    await snapNow();
+    const dim = await snapPx(0.2, 0.75), lit = await snapPx(0.45, 0.4);
+    check('spotlight dims outside and keeps inside', Math.max(...dim) < 60 && Math.max(...lit) > 90, { dim, lit });
+    await shot3('09-spotlight');
+    await pg.click('#clearCovers');
+
+    // curtain
+    await pg.click('#coverSeg button[data-tool="curtain"]');
+    check('choosing Curtain covers the lower part', await E(() => window.__docCam.panes.live.ink.curtain === 0.25));
+    await pg.keyboard.press('ArrowDown');
+    check('↓ reveals more', await E(() => Math.abs(window.__docCam.panes.live.ink.curtain - 0.3) < 1e-9));
+    await pg.click('#curMore');
+    check('▼ More reveals more', await E(() => Math.abs(window.__docCam.panes.live.ink.curtain - 0.4) < 1e-9));
+    await drag(b, [0.5, 0.4], [0.5, 0.6]);
+    check('dragging moves the curtain edge', await E(() => Math.abs(window.__docCam.panes.live.ink.curtain - 0.6) < 0.02));
+    await snapNow();
+    px = await snapPx(0.5, 0.9);
+    check('the curtain is baked into the snapshot', near(px, '#1d2a26', 20), px);
+    await shot3('10-curtain');
+    await pg.click('#clearCovers');
+
+    // covers turn with the picture
+    await pg.click('#coverSeg button[data-tool="mask"]'); await pg.click('#addMask');
+    await pg.keyboard.press('Escape');
+    check('Esc closes the drawing tools, the cover stays', await pg.isHidden('#drawBar') && await E(() => window.__docCam.panes.live.ink.masks.length === 1));
+    await pg.keyboard.press('r'); await wait(100);
+    masks = await E(() => window.__docCam.panes.live.ink.masks);
+    check('a cover turns with the picture', Math.abs(masks[0].x - (1 - 0.13)) < 1e-6 && Math.abs(masks[0].w - 0.1) < 1e-6, masks);
+    await pg.keyboard.press('r'); await pg.keyboard.press('r'); await pg.keyboard.press('r');
+    masks = await E(() => window.__docCam.panes.live.ink.masks);
+    check('four turns bring it back', Math.abs(masks[0].x - 0.03) < 1e-6 && Math.abs(masks[0].w - 0.34) < 1e-6, masks);
+    await E(() => { const p = window.__docCam.panes.live; p.ink.masks = []; p.inkDirty = true; });
+
+    // drawing on a saved snapshot saves a marked-up copy
+    await pg.click('#thumbs .thumb:nth-child(2) button.open');
+    await pg.waitForFunction(() => window.__docCam.state.mode === 'view' && window.__docCam.panes.snap.mapper);
+    let n0 = await snapCount();
+    await pg.keyboard.press(' '); await wait(200);
+    check('Snapshot on an unmarked saved snapshot does not duplicate it', (await snapCount()) === n0);
+    await pg.keyboard.press('d'); await pg.click('#toolSeg button[data-tool="box"]');
+    const r2 = await pg.locator('#inkSnap').boundingBox(), d2 = await E(() => window.__docCam.panes.snap.dest);
+    const bs = { x: r2.x + d2.x, y: r2.y + d2.y, w: d2.w, h: d2.h, fresh: false };
+    await drag(bs, [0.3, 0.3], [0.6, 0.6]);
+    await pg.keyboard.press(' ');
+    await pg.waitForFunction(n => window.__docCam.state.snaps.length === n + 1, n0);
+    check('a marked-up copy is saved and opened', await E(() => window.__docCam.state.snapId === window.__docCam.state.snaps[0].id && window.__docCam.panes.snap.ink.strokes.length === 0));
+    await pg.keyboard.press('Escape'); await pg.keyboard.press('Escape');
+    check('back to live', await E(() => window.__docCam.state.mode === 'live' && !window.__docCam.state.drawMode));
+
+    // --- adjust ---
+    await pg.keyboard.press('a');
+    check('A opens Adjust', await pg.isVisible('#adjustPanel'));
+    await pg.click('#colorSeg button[data-v="gray"]');
+    check('grey shows on the live picture', (await E(() => document.querySelector('#cvLive').style.filter)).includes('grayscale(1)'));
+    await snapNow();
+    px = await snapPx(0.2, 0.75);
+    check('grey is saved in the snapshot', Math.max(...px) - Math.min(...px) < 12, px);
+    await pg.click('#colorSeg button[data-v="color"]');
+    await pg.locator('#adjBri').fill('140');
+    check('brightness slider applies', (await E(() => document.querySelector('#cvLive').style.filter)).includes('brightness(1.4)') && (await pg.textContent('#adjBriVal')) === '140%');
+    await pg.click('#adjReset');
+    check('Reset picture', (await E(() => document.querySelector('#cvLive').style.filter)) === 'none');
+    await pg.click('#aidSeg button[data-v="yellow"]');
+    check('yellow-on-black aid shows on screen', (await E(() => document.querySelector('#cvLive').style.filter)).includes('url'));
+    await shot3('11-yellow-aid');
+    await snapNow();
+    px = await snapPx(0.2, 0.75);
+    check('viewing aid is not saved in snapshots (picture stays green)', px[1] > px[0] + 50 && px[1] > px[2] + 50, px);
+    await pg.click('#aidSeg button[data-v="normal"]');
+    await pg.click('#rotSeg button[data-rot="180"]');
+    check('Turn 180° in one tap', await E(() => window.__docCam.state.live.rot === 180));
+    await pg.click('#rotSeg button[data-rot="0"]');
+
+    // camera controls (simulated camera that reports them)
+    check('camera controls shown when the camera reports them', (await pg.textContent('#camCtl')).includes('Focus'));
+    await pg.click('#camCtl .seg button:text("Locked")');
+    await wait(100);
+    let applied = await E(() => window.__applied);
+    check('Lock focus sends manual focus at the current distance', applied.some(a => a.focusMode === 'manual' && a.focusDistance === 0.42), applied);
+    check('focus distance slider appears', await pg.isVisible('#camCtl input[aria-label="Focus distance"]'));
+    const savedCam = await E(() => JSON.parse(localStorage.getItem('teachingtools:doc-camera')).camCtl);
+    check('focus lock remembered for this camera', Object.values(savedCam).some(c => c.focus === 'locked' && c.focusDistance === 0.42), savedCam);
+    await shot3('12-adjust');
+    await pg.reload();
+    await pg.waitForFunction(() => window.__docCam.state.stream && video.videoWidth, null, { timeout: 10000 }).catch(() => {});
+    await pg.waitForFunction(() => window.__applied.some(a => a.focusMode === 'manual'), null, { timeout: 5000 }).catch(() => {});
+    check('focus lock re-applied after reload', await E(() => window.__applied.some(a => a.focusMode === 'manual' && a.focusDistance === 0.42)));
+    // rotation is remembered per camera across reloads (by camera name, since file:// IDs change each load)
+    await pg.keyboard.press('r'); await wait(50);
+    await pg.reload();
+    await pg.waitForFunction(() => window.__docCam.state.stream && window.__docCam.panes.live.mapper, null, { timeout: 10000 }); await wait(200);
+    check('rotation remembered after reload', await E(() => window.__docCam.state.live.rot === 90));
+    check('no errors in drawing/adjust checks', errs3.length === 0, errs3);
+    await b3.close();
+
+    // fake camera without controls: plain message
+    const b4 = await pw.chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
+    const c4 = await b4.newContext({ viewport: { width: 1400, height: 900 } });
+    await c4.addInitScript(() => { const P = MediaStreamTrack.prototype, gc = P.getCapabilities; P.getCapabilities = function () { const c = { ...gc.call(this) }; for (const k of ['focusMode', 'focusDistance', 'exposureMode', 'exposureTime', 'exposureCompensation', 'whiteBalanceMode', 'colorTemperature']) delete c[k]; return c; }; });
+    const p4 = await c4.newPage();
+    await p4.goto(URL); await p4.waitForFunction(() => window.__docCam.state.stream, null, { timeout: 10000 });
+    await p4.keyboard.press('a'); await wait(100);
+    check('camera without controls gets a plain explanation', (await p4.textContent('#camCtl')).includes('doesn’t let the browser'));
+    await b4.close();
+  }
+
+  /* ================= Touch board: big targets, finger drawing, pinch while drawing ================= */
+  {
+    const b5 = await pw.chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
+    const tctx = await b5.newContext({ viewport: { width: 1920, height: 1080 }, hasTouch: true, isMobile: false });
+    const tp = await tctx.newPage();
+    await tp.goto(URL);
+    await tp.waitForFunction(() => window.__docCam.state.stream && window.__docCam.panes.live.mapper, null, { timeout: 10000 });
+    const hgt = await tp.evaluate(() => document.querySelector('#snapBtn').getBoundingClientRect().height);
+    check('touch screens get 44px buttons', hgt >= 44, hgt);
+    const cdp = await tctx.newCDPSession(tp);
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, i) => ({ x: p[0], y: p[1], id: i, radiusX: 4, radiusY: 4 })) });
+    await tp.click('#drawBtn');
+    const tb = await tp.locator('#inkLive').boundingBox();
+    const cx = tb.x + tb.width * 0.4, cy = tb.y + tb.height * 0.5;
+    await touch('touchStart', [[cx, cy]]);
+    for (let s = 1; s <= 6; s++) await touch('touchMove', [[cx + s * 15, cy + s * 5]]);
+    await touch('touchEnd', []); await wait(80);
+    check('a finger draws with the pen', await tp.evaluate(() => window.__docCam.panes.live.ink.strokes.length === 1));
+    // start a stroke, then a second finger lands: the stroke is dropped and the fingers pinch
+    await touch('touchStart', [[cx, cy + 100]]);
+    await touch('touchMove', [[cx + 20, cy + 100]]);
+    await touch('touchStart', [[cx + 20, cy + 100], [cx + 120, cy + 100]]);
+    for (let s = 1; s <= 8; s++) await touch('touchMove', [[cx + 20 - s * 10, cy + 100], [cx + 120 + s * 10, cy + 100]]);
+    await touch('touchEnd', []); await wait(80);
+    const st = await tp.evaluate(() => ({ n: window.__docCam.panes.live.ink.strokes.length, z: window.__docCam.state.live.zoom }));
+    check('second finger cancels the stroke and pinches', st.n === 1 && st.z > 1.5, st);
+    await b5.close();
+  }
+
   console.log(`\n${passed} passed, ${fails.length} failed`);
   if (fails.length) { console.log(fails.join('\n')); process.exit(1); }
 })().catch(e => { console.error(e); process.exit(1); });

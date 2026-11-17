@@ -11,7 +11,8 @@ const { execFileSync } = require('node:child_process');
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const core = /<script id="core">([\s\S]*?)<\/script>/.exec(html)[1];
 const G = vm.runInNewContext(core + `;({ normRot, oriented, normView, visibleRect, fitRect, drawView, zoomAt, panBy, pinchStep, snapshotSize,
-  looksBuiltIn, pickPreferred, stamp, fileName, uniqueNames, crc32, makeZip, ZMIN, ZMAX })`, { TextEncoder });
+  looksBuiltIn, pickPreferred, stamp, fileName, uniqueNames, crc32, makeZip, ZMIN, ZMAX,
+  newInk, inkEmpty, inkMapper, rectBox, rectFrom, clampRect, transformInk, drawInk, adjustFilter, AIDS, INK_COLORS, MASK_FILL })`, { TextEncoder });
 const near = (a, b, e = 1e-9) => assert.ok(Math.abs(a - b) <= e, a + ' vs ' + b);
 
 test('rotation is kept to 0/90/180/270', () => {
@@ -153,4 +154,108 @@ test('makeZip writes a zip that unzip accepts, with the right contents', () => {
   } else {
     execFileSync('python3', ['-I', '-c', 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; assert z.read("one.txt")==b"hello"', zp]);
   }
+});
+
+/* ---------- drawing and covers ---------- */
+const plain = v => JSON.parse(JSON.stringify(v));
+
+test('inkMapper turns page fractions into pixels and back, following zoom', () => {
+  const r = G.visibleRect(2000, 1000, { zoom: 2, cx: 0.25, cy: 0.5 }); // shows x 0..1000, y 250..750
+  const m = G.inkMapper(r, { x: 10, y: 20, w: 500, h: 250 });
+  near(m.x(0), 10); near(m.x(0.5), 510); near(m.y(0.25), 20); near(m.y(0.75), 270);
+  near(m.u(m.x(0.37)), 0.37); near(m.v(m.y(0.61)), 0.61);
+});
+
+test('rectFrom and clampRect keep covers inside the page', () => {
+  assert.deepEqual(plain(G.rectFrom(0.6, 0.5, 0.2, 0.1)), { x: 0.2, y: 0.1, w: 0.39999999999999997, h: 0.4 });
+  assert.deepEqual(plain(G.rectFrom(-1, -1, 2, 0.5)), { x: 0, y: 0, w: 1, h: 0.5 });
+  assert.deepEqual(plain(G.clampRect({ x: 0.9, y: -0.2, w: 0.3, h: 0.2 })), { x: 0.7, y: 0, w: 0.3, h: 0.2 });
+});
+
+test('transformInk turns and mirrors drawings and covers with the picture', () => {
+  const k = { strokes: [{ t: 'pen', c: '#000', w: 0.003, p: [[0.1, 0.2], [0.3, 0.4]] }], masks: [{ x: 0.1, y: 0.2, w: 0.3, h: 0.1 }], spot: { x: 0, y: 0, w: 0.5, h: 0.5 }, curtain: 0.4 };
+  const r = G.transformInk(k, 'rot');
+  // clockwise quarter turn: (u, v) -> (1 - v, u)
+  assert.deepEqual(plain(r.strokes[0].p), [[0.8, 0.1], [0.6, 0.3]]);
+  near(r.masks[0].x, 0.7); near(r.masks[0].y, 0.1); near(r.masks[0].w, 0.1); near(r.masks[0].h, 0.3);
+  assert.equal(r.curtain, null, 'the curtain starts again after a turn');
+  // four turns is the identity
+  let q = k; for (let i = 0; i < 4; i++) q = G.transformInk(q, 'rot');
+  q.strokes[0].p.flat().forEach((v, i) => near(v, k.strokes[0].p.flat()[i]));
+  near(q.masks[0].x, 0.1); near(q.masks[0].w, 0.3);
+  const f = G.transformInk(k, 'flip');
+  assert.deepEqual(plain(f.strokes[0].p), [[0.9, 0.2], [0.7, 0.4]]);
+  near(f.masks[0].x, 0.6); assert.equal(f.curtain, 0.4);
+  assert.equal(k.strokes[0].p[0][0], 0.1, 'the original is not changed');
+});
+
+test('a turned and mirrored drawing lands where drawView puts the same page point', () => {
+  // A point on the page under rotation 90 + flip, then the same page point after one more turn of the picture.
+  // The app turns the drawing three quarter-turns when the mirror is on (see moveLiveInk): check that matches drawView.
+  const sw = 200, sh = 100;
+  const where = (view, sx, sy) => { // where source pixel (sx, sy) ends up, as a page fraction of the turned picture
+    let out; const c = fakeCtx2(); c.onDraw = m => { out = m; };
+    const o = G.oriented(sw, sh, view.rot), d = G.fitRect(o.w, o.h, 1000, 1000);
+    G.drawView(c, {}, sw, sh, view, d);
+    const [x, y] = out(sx - sw / 2, sy - sh / 2);
+    return [(x - d.x) / d.w, (y - d.y) / d.h];
+  };
+  const v1 = { rot: 90, flip: true }, v2 = { rot: 180, flip: true };
+  const a = where(v1, 30, 20), b = where(v2, 30, 20);
+  let k = { strokes: [{ t: 'pen', c: '#000', w: 0.003, p: [a] }], masks: [], spot: null, curtain: null };
+  for (let i = 0; i < 3; i++) k = G.transformInk(k, 'rot');
+  near(k.strokes[0].p[0][0], b[0], 1e-9); near(k.strokes[0].p[0][1], b[1], 1e-9);
+  // and without the mirror, one turn
+  const c1 = where({ rot: 0 }, 30, 20), c2 = where({ rot: 90 }, 30, 20);
+  const k2 = G.transformInk({ strokes: [{ p: [c1] }], masks: [], spot: null, curtain: null }, 'rot');
+  near(k2.strokes[0].p[0][0], c2[0]); near(k2.strokes[0].p[0][1], c2[1]);
+});
+
+/* fake context that exposes the transform drawImage used, and records fills */
+function fakeCtx2() {
+  let m = [1, 0, 0, 1, 0, 0]; const stack = [];
+  const mul = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+  const c = {
+    fills: [], strokes: 0, save() { stack.push(m); }, restore() { m = stack.pop(); }, beginPath() {}, rect() {}, clip() {},
+    translate(x, y) { m = mul(m, [1, 0, 0, 1, x, y]); }, scale(x, y) { m = mul(m, [x, 0, 0, y, 0, 0]); },
+    rotate(a) { const cs = Math.cos(a), sn = Math.sin(a); m = mul(m, [cs, sn, -sn, cs, 0, 0]); },
+    drawImage() { const mm = m.slice(); c.onDraw && c.onDraw((x, y) => [mm[0] * x + mm[2] * y + mm[4], mm[1] * x + mm[3] * y + mm[5]]); },
+    fillRect(x, y, w, h) { c.fills.push({ style: c.fillStyle, x, y, w, h }); }, fill() { c.fills.push({ style: c.fillStyle, path: true }); },
+    stroke() { c.strokes++; }, strokeRect() { c.strokes++; }, moveTo() {}, lineTo() {}, quadraticCurveTo() {}, arc() {}, setLineDash() {}
+  };
+  return c;
+}
+
+test('drawInk paints covers at the right place, and screen-only marks stay off snapshots', () => {
+  const r = G.visibleRect(1000, 500, {}), m = G.inkMapper(r, { x: 0, y: 0, w: 1000, h: 500 });
+  const ink = { strokes: [{ t: 'pen', c: '#0072B2', w: 0.003, p: [[0.1, 0.1], [0.2, 0.2], [0.3, 0.1]] }], masks: [{ x: 0.1, y: 0.2, w: 0.3, h: 0.1 }], spot: null, curtain: 0.75 };
+  let c = fakeCtx2(); G.drawInk(c, ink, m);
+  const mask = c.fills.find(f => f.style === G.MASK_FILL);
+  assert.deepEqual([mask.x, mask.y, Math.round(mask.w), Math.round(mask.h)], [100, 100, 300, 50]);
+  const cur = c.fills.find(f => f.style !== G.MASK_FILL && !f.path);
+  near(cur.y, 375); near(cur.h, 125);
+  assert.equal(c.fills.length, 2, 'no curtain grip or selection on a snapshot');
+  c = fakeCtx2(); G.drawInk(c, ink, m, { screen: true, sel: 0 });
+  assert.ok(c.fills.length > 2, 'the screen shows a selection handle and the curtain grip');
+  // curtain below what is visible draws nothing
+  const zoomed = G.inkMapper(G.visibleRect(1000, 500, { zoom: 4, cx: 0.5, cy: 0.2 }), { x: 0, y: 0, w: 1000, h: 500 });
+  c = fakeCtx2(); G.drawInk(c, { ...G.newInk(), curtain: 0.9 }, zoomed); assert.equal(c.fills.length, 0);
+});
+
+test('inkEmpty', () => {
+  assert.equal(G.inkEmpty(G.newInk()), true);
+  assert.equal(G.inkEmpty({ ...G.newInk(), curtain: 0 }), false);
+  assert.equal(G.inkEmpty({ ...G.newInk(), masks: [{}] }), false);
+});
+
+test('adjustFilter: only what differs from normal', () => {
+  assert.equal(G.adjustFilter({ brightness: 100, contrast: 100, color: 'color' }), 'none');
+  assert.equal(G.adjustFilter({ brightness: 120, contrast: 100, color: 'color' }), 'brightness(1.2)');
+  assert.equal(G.adjustFilter({ brightness: 100, contrast: 150, color: 'gray' }), 'grayscale(1) contrast(1.5)');
+  assert.match(G.adjustFilter({ color: 'bw' }), /^grayscale\(1\) contrast\(1\.9\)/);
+  assert.equal(G.AIDS.normal, '');
+});
+
+test('ink colours are the four Okabe–Ito picks, all distinct', () => {
+  assert.deepEqual(plain(G.INK_COLORS.map(c => c.hex)), ['#1b1b1b', '#0072B2', '#D55E00', '#F0E442']);
 });
