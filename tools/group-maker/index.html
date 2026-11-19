@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Split a class into random groups of any size (or a set number of groups), then drag students between groups to fine-tune. Names come from your shared Class Lists or are typed in.">
+<meta name="theme-color" content="#1f3d35">
+<title>Group Maker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;white-space:nowrap;color:var(--ink);text-decoration:none;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.danger{color:var(--danger);border-color:var(--danger-soft);background:#fff;}
+  .btn.danger:hover{background:var(--danger-soft);}
+  .btn.small{padding:5px 9px;font-size:12px;border-radius:7px;}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;}
+  .btn .ic{font-size:15px;line-height:1;}
+  .btn.big{padding:11px 16px;font-size:14px;width:100%;justify-content:center;}
+
+  .main{flex:1;display:flex;min-height:0;}
+  .panel{width:330px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+    overflow:auto;padding:16px;display:flex;flex-direction:column;gap:18px;}
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .canvas{flex:1;overflow:auto;padding:16px;}
+
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 9px;display:flex;align-items:center;gap:8px;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;margin:6px 0 0;}
+  .count-pill{font-family:var(--mono);font-size:11px;background:var(--panel-2);letter-spacing:0;
+    border:1px solid var(--line);border-radius:20px;padding:2px 9px;color:var(--muted);}
+  textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 10px;
+    resize:vertical;min-height:170px;background:var(--panel-2);line-height:1.5;}
+  select,input[type=number]{border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--panel-2);}
+  select{width:100%;}
+  input[type=number]{width:72px;font-family:var(--mono);font-weight:600;}
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:6px 11px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);}
+  .seg button + button{border-left:1px solid var(--line);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .field-lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:12px 0 6px;}
+  .preview{font-family:var(--mono);font-size:12px;color:var(--board);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin-top:10px;}
+  .preview.warn{color:var(--danger);background:var(--danger-soft);border-color:var(--danger-soft);}
+
+  /* groups */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--card-w,210px),1fr));gap:14px;align-items:start;}
+  .group{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+    display:flex;flex-direction:column;min-height:120px;transition:border-color .12s,box-shadow .12s;}
+  .group .head{display:flex;align-items:center;gap:8px;padding:9px 10px 8px 12px;border-bottom:1px solid var(--line);}
+  .group .num{width:24px;height:24px;border-radius:6px;background:var(--board);color:#fff;flex:none;
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;}
+  .group .gname{flex:1;min-width:0;border:1px solid transparent;background:none;border-radius:6px;
+    padding:3px 5px;font-weight:700;font-size:14px;}
+  .group .gname:hover{border-color:var(--line);}
+  .group .gname:focus{background:var(--panel-2);border-color:var(--line);outline:none;}
+  .group .ct{font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .xbtn{border:none;background:none;cursor:pointer;color:var(--muted);font-size:16px;
+    line-height:1;padding:2px 5px;border-radius:6px;}
+  .xbtn:hover{color:var(--danger);background:var(--danger-soft);}
+  .members{list-style:none;margin:0;padding:9px;display:flex;flex-direction:column;gap:6px;flex:1;min-height:60px;}
+  .members .none{color:var(--muted);font-size:12px;text-align:center;padding:10px 4px;border:1px dashed var(--line);border-radius:8px;}
+  .group.target{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent),var(--shadow);}
+  .group.pickable{cursor:pointer;}
+  .group.pickable:hover{border-color:var(--accent);}
+
+  .chip{display:flex;align-items:center;gap:7px;width:100%;text-align:left;padding:7px 9px;
+    border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:var(--shadow-sm);
+    font-size:var(--chip-fs,14px);font-weight:500;cursor:grab;touch-action:none;user-select:none;color:var(--ink);}
+  .chip:hover{border-color:#bfc8cd;}
+  .chip .grip{color:var(--muted);font-size:13px;line-height:1;letter-spacing:-2px;}
+  .chip .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .chip.selected{box-shadow:0 0 0 2px var(--accent);border-color:var(--accent);background:var(--accent-soft);}
+  .chip.dragging{opacity:.35;}
+  .ghost{position:fixed;z-index:999;pointer-events:none;background:#fff;border:1px solid var(--accent);
+    border-radius:8px;padding:7px 11px;box-shadow:0 8px 24px rgba(20,40,33,.25);opacity:.95;font-weight:600;
+    transform:translate(-50%,-60%) rotate(-2deg);white-space:nowrap;}
+  .drop-mark{height:3px;border-radius:2px;background:var(--accent);margin:-2px 0;}
+
+  .newgroup{border:1px dashed var(--line);border-radius:var(--radius);min-height:120px;display:flex;
+    align-items:center;justify-content:center;color:var(--muted);font-weight:600;font-size:13px;
+    background:transparent;cursor:pointer;width:100%;}
+  .newgroup:hover,.newgroup.target{border-color:var(--accent);color:var(--ink);background:var(--panel);}
+
+  .tray{background:var(--accent-soft);border:1px solid #f1d3a4;border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;}
+  .tray .section-title{color:var(--accent-deep);margin-bottom:7px;}
+  .tray .members{flex-direction:row;flex-wrap:wrap;padding:0;min-height:38px;}
+  .tray .chip{width:auto;}
+  .tray.target{box-shadow:0 0 0 2px var(--accent);}
+
+  .empty{border:1px dashed var(--line);border-radius:10px;padding:22px;color:var(--muted);
+    font-size:13px;line-height:1.6;background:var(--panel-2);max-width:520px;margin:30px auto;text-align:center;}
+
+  .statusbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:0 16px;min-height:42px;
+    border-top:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--muted);}
+  .statusbar b{font-family:var(--mono);font-weight:600;color:var(--ink);}
+  .statusbar .dotline{width:1px;height:18px;background:var(--line);}
+  .statusbar .tip{margin-left:auto;font-size:12px;}
+
+  .toast-wrap{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:1000;
+    display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .toast{background:var(--ink);color:#fff;padding:10px 15px;border-radius:10px;font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,560px);
+    border-left:3px solid var(--accent);animation:tin .2s ease both;}
+  .toast.ok{border-left-color:var(--ok);} .toast.err{border-left-color:var(--danger);}
+  @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  @keyframes pop{from{opacity:0;transform:translateY(5px) scale(.95);}to{opacity:1;transform:none;}}
+  .pop{animation:pop .26s cubic-bezier(.2,.7,.3,1) both;animation-delay:var(--d,0ms);}
+
+  /* present mode: groups only, bigger type for the board */
+  body.present .panel,body.present .statusbar,body.present .toolbar .edit-only{display:none;}
+  body.present{--card-w:260px;--chip-fs:20px;}
+  body.present .group .gname{font-size:19px;}
+  body.present .group .num{width:30px;height:30px;font-size:15px;}
+  body.present .chip .grip{display:none;}
+  body.present .newgroup,body.present .group .xbtn{display:none;}
+
+  #printHeader{display:none;}
+  @media print{
+    @page{margin:12mm;}
+    body{background:#fff;}
+    .toolbar,.panel,.statusbar,.toast-wrap,.newgroup,.xbtn,.chip .grip,.tray{display:none !important;}
+    .app,.main,.stage,.canvas{display:block;height:auto;overflow:visible;padding:0;}
+    #printHeader{display:block;margin:0 0 12px;}
+    #printHeader h1{margin:0;font-size:18px;} #printHeader div{font-family:var(--mono);font-size:11px;color:#555;}
+    .grid{grid-template-columns:repeat(3,1fr);gap:10px;}
+    .group{box-shadow:none;break-inside:avoid;min-height:0;}
+    .group .num{background:#fff;color:#000;border:1px solid #000;}
+    .chip{box-shadow:none;border:none;padding:2px 4px;}
+    .members{gap:0;}
+  }
+  @media (max-width:880px){
+    .main{flex-direction:column;overflow:auto;}
+    .panel{width:100%;border-right:none;border-bottom:1px solid var(--line);overflow:visible;}
+    .stage{min-height:60vh;}
+    .canvas{overflow:visible;}
+  }
+  @media (prefers-reduced-motion:reduce){ .pop,.toast{animation:none;} .btn:active{transform:none;} *{scroll-behavior:auto;} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <a class="brand" href="../../index.html" title="Back to Teaching Tools"><span class="mark"></span>Group Maker <small>random groups</small></a>
+    <div class="spacer"></div>
+    <button class="btn edit-only" id="undoBtn" disabled title="Undo (Ctrl+Z)"><span class="ic">↶</span>Undo</button>
+    <button class="btn edit-only" id="copyBtn" title="Copy the groups as text"><span class="ic">⧉</span>Copy</button>
+    <button class="btn edit-only" id="printBtn"><span class="ic">⎙</span>Print</button>
+    <button class="btn" id="presentBtn"><span class="ic">⛶</span>Present</button>
+  </header>
+
+  <div class="main">
+    <aside class="panel">
+      <section>
+        <h3 class="section-title">Students <span class="count-pill" id="nameCount">0</span></h3>
+        <select id="classPick" aria-label="Load a class from your Class Lists"></select>
+        <textarea id="names" spellcheck="false" autocomplete="off" style="margin-top:8px"
+          placeholder="One name per line…&#10;&#10;Ada Lovelace&#10;Alan Turing&#10;Grace Hopper"></textarea>
+        <p class="hint">One name per line (commas work too). Leave out anyone who's absent today. Your <b>Class Lists</b> from the Teaching Tools home page show up in the menu above.</p>
+      </section>
+
+      <section>
+        <h3 class="section-title">Groups</h3>
+        <div class="seg" role="group" aria-label="Group by">
+          <button id="modeSize" class="active" type="button">People per group</button>
+          <button id="modeCount" type="button">Number of groups</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <input type="number" id="num" min="1" max="99" value="4" aria-label="Size">
+          <span id="numLab" class="hint" style="margin:0">people in each group</span>
+        </div>
+        <div id="extrasBox">
+          <div class="field-lab">If it doesn't divide evenly</div>
+          <select id="extras">
+            <option value="smaller">Make some groups one smaller</option>
+            <option value="bigger">Make some groups one bigger</option>
+          </select>
+        </div>
+        <div class="preview" id="preview"></div>
+      </section>
+
+      <section>
+        <button class="btn primary big" id="makeBtn"><span class="ic">🔀</span>Make groups</button>
+        <p class="hint">Then <b>drag</b> a name to another group to move it. On a touch screen, you can also tap a name, then tap the group it should go to. Group names can be edited.</p>
+      </section>
+    </aside>
+
+    <main class="stage">
+      <div class="canvas">
+        <div id="printHeader"><h1 id="printTitle">Groups</h1><div id="printMeta"></div></div>
+        <div id="tray" class="tray" hidden>
+          <h3 class="section-title">Not in a group yet <span class="count-pill" id="trayCount">0</span></h3>
+          <ul class="members" data-g="tray"></ul>
+        </div>
+        <div id="grid" class="grid"></div>
+        <div id="empty" class="empty">Add your students on the left, choose a group size, then press <b>Make groups</b>.</div>
+      </div>
+      <div class="statusbar" id="status"></div>
+    </main>
+  </div>
+</div>
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+(function(){
+  'use strict';
+  const LS='teachingtools:group-maker';
+  const ROSTER_LS='teachingtools:rosters';
+  const $=id=>document.getElementById(id);
+
+  /* ---------- state ----------
+     names:    the raw text in the textarea
+     groups:   [{name, members:[id…]}]
+     tray:     [id…]   people not in any group (new names, or members of a deleted group)
+     people:   {id: name}
+  */
+  let state={ names:'', mode:'size', num:4, extras:'smaller', className:'', groups:[], tray:[], people:{}, nextId:1 };
+  const undoStack=[];
+  let selected=null;          // id of the chip picked by tap
+
+  function save(){ try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} }
+  function load(){
+    try{
+      const d=JSON.parse(localStorage.getItem(LS)||'null');
+      if(d && typeof d==='object' && Array.isArray(d.groups)) Object.assign(state,d);
+    }catch(e){}
+  }
+  function readRosters(){
+    try{
+      const d=JSON.parse(localStorage.getItem(ROSTER_LS)||'null');
+      if(d && Array.isArray(d.classes)) return d.classes.filter(c=>c && Array.isArray(c.students));
+    }catch(e){}
+    return [];
+  }
+
+  function parseNames(text){ return text.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean); }
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  /* How many groups, and how big each one is.
+     size mode: "smaller" → ceil(n/size) groups (none bigger than size),
+                "bigger"  → floor(n/size) groups (none smaller than size).
+     count mode: exactly that many groups, sizes differ by at most one. */
+  function plan(n, mode, num, extras){
+    num=Math.max(1, Math.floor(num)||1);
+    if(n<=0) return [];
+    let g;
+    if(mode==='count') g=Math.min(num,n);
+    else g = extras==='bigger' ? Math.max(1,Math.floor(n/num)) : Math.ceil(n/num);
+    const base=Math.floor(n/g), rem=n%g;
+    return Array.from({length:g},(_,i)=>base+(i<rem?1:0));
+  }
+  function describe(sizes){
+    if(!sizes.length) return '';
+    const counts={}; sizes.forEach(s=>counts[s]=(counts[s]||0)+1);
+    return Object.keys(counts).map(Number).sort((a,b)=>b-a)
+      .map(s=>counts[s]+' group'+(counts[s]>1?'s':'')+' of '+s).join(' + ');
+  }
+
+  /* ---------- undo ---------- */
+  function snapshot(){ undoStack.push(JSON.stringify({groups:state.groups,tray:state.tray,people:state.people,nextId:state.nextId})); if(undoStack.length>50) undoStack.shift(); }
+  function undo(){
+    const s=undoStack.pop(); if(!s) return;
+    Object.assign(state, JSON.parse(s)); selected=null;
+    save(); render();
+  }
+
+  /* ---------- make groups ---------- */
+  function makeGroups(){
+    const list=parseNames(state.names);
+    if(!list.length){ toast('Add some names first.','err'); $('names').focus(); return; }
+    const sizes=plan(list.length,state.mode,state.num,state.extras);
+    snapshot();
+    const people={}; let id=1;
+    const ids=list.map(n=>{ const k='p'+(id++); people[k]=n; return k; });
+    shuffle(ids);
+    // keep the teacher's group names if the number of groups is unchanged
+    const oldNames=state.groups.map(g=>g.name);
+    let at=0;
+    state.groups=sizes.map((sz,i)=>({ name:(sizes.length===oldNames.length && oldNames[i]) ? oldNames[i] : 'Group '+(i+1), members:ids.slice(at,at+=sz) }));
+    state.people=people; state.nextId=id; state.tray=[]; selected=null;
+    save(); render(true);
+  }
+
+  /* Editing the name list after making groups: new names wait in the tray,
+     removed names leave their group. Matching is by name and count, so two
+     students with the same name are both kept. */
+  function syncPeople(){
+    if(!state.groups.length && !state.tray.length) return;
+    const want={}; parseNames(state.names).forEach(n=>want[n]=(want[n]||0)+1);
+    const have={};
+    const keep=id=>{ const n=state.people[id]; have[n]=(have[n]||0)+1; if(have[n]<=(want[n]||0)) return true; delete state.people[id]; return false; };
+    state.groups.forEach(g=>g.members=g.members.filter(keep));
+    state.tray=state.tray.filter(keep);
+    Object.keys(want).forEach(n=>{
+      for(let i=(have[n]||0);i<want[n];i++){ const k='p'+(state.nextId++); state.people[k]=n; state.tray.push(k); }
+    });
+  }
+
+  /* ---------- moving people ---------- */
+  function listOf(g){ return g==='tray' ? state.tray : state.groups[g].members; }
+  function locate(id){
+    let i=state.tray.indexOf(id); if(i>=0) return {g:'tray',i};
+    for(let g=0;g<state.groups.length;g++){ i=state.groups[g].members.indexOf(id); if(i>=0) return {g,i}; }
+    return null;
+  }
+  // target g: group index, 'tray', or 'new'. index: position in the target list (end if omitted).
+  function move(id, g, index){
+    const from=locate(id); if(!from) return;
+    if(g==='new'){
+      snapshot();
+      listOf(from.g).splice(from.i,1);
+      state.groups.push({name:'Group '+(state.groups.length+1),members:[id]});
+    }else{
+      const to=listOf(g);
+      if(index==null) index=to.length;
+      if(from.g===g){ if(index===from.i || index===from.i+1) return; }
+      snapshot();
+      listOf(from.g).splice(from.i,1);
+      if(from.g===g && index>from.i) index--;
+      to.splice(index,0,id);
+    }
+    selected=null; save(); render();
+  }
+  function removeGroup(gi){
+    const g=state.groups[gi];
+    snapshot();
+    state.tray.push(...g.members);
+    state.groups.splice(gi,1);
+    save(); render();
+    if(g.members.length) toast(g.members.length+' moved to “Not in a group yet” — drag them into a group.');
+  }
+
+  /* ---------- render ---------- */
+  function chip(id){
+    const b=document.createElement('button');
+    b.type='button'; b.className='chip'+(selected===id?' selected':''); b.dataset.id=id;
+    b.innerHTML='<span class="grip" aria-hidden="true">⋮⋮</span><span class="nm"></span>';
+    b.querySelector('.nm').textContent=state.people[id];
+    b.title=state.people[id];
+    return b;
+  }
+  function render(animate){
+    const n=parseNames(state.names).length;
+    $('nameCount').textContent=n;
+
+    // panel
+    $('modeSize').classList.toggle('active',state.mode==='size');
+    $('modeCount').classList.toggle('active',state.mode==='count');
+    $('numLab').textContent = state.mode==='size' ? 'people in each group' : 'groups';
+    $('extrasBox').hidden = state.mode!=='size';
+    $('extras').value=state.extras;
+    if(document.activeElement!==$('num')) $('num').value=state.num;
+    const sizes=plan(n,state.mode,state.num,state.extras);
+    const pv=$('preview');
+    pv.classList.toggle('warn', n>0 && state.mode==='count' && state.num>n);
+    pv.textContent = !n ? 'No names yet'
+      : n+' students → '+describe(sizes)+(state.mode==='count' && state.num>n ? ' (fewer students than groups)' : '');
+
+    // groups
+    const grid=$('grid'); grid.innerHTML='';
+    state.groups.forEach((g,gi)=>{
+      const card=document.createElement('section');
+      card.className='group'+(animate?' pop':''); card.dataset.g=gi;
+      if(animate) card.style.setProperty('--d',(gi*40)+'ms');
+      card.innerHTML='<div class="head"><span class="num"></span><input class="gname" aria-label="Group name"><span class="ct"></span>'
+        +'<button class="xbtn" type="button" title="Remove this group">×</button></div><ul class="members" data-g="'+gi+'"></ul>';
+      card.querySelector('.num').textContent=gi+1;
+      const nm=card.querySelector('.gname'); nm.value=g.name;
+      nm.addEventListener('input',()=>{ g.name=nm.value; save(); updatePrintMeta(); });
+      card.querySelector('.ct').textContent=g.members.length;
+      card.querySelector('.xbtn').addEventListener('click',e=>{ e.stopPropagation(); removeGroup(gi); });
+      const ul=card.querySelector('.members');
+      g.members.forEach(id=>{ const li=document.createElement('li'); li.appendChild(chip(id)); ul.appendChild(li); });
+      if(!g.members.length){ const li=document.createElement('li'); li.className='none'; li.textContent='Drop a name here'; ul.appendChild(li); }
+      if(selected) card.classList.add('pickable');
+      grid.appendChild(card);
+    });
+    if(state.groups.length){
+      const nb=document.createElement('button'); nb.type='button'; nb.className='newgroup'; nb.dataset.g='new';
+      nb.textContent='+ New group'; nb.title='Add an empty group, or drop a name here to start one';
+      grid.appendChild(nb);
+    }
+
+    // tray
+    const tray=$('tray'), tul=tray.querySelector('.members');
+    tray.hidden=!state.tray.length; tul.innerHTML='';
+    state.tray.forEach(id=>{ const li=document.createElement('li'); li.appendChild(chip(id)); tul.appendChild(li); });
+    $('trayCount').textContent=state.tray.length;
+    tray.classList.toggle('pickable',!!selected);
+
+    $('empty').hidden = !!(state.groups.length || state.tray.length);
+    $('undoBtn').disabled=!undoStack.length;
+
+    // status
+    const placed=state.groups.reduce((s,g)=>s+g.members.length,0);
+    const gs=state.groups.map(g=>g.members.length);
+    $('status').innerHTML = state.groups.length
+      ? '<span><b>'+state.groups.length+'</b> groups</span><span class="dotline"></span><span><b>'+placed+'</b> placed</span>'
+        +(state.tray.length?'<span class="dotline"></span><span style="color:var(--accent-deep)"><b style="color:inherit">'+state.tray.length+'</b> not in a group</span>':'')
+        +'<span class="dotline"></span><span>sizes <b>'+(gs.length?Math.min(...gs)+(Math.min(...gs)!==Math.max(...gs)?'–'+Math.max(...gs):''):'–')+'</b></span>'
+        +'<span class="tip">Drag names to move them · Ctrl+Z to undo</span>'
+      : '<span>No groups yet</span>';
+    updatePrintMeta();
+  }
+  function updatePrintMeta(){
+    $('printTitle').textContent=(state.className?state.className+' — ':'')+'Groups';
+    $('printMeta').textContent=state.groups.length+' groups · '+new Date().toLocaleDateString();
+  }
+
+  /* ---------- drag (pointer events: mouse, pen, touch, smart board) ---------- */
+  let drag=null;
+  const DRAG_START=6;
+  document.addEventListener('pointerdown',e=>{
+    const c=e.target.closest('.chip'); if(!c || e.button>0) return;
+    drag={id:c.dataset.id, el:c, x:e.clientX, y:e.clientY, live:false, pid:e.pointerId};
+  });
+  document.addEventListener('pointermove',e=>{
+    if(!drag || e.pointerId!==drag.pid) return;
+    if(!drag.live){
+      if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<DRAG_START) return;
+      drag.live=true; selected=null;
+      document.querySelectorAll('.chip.selected').forEach(x=>x.classList.remove('selected'));
+      drag.el.classList.add('dragging');
+      drag.ghost=document.createElement('div'); drag.ghost.className='ghost';
+      drag.ghost.textContent=state.people[drag.id]; document.body.appendChild(drag.ghost);
+    }
+    e.preventDefault();
+    drag.ghost.style.left=e.clientX+'px'; drag.ghost.style.top=e.clientY+'px';
+    showTarget(dropTarget(e.clientX,e.clientY));
+    autoScroll(e.clientY);
+  });
+  function endDrag(e, cancel){
+    if(!drag || (e && e.pointerId!==drag.pid)) return;
+    const d=drag; drag=null;
+    if(!d.live) return;              // a plain tap — handled by click
+    d.ghost.remove(); d.el.classList.remove('dragging'); showTarget(null);
+    suppressClick=true; setTimeout(()=>suppressClick=false,0);
+    if(cancel) return;
+    const t=dropTarget(e.clientX,e.clientY);
+    if(t) move(d.id,t.g,t.index);
+  }
+  document.addEventListener('pointerup',e=>endDrag(e,false));
+  document.addEventListener('pointercancel',e=>endDrag(e,true));
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){
+      if(drag && drag.live){ drag.ghost.remove(); drag.el.classList.remove('dragging'); showTarget(null); drag=null; }
+      if(selected){ selected=null; render(); }
+      if(document.body.classList.contains('present')) togglePresent(false);
+    }
+    if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z' && !e.shiftKey && !/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName)){
+      e.preventDefault(); undo();
+    }
+  });
+
+  // Where would a drop at (x,y) land? Returns {g, index, el, before} or null.
+  function dropTarget(x,y){
+    const el=document.elementFromPoint(x,y); if(!el) return null;
+    if(el.closest('.newgroup')) return {g:'new', el:el.closest('.newgroup')};
+    const box=el.closest('.group, .tray'); if(!box) return null;
+    const ul=box.querySelector('.members');
+    const g=ul.dataset.g==='tray' ? 'tray' : +ul.dataset.g;
+    const items=[...ul.querySelectorAll('.chip')].filter(c=>c.dataset.id!==(drag&&drag.id));
+    const list=listOf(g);
+    let index=list.length, before=null;
+    const horizontal = g==='tray';
+    for(const c of items){
+      const r=c.getBoundingClientRect();
+      const hit = horizontal ? (y<r.bottom && x<r.left+r.width/2) || y<r.top : y<r.top+r.height/2;
+      if(hit){ index=list.indexOf(c.dataset.id); before=c.parentElement; break; }
+    }
+    return {g, index, el:box, before, ul};
+  }
+  let markEl=null;
+  function showTarget(t){
+    document.querySelectorAll('.target').forEach(x=>x.classList.remove('target'));
+    if(markEl){ markEl.remove(); markEl=null; }
+    if(!t) return;
+    t.el.classList.add('target');
+    if(t.ul && t.g!=='tray'){
+      markEl=document.createElement('li'); markEl.className='drop-mark';
+      const none=t.ul.querySelector('.none');
+      if(!none) t.ul.insertBefore(markEl,t.before||null);
+    }
+  }
+  function autoScroll(y){
+    const sc=document.querySelector('.canvas'), r=sc.getBoundingClientRect(), edge=50;
+    if(y<r.top+edge) sc.scrollTop-=12; else if(y>r.bottom-edge) sc.scrollTop+=12;
+  }
+
+  /* ---------- tap to move (touch / keyboard alternative to dragging) ---------- */
+  let suppressClick=false;
+  document.addEventListener('click',e=>{
+    if(suppressClick) return;
+    const c=e.target.closest('.chip');
+    if(c){
+      const id=c.dataset.id;
+      // with a name already picked, tapping a name in another group moves the picked one there
+      if(selected && selected!==id){
+        const a=locate(selected), b=locate(id);
+        if(a && b && a.g!==b.g){ move(selected,b.g); return; }
+      }
+      selected = selected===id ? null : id;
+      render();
+      if(selected) toast('Now tap the group '+state.people[id]+' should join.');
+      const again=document.querySelector('.chip[data-id="'+id+'"]'); if(again) again.focus();
+      return;
+    }
+    if(e.target.closest('.newgroup')){
+      if(selected) move(selected,'new');
+      else{ snapshot(); state.groups.push({name:'Group '+(state.groups.length+1),members:[]}); save(); render(); }
+      return;
+    }
+    if(selected){
+      if(e.target.closest('.gname,.xbtn')) return;
+      const box=e.target.closest('.group, .tray');
+      if(box){ const g=box.querySelector('.members').dataset.g; move(selected, g==='tray'?'tray':+g); }
+    }
+  });
+
+  /* ---------- panel controls ---------- */
+  function fillClassPick(){
+    const sel=$('classPick'), rosters=readRosters();
+    sel.innerHTML='';
+    const o=document.createElement('option'); o.value='';
+    o.textContent = rosters.length ? '📋 Load from Class Lists…' : 'No saved Class Lists on this computer';
+    sel.appendChild(o);
+    rosters.forEach((c,i)=>{
+      const op=document.createElement('option'); op.value=i;
+      op.textContent=(c.name||'Untitled class')+' ('+c.students.length+')';
+      sel.appendChild(op);
+    });
+    sel.disabled=!rosters.length;
+  }
+  $('classPick').addEventListener('change',e=>{
+    const c=readRosters()[e.target.value]; e.target.value='';
+    if(!c) return;
+    state.names=c.students.map(s=>String(s).trim()).filter(Boolean).join('\n');
+    state.className=c.name||'';
+    $('names').value=state.names;
+    snapshot(); state.groups=[]; state.tray=[]; state.people={};
+    save(); render();
+    toast('Loaded '+(c.name||'class')+' — press Make groups.','ok');
+  });
+  let syncTimer=null;
+  $('names').addEventListener('input',e=>{
+    state.names=e.target.value; save(); render();
+    clearTimeout(syncTimer);
+    syncTimer=setTimeout(()=>{ syncPeople(); save(); render(); },600);
+  });
+  $('modeSize').addEventListener('click',()=>{ state.mode='size'; save(); render(); });
+  $('modeCount').addEventListener('click',()=>{ state.mode='count'; save(); render(); });
+  $('num').addEventListener('input',e=>{ const v=parseInt(e.target.value,10); if(v>=1){ state.num=Math.min(v,99); save(); render(); } });
+  $('num').addEventListener('change',()=>{ $('num').value=state.num; });
+  $('extras').addEventListener('change',e=>{ state.extras=e.target.value; save(); render(); });
+  $('makeBtn').addEventListener('click',makeGroups);
+  $('undoBtn').addEventListener('click',undo);
+  $('printBtn').addEventListener('click',()=>{ if(!state.groups.length) return toast('Make some groups first.','err'); window.print(); });
+  $('copyBtn').addEventListener('click',()=>{
+    if(!state.groups.length) return toast('Make some groups first.','err');
+    const text=state.groups.map(g=>g.name+'\n'+g.members.map(id=>'  '+state.people[id]).join('\n')).join('\n\n');
+    const done=()=>toast('Groups copied — paste them anywhere.','ok');
+    if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done,()=>fallbackCopy(text,done));
+    else fallbackCopy(text,done);
+  });
+  function fallbackCopy(text,done){
+    const t=document.createElement('textarea'); t.value=text; t.style.position='fixed'; t.style.opacity='0';
+    document.body.appendChild(t); t.select();
+    try{ document.execCommand('copy'); done(); }catch(e){ toast('Could not copy here.','err'); }
+    t.remove();
+  }
+  function togglePresent(on){
+    document.body.classList.toggle('present',on);
+    $('presentBtn').innerHTML = on ? '<span class="ic">✕</span>Exit' : '<span class="ic">⛶</span>Present';
+    try{
+      if(on && !document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
+      if(!on && document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+    }catch(e){}
+  }
+  $('presentBtn').addEventListener('click',()=>togglePresent(!document.body.classList.contains('present')));
+  document.addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement && document.body.classList.contains('present')) togglePresent(false); });
+
+  function toast(msg,kind){
+    const w=$('toasts'); while(w.children.length>1) w.firstChild.remove();
+    const t=document.createElement('div'); t.className='toast'+(kind?' '+kind:''); t.textContent=msg;
+    w.appendChild(t); setTimeout(()=>t.remove(),3600);
+  }
+
+  /* ---------- start ---------- */
+  load();
+  if(!state.names){
+    const r=readRosters();
+    if(r.length===1){ state.names=r[0].students.map(s=>String(s).trim()).filter(Boolean).join('\n'); state.className=r[0].name||''; }
+  }
+  $('names').value=state.names;
+  fillClassPick();
+  window.addEventListener('focus',fillClassPick);
+  render();
+  window.GroupMaker={plan,describe};   // exposed for tests
+})();
+</script>
+</body>
+</html>
