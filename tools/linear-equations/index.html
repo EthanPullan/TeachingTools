@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Generate linear equations to solve — one-step to brackets and fractions, with integer or fraction answers — and show 1, 2 or 4 at a time, full screen.">
+<meta name="theme-color" content="#1f3d35">
+<title>Linear Equations</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23e0982e'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --app-bg:#e9edf0; --panel:#fff; --panel-2:#f4f6f8; --room-bg:#f7f8f6;
+    --ink:#16241f; --muted:#67756f; --line:#d8dee2; --grid-line:rgba(31,61,53,.07);
+    --board:#1f3d35; --board-2:#173029; --board-line:#2c5247;
+    --accent:#e0982e; --accent-soft:#fbe6c8; --accent-deep:#b9781f;
+    --danger:#c43d35; --danger-soft:#f7e0de; --together:#2f6f9f; --together-soft:#dde9f3;
+    --ok:#3f9e6b;
+    --shadow:0 1px 2px rgba(20,40,33,.06),0 6px 18px rgba(20,40,33,.06);
+    --shadow-sm:0 1px 2px rgba(20,40,33,.10); --radius:12px;
+    --sans:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --math:"Cambria Math", Cambria, "STIX Two Text", "Times New Roman", Georgia, serif;
+  }
+  *{box-sizing:border-box;} html,body{height:100%;}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--app-bg);
+    -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.45;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+
+  .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;font-size:13px;white-space:nowrap;color:var(--ink);text-decoration:none;}
+  .brand .mark{width:16px;height:16px;border-radius:4px;background:var(--accent);
+    box-shadow:inset 0 0 0 2px rgba(0,0,0,.06);flex:none;}
+  .brand small{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--muted);font-size:11px;}
+  .spacer{flex:1;}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 13px;
+    border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;
+    align-items:center;gap:7px;transition:background .12s,border-color .12s,transform .05s;}
+  .btn:hover{background:var(--panel-2);} .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--board);border-color:var(--board);color:#fff;}
+  .btn.primary:hover{background:var(--board-2);}
+  .btn.small{padding:5px 9px;font-size:12px;border-radius:7px;}
+  .btn.on{background:var(--accent-soft);border-color:var(--accent);}
+  .btn .ic{font-size:15px;line-height:1;}
+
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:6px 12px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);}
+  .seg button + button{border-left:1px solid var(--line);}
+  .seg button.active{background:var(--board);color:#fff;}
+  .seg.wide{display:flex;} .seg.wide button{flex:1;}
+  .countseg button{font-family:var(--mono);min-width:36px;}
+
+  .main{flex:1;display:flex;min-height:0;}
+  .panel{width:320px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+    overflow:auto;padding:16px;display:flex;flex-direction:column;gap:20px;}
+  .stage{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px;}
+
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 9px;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;margin:7px 0 0;}
+  .hint kbd{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:4px;padding:0 4px;color:var(--ink);}
+  select{border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--panel-2);width:100%;}
+
+  .check{display:flex;align-items:flex-start;gap:9px;font-size:13px;cursor:pointer;user-select:none;
+    padding:7px 8px;border-radius:8px;border:1px solid transparent;}
+  .check:hover{background:var(--panel-2);}
+  .check input{width:16px;height:16px;accent-color:var(--board);margin:1px 0 0;flex:none;}
+  .check .nm{font-weight:600;display:block;}
+  .check .ex{display:flex;flex-wrap:wrap;column-gap:1.4em;font-family:var(--math);font-size:13.5px;color:var(--muted);margin-top:1px;}
+  .levels{display:flex;flex-direction:column;gap:2px;}
+
+  /* equation grid */
+  .grid{flex:1;min-height:0;display:grid;gap:var(--gap,14px);
+    grid-template-columns:repeat(var(--cols,1),minmax(0,1fr));grid-template-rows:repeat(var(--rows,1),minmax(0,1fr));}
+  .card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;min-width:0;min-height:0;overflow:hidden;}
+  .card .tag{position:absolute;left:12px;top:10px;width:26px;height:26px;border-radius:7px;background:var(--board);
+    color:#fff;font-family:var(--mono);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;}
+  .card .acts{position:absolute;right:10px;top:8px;display:flex;gap:6px;opacity:.55;transition:opacity .12s;}
+  .card:hover .acts,.card .acts:focus-within{opacity:1;}
+  .body{width:max-content;text-align:center;font-size:var(--fs,64px);line-height:1.25;}
+  .eq{white-space:nowrap;font-weight:500;letter-spacing:.01em;}
+  .ans{white-space:nowrap;font-size:.55em;margin-top:.45em;visibility:hidden;}
+  .ans .pill{display:inline-block;background:var(--accent-soft);color:var(--board);border-radius:.35em;padding:.1em .5em;}
+  .ans .approx{color:var(--muted);font-size:.6em;margin-left:.6em;font-family:var(--mono);}
+  .card.shown .ans{visibility:visible;}
+  .card.pop{animation:pop .26s cubic-bezier(.2,.7,.3,1) both;animation-delay:var(--d,0ms);}
+
+  .v{font-family:var(--math);font-style:italic;padding:0 .04em;}
+  .op{margin:0 .22em;} .eqs{margin:0 .32em;}
+  .p{font-weight:400;}
+  .fr{display:inline-flex;flex-direction:column;align-items:stretch;vertical-align:middle;text-align:center;
+    font-size:.86em;margin:0 .06em;line-height:1.15;}
+  .fr > span{display:block;padding:0 .14em;}
+  .fr > .b{border-top:.065em solid currentColor;padding-top:.05em;}
+
+  .empty{border:1px dashed var(--line);border-radius:10px;padding:22px;color:var(--muted);
+    font-size:13px;line-height:1.6;background:var(--panel-2);max-width:520px;margin:30px auto;text-align:center;}
+
+  .toast-wrap{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:1000;
+    display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .toast{background:var(--ink);color:#fff;padding:10px 15px;border-radius:10px;font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:min(92vw,560px);
+    border-left:3px solid var(--accent);animation:tin .2s ease both;}
+  @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  @keyframes pop{from{opacity:0;transform:translateY(5px) scale(.97);}to{opacity:1;transform:none;}}
+
+  /* present mode: equations only, as big as they fit */
+  body.present .panel,body.present .edit-only{display:none;}
+  body.present .stage{padding:18px;}
+  body.present .grid{--gap:18px;}
+
+  @media (max-width:880px){
+    .main{flex-direction:column;overflow:auto;}
+    .panel{width:100%;border-right:none;border-bottom:1px solid var(--line);overflow:visible;}
+    .stage{min-height:70vh;}
+  }
+  @media (prefers-reduced-motion:reduce){ .card.pop,.toast{animation:none;} .btn:active{transform:none;} *{scroll-behavior:auto;} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="toolbar">
+    <a class="brand" href="../../index.html" title="Back to Teaching Tools"><span class="mark"></span>Linear Equations <small>solve for x</small></a>
+    <div class="spacer"></div>
+    <div class="seg countseg" role="group" aria-label="Equations on screen" id="countSeg">
+      <button type="button" data-n="1" title="One equation (1)">1</button>
+      <button type="button" data-n="2" title="Two equations (2)">2</button>
+      <button type="button" data-n="4" title="Four equations (4)">4</button>
+    </div>
+    <button class="btn" id="ansBtn" title="Show or hide all answers (A)"><span class="ic">👁</span><span>Answers</span></button>
+    <button class="btn primary" id="newBtn" title="New equations (N or Space)"><span class="ic">↻</span>New</button>
+    <button class="btn" id="presentBtn" title="Full screen (F)"><span class="ic">⛶</span>Present</button>
+  </header>
+
+  <div class="main">
+    <aside class="panel">
+      <section>
+        <h3 class="section-title">Answers</h3>
+        <div class="seg wide" role="group" aria-label="Answer type" id="kindSeg">
+          <button type="button" data-k="int">Integers</button>
+          <button type="button" data-k="frac">Fractions</button>
+          <button type="button" data-k="mix">Mix</button>
+        </div>
+        <p class="hint">Fractions means the answer is a non-whole rational number, like <span class="v">x</span> = −7/3.</p>
+      </section>
+
+      <section>
+        <h3 class="section-title">Complexity</h3>
+        <div class="levels" id="levels"></div>
+        <p class="hint">Tick one or more. With several ticked, each equation picks one at random.</p>
+      </section>
+
+      <section>
+        <h3 class="section-title">Numbers</h3>
+        <div class="seg wide" role="group" aria-label="Number size" id="sizeSeg">
+          <button type="button" data-s="small">Small</button>
+          <button type="button" data-s="large">Large</button>
+        </div>
+        <label class="check" style="margin-top:8px"><input type="checkbox" id="negChk">
+          <span><span class="nm">Negative numbers</span><span class="hint" style="margin:0;display:block">Negative coefficients, constants and answers. Off keeps everything positive (subtraction still appears).</span></span></label>
+      </section>
+
+      <section>
+        <h3 class="section-title">Variable</h3>
+        <select id="varSel" aria-label="Variable letter">
+          <option value="x">x</option>
+          <option value="rand">Random letter each time</option>
+        </select>
+      </section>
+
+      <section>
+        <p class="hint" style="margin:0">Keys: <kbd>N</kbd> or <kbd>Space</kbd> new · <kbd>A</kbd> answers · <kbd>1</kbd> <kbd>2</kbd> <kbd>4</kbd> how many · <kbd>F</kbd> full screen. Click an equation's 👁 to reveal just that one.</p>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div class="grid" id="grid" aria-live="polite"></div>
+    </section>
+  </div>
+</div>
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+(function(){
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const LS = 'teachingtools:linear-equations:v1';
+  const MINUS = '−';
+
+  /* ---------- settings ---------- */
+  const LEVELS = [
+    {id:1, name:'One-step',               ex:['x + 7 = 12','4x = 20']},
+    {id:2, name:'Two-step',               ex:['3x + 5 = 20','x/4 − 2 = 3']},
+    {id:3, name:'Variables on both sides',ex:['5x + 3 = 2x + 18']},
+    {id:4, name:'Brackets',               ex:['3(x + 2) = 5x − 4']},
+    {id:5, name:'Fractions in the equation', ex:['(2x + 1)/3 = 5','x/2 + x/3 = 5']},
+  ];
+  const state = {count:1, kind:'int', levels:[2], size:'small', neg:false, varMode:'x', eqs:[], shown:[]};
+  function load(){
+    try{ const s = JSON.parse(localStorage.getItem(LS)||'null'); if(s) Object.assign(state, s); }catch(e){}
+    if(![1,2,4].includes(state.count)) state.count = 1;
+    if(!['int','frac','mix'].includes(state.kind)) state.kind = 'int';
+    state.levels = (state.levels||[]).filter(l => LEVELS.some(L => L.id === l));
+    if(!state.levels.length) state.levels = [2];
+    if(!Array.isArray(state.eqs)) state.eqs = [];
+    if(!Array.isArray(state.shown)) state.shown = [];
+  }
+  function save(){ try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} }
+
+  /* ---------- numbers ---------- */
+  const ri = (a,b) => a + Math.floor(Math.random()*(b-a+1));
+  const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+  const sgn = () => Math.random() < .5 ? -1 : 1;
+  const gcd = (a,b) => { a=Math.abs(a); b=Math.abs(b); while(b){ [a,b]=[b,a%b]; } return a; };
+
+  // Per-generation context: ranges, and whether a negative "shows" (leads a side or bracket).
+  let cx;
+  function makeCtx(o){
+    const R = o.size === 'large' ? 20 : 10;
+    return { R, RC: R*3, neg:o.neg, v:o.v, showsNeg:false,
+      maxInt: o.size === 'large' ? 30 : 12, maxDen: o.size === 'large' ? 15 : 10, maxNum: o.size === 'large' ? 90 : 40 };
+  }
+  const K  = () => ri(2, cx.R);                              // positive multiplier (also denominators)
+  const LK = () => cx.neg ? sgn()*ri(2, cx.R) : ri(2, cx.R); // leading multiplier
+  const L1 = () => cx.neg ? sgn()*ri(1, cx.R) : ri(1, cx.R); // leading coefficient, 1 allowed
+  const S  = () => sgn()*ri(1, cx.R);                        // added/subtracted term (shows as + or −)
+  const C  = () => cx.neg ? sgn()*ri(1, cx.RC) : ri(1, cx.RC); // stand-alone constant on a side
+
+  /* ---------- rendering: each piece is {h: html, t: plain text} ---------- */
+  const N = n => ({h:'<span class="n">'+Math.abs(n)+'</span>', t:String(Math.abs(n))});
+  const V = () => ({h:'<span class="v">'+cx.v+'</span>', t:cx.v});
+  const cat = (...ps) => ({h:ps.map(p=>p.h).join(''), t:ps.map(p=>p.t).join('')});
+  const fr = (top, bot) => ({h:'<span class="fr"><span class="t">'+top.h+'</span><span class="b">'+bot.h+'</span></span>',
+    t:(/ /.test(top.t)?'('+top.t+')':top.t)+'/'+(/ /.test(bot.t)?'('+bot.t+')':bot.t)});
+  const br = inner => ({h:'<span class="p">(</span>'+inner.h+'<span class="p">)</span>', t:'('+inner.t+')'});
+  const coefFr = (a,b) => { const f = fr(N(a),N(b)); return {h:f.h, t:'('+f.t+')'}; }; // (2/3)x
+
+  // A side of the equation: a sum of [coefficient, body] terms. body null = constant.
+  function side(terms){
+    let h = '', t = '';
+    terms.forEach(([c, body], i) => {
+      const neg = c < 0;
+      const mag = body ? (Math.abs(c) === 1 ? body : cat(N(c), body)) : N(c);
+      if(i === 0){
+        if(neg){ h += MINUS; t += '-'; cx.showsNeg = true; }
+      } else {
+        h += '<span class="op">'+(neg?MINUS:'+')+'</span>'; t += neg ? ' - ' : ' + ';
+      }
+      h += mag.h; t += mag.t;
+    });
+    return {h, t};
+  }
+  const inner = side; // bracket contents / numerators: a leading negative there shows too
+
+  /* ---------- templates: return {l, r, n, d} with answer n/d, or null ---------- */
+  const T = {
+    1: [
+      {k:['int'],        g(){ const b=S(), c=C(); return {l:side([[1,V()],[b]]), r:side([[c]]), n:c-b, d:1}; }},
+      {k:['int','frac'], g(){ const a=LK(), c=C(); return {l:side([[a,V()]]), r:side([[c]]), n:c, d:a}; }},
+      {k:['int'],        g(){ const a=K(), c=L1(); return {l:side([[1,fr(V(),N(a))]]), r:side([[c]]), n:a*c, d:1}; }},
+      {k:['int'],        g(){ const b=C(), c=C(); return {l:side([[b],[-1,V()]]), r:side([[c]]), n:b-c, d:1}; }},
+    ],
+    2: [
+      {k:['int','frac'], w:3, g(){ const a=LK(), b=S(), c=C(); return {l:side([[a,V()],[b]]), r:side([[c]]), n:c-b, d:a}; }},
+      {k:['int','frac'], g(){ const a=K(), b=C(), c=C(); return {l:side([[b],[-a,V()]]), r:side([[c]]), n:b-c, d:a}; }},
+      {k:['int'],        g(){ const a=K(), b=S(), c=C(); return {l:side([[1,fr(V(),N(a))],[b]]), r:side([[c]]), n:a*(c-b), d:1}; }},
+      {k:['int'],        g(){ const a=K(), b=S(), c=L1(); return {l:side([[1,fr(inner([[1,V()],[b]]),N(a))]]), r:side([[c]]), n:a*c-b, d:1}; }},
+    ],
+    3: [
+      {k:['int','frac'], w:3, g(){ const a=L1(), b=S(), c=L1(), d=S(); if(a===c) return null;
+        return {l:side([[a,V()],[b]]), r:side([[c,V()],[d]]), n:d-b, d:a-c}; }},
+      {k:['int','frac'], g(){ const a=L1(), b=S(), c=K(), d=C(); if(a+c===0) return null;
+        return {l:side([[a,V()],[b]]), r:side([[d],[-c,V()]]), n:d-b, d:a+c}; }},
+      {k:['int','frac'], g(){ const a=LK(), c=L1(), d=S(); if(a===c) return null;
+        return {l:side([[a,V()]]), r:side([[c,V()],[d]]), n:d, d:a-c}; }},
+    ],
+    4: [
+      {k:['int','frac'], w:2, g(){ const a=LK(), b=S(), c=C();
+        return {l:side([[a,br(inner([[1,V()],[b]]))]]), r:side([[c]]), n:c-a*b, d:a}; }},
+      {k:['int','frac'], g(){ const a=LK(), b=K(), c=S(), d=C();
+        return {l:side([[a,br(inner([[b,V()],[c]]))]]), r:side([[d]]), n:d-a*c, d:a*b}; }},
+      {k:['int','frac'], w:2, g(){ const a=LK(), b=S(), c=L1(), d=S(); if(a===c) return null;
+        return {l:side([[a,br(inner([[1,V()],[b]]))]]), r:side([[c,V()],[d]]), n:d-a*b, d:a-c}; }},
+      {k:['int','frac'], g(){ const a=LK(), b=S(), c=S(), d=C();
+        return {l:side([[a,br(inner([[1,V()],[b]]))],[c]]), r:side([[d]]), n:d-c-a*b, d:a}; }},
+      {k:['int','frac'], g(){ const a=LK(), b=S(), c=LK(), d=S(); if(a===c) return null;
+        return {l:side([[a,br(inner([[1,V()],[b]]))]]), r:side([[c,br(inner([[1,V()],[d]]))]]), n:c*d-a*b, d:a-c}; }},
+      {k:['int','frac'], g(){ const a=LK(), b=S(), c=K(), d=S(), e=C(); if(a===c) return null;
+        return {l:side([[a,br(inner([[1,V()],[b]]))],[-c,br(inner([[1,V()],[d]]))]]), r:side([[e]]), n:e-a*b+c*d, d:a-c}; }},
+    ],
+    5: [
+      {k:['int','frac'], w:2, g(){ const a=L1(), b=S(), c=K(), d=C();
+        return {l:side([[1,fr(inner([[a,V()],[b]]),N(c))]]), r:side([[d]]), n:c*d-b, d:a}; }},
+      {k:['int','frac'], g(){ const a=K(), b=K(), s=sgn(), c=C(); if(a===b || b+s*a===0) return null;
+        return {l:side([[1,fr(V(),N(a))],[s,fr(V(),N(b))]]), r:side([[c]]), n:a*b*c, d:b+s*a}; }},
+      {k:['int','frac'], w:2, g(){ const a=S(), b=K(), c=S(), d=K(); if(b===d || a===c) return null;
+        return {l:side([[1,fr(inner([[1,V()],[a]]),N(b))]]), r:side([[1,fr(inner([[1,V()],[c]]),N(d))]]), n:b*c-a*d, d:d-b}; }},
+      {k:['int','frac'], g(){ const a=L1(), b=K(), c=S(), d=C(); if(gcd(a,b)!==1) return null;
+        const lead = a<0 ? -1 : 1;
+        return {l:side([[lead,cat(coefFr(a,b),V())],[c]]), r:side([[d]]), n:b*(d-c), d:a}; }},
+    ],
+  };
+
+  const VARS = ['x','y','n','a','m','k','t','p','w','z'];
+
+  // Make one equation. kind: 'int' | 'frac'. Returns a plain object safe to store.
+  function generate(o){
+    const kind = o.kind === 'mix' ? (Math.random() < .5 ? 'int' : 'frac') : o.kind;
+    const v = o.varMode === 'rand' ? pick(VARS) : 'x';
+    const pool = [];
+    o.levels.forEach(lv => (T[lv]||[]).forEach(tp => { if(tp.k.includes(kind)) for(let i=0;i<(tp.w||1);i++) pool.push([lv,tp]); }));
+    if(!pool.length) return null;
+    for(let tries = 0; tries < 20000; tries++){
+      const [lv, tp] = pick(pool);
+      cx = makeCtx({size:o.size, neg:o.neg, v});
+      const r = tp.g(); if(!r || r.d === 0) continue;
+      let n = r.n, d = r.d; if(d < 0){ n = -n; d = -d; }
+      const g = gcd(n,d) || 1; n /= g; d /= g;
+      if(n === 0) continue;
+      if(kind === 'int' ? d !== 1 : d === 1) continue;
+      if(kind === 'int' && Math.abs(n) > cx.maxInt) continue;
+      if(kind === 'frac' && (d > cx.maxDen || Math.abs(n) > cx.maxNum)) continue;
+      if(!o.neg && (n < 0 || cx.showsNeg)) continue;
+      return {level:lv, v, n, d, h:r.l.h+'<span class="eqs">=</span>'+r.r.h, t:r.l.t+' = '+r.r.t};
+    }
+    return null;
+  }
+
+  function answerHtml(e){
+    const val = e.d === 1 ? N(e.n).h
+      : fr(N(e.n), N(e.d)).h;
+    const sign = e.n < 0 ? MINUS : '';
+    const approx = e.d === 1 ? '' : '<span class="approx">≈ '+(e.n/e.d).toFixed(2).replace('-',MINUS)+'</span>';
+    return '<span class="pill"><span class="v">'+e.v+'</span><span class="eqs">=</span>'+sign+val+'</span>'+approx;
+  }
+  const answerText = e => e.v+' = '+(e.d===1 ? e.n : e.n+'/'+e.d);
+
+  function opts(){ return {kind:state.kind, levels:state.levels, size:state.size, neg:state.neg, varMode:state.varMode}; }
+  function freshOne(avoid){
+    let e = null;
+    for(let i=0;i<30;i++){ e = generate(opts()); if(!e || !avoid.has(e.t)) break; }
+    return e;
+  }
+  function newSet(){
+    const seen = new Set(); state.eqs = []; state.shown = [];
+    for(let i=0;i<state.count;i++){ const e = freshOne(seen); if(e){ seen.add(e.t); state.eqs.push(e); state.shown.push(false); } }
+    save(); render(true);
+  }
+  function newOne(i){
+    const seen = new Set(state.eqs.map(e=>e.t));
+    const e = freshOne(seen); if(!e) return;
+    state.eqs[i] = e; state.shown[i] = false; save(); render(false, i);
+  }
+
+  /* ---------- view ---------- */
+  function render(animate, only){
+    const grid = $('grid');
+    if(!state.eqs.length){
+      grid.style.setProperty('--cols',1); grid.style.setProperty('--rows',1);
+      grid.innerHTML = '<div class="empty">No equations could be made with these settings — try ticking another complexity level or switching the answer type.</div>';
+      syncControls(); return;
+    }
+    grid.innerHTML = state.eqs.map((e,i) => {
+      const a = String.fromCharCode(65+i);
+      return '<div class="card'+(state.shown[i]?' shown':'')+((animate||only===i)?' pop':'')+'" style="--d:'+(animate?i*50:0)+'ms" data-i="'+i+'">'
+        + (state.eqs.length>1 ? '<span class="tag">'+a+'</span>' : '')
+        + '<div class="acts">'
+        +   '<button class="btn small" data-act="show" title="Show or hide this answer" aria-label="Show or hide answer '+a+'">👁</button>'
+        +   '<button class="btn small" data-act="new" title="New equation here" aria-label="New equation '+a+'">↻</button>'
+        + '</div>'
+        + '<div class="body"><div class="eq" role="math" aria-label="'+e.t.replace(/-/g,'minus ')+'">'+e.h+'</div>'
+        + '<div class="ans" aria-label="Answer: '+answerText(e)+'">'+answerHtml(e)+'</div></div></div>';
+    }).join('');
+    syncControls(); fit();
+  }
+
+  // Size the type so the longest equation (and its answer) fills its cell; pick the best arrangement for 2.
+  function fit(){
+    const grid = $('grid'); const cards = [...grid.querySelectorAll('.card')]; if(!cards.length) return;
+    grid.style.setProperty('--fs','100px');
+    let w = 1, h = 1;
+    cards.forEach(c => { const b = c.querySelector('.body'); w = Math.max(w, b.offsetWidth); h = Math.max(h, b.offsetHeight); });
+    const W = grid.clientWidth, H = grid.clientHeight;
+    const gap = parseFloat(getComputedStyle(grid).rowGap) || 14;
+    const n = cards.length;
+    const layouts = n === 1 ? [[1,1]] : n === 2 ? [[1,2],[2,1]] : n === 3 ? [[1,3],[3,1]] : [[2,2],[1,4]];
+    let best = null;
+    layouts.forEach(([cols,rows]) => {
+      const cw = (W - gap*(cols-1))/cols - 40, ch = (H - gap*(rows-1))/rows - (n>1 ? 76 : 48);
+      const s = Math.min(cw/w, ch/h);
+      if(!best || s > best.s) best = {cols, rows, s};
+    });
+    const fs = Math.max(14, Math.min(best.s*100, 260));
+    grid.style.setProperty('--cols', best.cols); grid.style.setProperty('--rows', best.rows);
+    grid.style.setProperty('--fs', fs.toFixed(1)+'px');
+  }
+
+  function syncControls(){
+    document.querySelectorAll('#countSeg button').forEach(b => b.classList.toggle('active', +b.dataset.n === state.count));
+    document.querySelectorAll('#kindSeg button').forEach(b => b.classList.toggle('active', b.dataset.k === state.kind));
+    document.querySelectorAll('#sizeSeg button').forEach(b => b.classList.toggle('active', b.dataset.s === state.size));
+    document.querySelectorAll('#levels input').forEach(c => { c.checked = state.levels.includes(+c.value); });
+    $('negChk').checked = state.neg; $('varSel').value = state.varMode;
+    const all = state.eqs.length && state.shown.every(Boolean);
+    $('ansBtn').classList.toggle('on', !!all);
+    $('ansBtn').lastElementChild.textContent = all ? 'Hide answers' : 'Answers';
+  }
+
+  function toggleAll(){
+    const all = state.shown.length && state.shown.every(Boolean);
+    state.shown = state.eqs.map(() => !all); save();
+    document.querySelectorAll('#grid .card').forEach((c,i) => c.classList.toggle('shown', state.shown[i]));
+    syncControls();
+  }
+  function setCount(n){
+    if(n === state.count) return;
+    const old = state.count; state.count = n;
+    if(n < old){ state.eqs = state.eqs.slice(0,n); state.shown = state.shown.slice(0,n); save(); render(false); }
+    else {
+      const seen = new Set(state.eqs.map(e=>e.t));
+      while(state.eqs.length < n){ const e = freshOne(seen); if(!e) break; seen.add(e.t); state.eqs.push(e); state.shown.push(false); }
+      save(); render(false);
+      document.querySelectorAll('#grid .card').forEach((c,i) => { if(i >= old) c.classList.add('pop'); });
+    }
+  }
+  function togglePresent(on){
+    document.body.classList.toggle('present', on);
+    $('presentBtn').innerHTML = on ? '<span class="ic">✕</span>Exit' : '<span class="ic">⛶</span>Present';
+    try{
+      if(on && !document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
+      if(!on && document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+    }catch(e){}
+    fit();
+  }
+  function toast(msg){
+    const w = $('toasts'); w.innerHTML = '';
+    const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+    w.appendChild(t); setTimeout(() => t.remove(), 3600);
+  }
+
+  /* ---------- wiring ---------- */
+  $('levels').innerHTML = LEVELS.map(L =>
+    '<label class="check"><input type="checkbox" value="'+L.id+'"><span><span class="nm">'+L.name+'</span><span class="ex">'+L.ex.map(x => '<span>'+x+'</span>').join('')+'</span></span></label>').join('');
+  $('levels').addEventListener('change', e => {
+    const id = +e.target.value;
+    if(e.target.checked){ if(!state.levels.includes(id)) state.levels.push(id); }
+    else {
+      if(state.levels.length === 1){ e.target.checked = true; toast('Keep at least one complexity level ticked.'); return; }
+      state.levels = state.levels.filter(l => l !== id);
+    }
+    state.levels.sort(); newSet();
+  });
+  $('countSeg').addEventListener('click', e => { const b = e.target.closest('button'); if(b) setCount(+b.dataset.n); });
+  $('kindSeg').addEventListener('click', e => { const b = e.target.closest('button'); if(b && b.dataset.k !== state.kind){ state.kind = b.dataset.k; newSet(); } });
+  $('sizeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if(b && b.dataset.s !== state.size){ state.size = b.dataset.s; newSet(); } });
+  $('negChk').addEventListener('change', e => { state.neg = e.target.checked; newSet(); });
+  $('varSel').addEventListener('change', e => { state.varMode = e.target.value; newSet(); });
+  $('newBtn').addEventListener('click', newSet);
+  $('ansBtn').addEventListener('click', toggleAll);
+  $('presentBtn').addEventListener('click', () => togglePresent(!document.body.classList.contains('present')));
+  document.addEventListener('fullscreenchange', () => { if(!document.fullscreenElement && document.body.classList.contains('present')) togglePresent(false); });
+
+  $('grid').addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]'); const card = e.target.closest('.card'); if(!card) return;
+    const i = +card.dataset.i;
+    if(b && b.dataset.act === 'new'){ newOne(i); return; }
+    if(b || e.target.closest('.ans')){
+      state.shown[i] = !state.shown[i]; save(); card.classList.toggle('shown', state.shown[i]); syncControls();
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    if(e.target.closest && e.target.closest('input,select,textarea')) return;
+    const k = e.key.toLowerCase();
+    if(k === 'n' || k === ' ' || k === 'arrowright'){ e.preventDefault(); newSet(); }
+    else if(k === 'a'){ e.preventDefault(); toggleAll(); }
+    else if(k === 'f'){ e.preventDefault(); togglePresent(!document.body.classList.contains('present')); }
+    else if(k === '1' || k === '2' || k === '4'){ e.preventDefault(); setCount(+k); }
+  });
+
+  if(window.ResizeObserver) new ResizeObserver(() => fit()).observe($('grid'));
+  else window.addEventListener('resize', fit);
+
+  /* ---------- start ---------- */
+  load();
+  if(state.eqs.length !== state.count || !state.eqs.every(e => e && e.h)) newSet();
+  else render(true);
+  window.LinearEquations = {generate, T, LEVELS};   // exposed for tests
+})();
+</script>
+</body>
+</html>
