@@ -129,6 +129,11 @@ test('every question has the right answer for what it asks', () => {
   assert.equal(new Set(K.ALL.map(x => x.q)).size, K.ALL.length, 'no question is worded twice');
   K.ALL.forEach(x => assert.ok(x.a.length <= 24, 'fits a bingo square: ' + x.a));
 });
+test('the simple category: protons and electrons in atoms, neutrons and protons in isotopes', () => {
+  assert.deepEqual(plain([...new Set(P.atoms.map(x => x.kind))].sort()), ['e', 'n', 'p', 'xIsoP']);
+  assert.equal(K.TYPE_SHORT.atoms, 'Simple');
+  assert.ok(!P.extra.some(x => x.kind === 'xIsoP'));
+});
 test('every type has questions, and Bohr–Rutherford stays within 1 to 20', () => {
   K.TYPES.forEach(t => assert.ok(P[t].length >= 30, t));
   assert.deepEqual(plain(K.GROUPS.map(g => g.name)), ['Numbers', 'Symbols']);
@@ -167,8 +172,8 @@ test('a set has the number asked for, only ticked types, spread evenly, every an
     assert.equal(all.length, 30); assert.equal(new Set(all.map(x => K.keyOf(x.a))).size, 30);
     const per = K.TYPES.map(t => all.filter(x => x.type === t).length);
     assert.ok(Math.max(...per) - Math.min(...per) <= 1, 'spread evenly: ' + per);
-    // protons, neutrons and electrons all come up
-    assert.deepEqual([...new Set(r.list.filter(x => x.type === 'atoms').map(x => x.kind))].sort(), ['e', 'n', 'p']);
+    // the simple questions are spread across their kinds: protons, electrons, neutrons, protons in an isotope
+    assert.ok(new Set(r.list.filter(x => x.type === 'atoms').map(x => x.kind)).size >= 3);
     const two = K.pickSet(P, { types:['ions', 'mass'], count:20 }, K.makeRng(seed));
     assert.ok(two.list.every(x => x.type === 'ions' || x.type === 'mass')); assert.equal(two.list.length, 20);
   }
@@ -261,7 +266,7 @@ test('decoys never equal an answer, never repeat, and at most 2 come from one qu
 test('titles', () => {
   assert.equal(K.typesTitle(K.TYPES), 'Subatomic particles');
   assert.equal(K.typesTitle(['ions']), 'Subatomic particles: ions');
-  assert.equal(K.typesTitle(['charge', 'atoms', 'ions']), 'Subatomic particles: atoms, ions and charge');
+  assert.equal(K.typesTitle(['charge', 'atoms', 'ions']), 'Subatomic particles: simple, ions and charge');
   assert.equal(K.typesTitle(K.DEFAULT_TYPES), 'Subatomic particles');
   assert.equal(K.typesTitle(['ionsym', 'bohr']), 'Subatomic particles: Bohr and ion symbol');
 });
@@ -271,6 +276,11 @@ test('Bingo reads the game with no errors and no warnings; charges are not mista
     const p = plain(K.payload(set, K.makeDecoys(set, 10, K.makeRng(seed)), 'Subatomic particles'));
     const d = Bingo.readDraft(p);
     assert.ok(d.ok, d.errors.join(' ')); assert.equal(d.items.length, 40); assert.equal(d.decoys.length, 10);
+    // each question's type goes to Bingo as its category, and survives the trip into Bingo's text box
+    d.items.forEach((it, i) => assert.equal(it.cat, K.TYPE_SHORT[set[i].type]));
+    const back = Bingo.parseItems(d.items.map(Bingo.itemLine).join('\n')).items;
+    assert.deepEqual(plain(back.map(it => [it.q, it.a, it.cat])), plain(set.map(x => [x.q, x.a, K.TYPE_SHORT[x.type]])));
+    assert.deepEqual(plain(Bingo.categoriesOf(back).map(c => c.name)).sort(), plain([...new Set(set.map(x => K.TYPE_SHORT[x.type]))]).sort());
     assert.equal(d.formulas, false);
     const parsed = Bingo.parseItems(d.items.map(Bingo.itemLine).join('\n'));
     assert.deepEqual(plain(parsed.problems), []);

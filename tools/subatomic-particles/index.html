@@ -174,7 +174,7 @@
           <label class="field"><span class="lab">Game name</span><input type="text" id="title" maxlength="80"></label>
           <div class="row" style="margin-top:12px"><button type="button" class="btn primary big" id="sendBtn"><span class="ic">🎱</span> Send to Bingo</button></div>
           <div class="row"><button type="button" class="btn small" id="jsonBtn">⤓ Download .json</button><button type="button" class="btn small" id="copyBtn">⧉ Copy as text</button></div>
-          <p class="hint">Bingo opens with the questions and decoys ready to use. If that doesn’t work (some browsers block it for tools opened as files), use <b>Download .json</b>, then in Bingo choose <b>Import…</b> and pick the file.</p>
+          <p class="hint">Each question goes with its type as its Bingo category, so in Bingo you can pick a set spread across the types, evenly or by weight. Bingo opens with the questions and decoys ready to use. If that doesn’t work (some browsers block it for tools opened as files), use <b>Download .json</b>, then in Bingo choose <b>Import…</b> and pick the file.</p>
           <div id="sendMsg"></div>
         </section>
       </div>
@@ -262,10 +262,10 @@ const SubatomicCore = (function(){
   ];
   const TYPES = GROUPS.reduce((a, g) => a.concat(g.types), []);
   const DEFAULT_TYPES = ['atoms', 'ions', 'mass', 'charge'];
-  const TYPE_NAME = { atoms:'Protons, neutrons, electrons', ions:'Electrons in ions', mass:'Mass and atomic number', charge:'Ion charge',
+  const TYPE_NAME = { atoms:'Simple: protons, neutrons, electrons', ions:'Electrons in ions', mass:'Mass and atomic number', charge:'Ion charge',
     extra:'Extra information (watch out!)', backwards:'Ions, working backwards', nucleus:'Nucleus and totals',
     bohr:'Bohr–Rutherford shells (elements 1 to 20)', element:'Name the element', ionsym:'Name the ion', same:'Same electrons as an ion' };
-  const TYPE_SHORT = { atoms:'Atoms', ions:'Ions', mass:'Mass number', charge:'Charge', extra:'Extra info', backwards:'Backwards',
+  const TYPE_SHORT = { atoms:'Simple', ions:'Ions', mass:'Mass number', charge:'Charge', extra:'Extra info', backwards:'Backwards',
     nucleus:'Nucleus', bohr:'Bohr', element:'Element', ionsym:'Ion symbol', same:'Same electrons' };
   const MINUS = '−';   // − a real minus sign (Bingo treats it and "-" alike)
   const NBH = '‑';     // ‑ a hyphen that never breaks the line; Bingo would draw a plain "-" before a digit as a minus
@@ -353,8 +353,8 @@ const SubatomicCore = (function(){
 
       e.isotopes.forEach(A => {
         const N = A - z, iso = isoName(e, A), more = { A, N };
-        /* extra information */
-        X('extra', 'xIsoP', 'xip:' + sym + '-' + A, 'How many protons are in an atom of ' + iso + '?', z,
+        /* simple: protons in an isotope (the mass number is there, but not needed) */
+        X('atoms', 'xIsoP', 'xip:' + sym + '-' + A, 'How many protons are in an atom of ' + iso + '?', z,
           'Protons in ' + iso, 'atomic number ' + z + ' (the mass number doesn’t matter)', more);
         X('extra', 'xPN', 'xpn:' + sym + '-' + A, 'A neutral atom has ' + n1(z, 'proton') + ' and ' + n1(N, 'neutron') + '. How many electrons does it have?', z,
           'Electrons, ' + z + ' p and ' + N + ' n', 'same as protons: ' + z + ' (neutrons don’t matter)', more);
@@ -645,7 +645,7 @@ const SubatomicCore = (function(){
   }
   function payload(set, decoys, title){
     return { format:'teachingtools-bingo-draft', title:String(title || '').slice(0, 80), source:'subatomic-particles',
-      items:set.map(x => ({ question:x.q, answer:x.a })),
+      items:set.map(x => ({ question:x.q, answer:x.a, category:TYPE_SHORT[x.type] })),   // the type is Bingo's category
       decoys:decoys.map(d => ({ answer:d.answer, mistake:d.mistake })) };
   }
 
@@ -662,7 +662,7 @@ const $ = id => document.getElementById(id);
 const LS_STATE = 'subatomicparticles.v1.state';
 const HANDOFF_KEY = 'teachingtools.handoff.v1';   // read by tools/bingo (receiveHandoff)
 const BINGO_URL = '../bingo/index.html';
-const EXAMPLE = { atoms:'Neutrons in chlorine‑35 → 18', ions:'Electrons in O²⁻ → 10', mass:'17 protons, 18 neutrons → 35', charge:'12 protons, 10 electrons → 2+',
+const EXAMPLE = { atoms:'Protons in carbon‑14 → 6 · electrons in sodium → 11 · neutrons in chlorine‑35 → 18', ions:'Electrons in O²⁻ → 10', mass:'17 protons, 18 neutrons → 35', charge:'12 protons, 10 electrons → 2+',
   extra:'Protons in Na⁺ → 11 · 24 p, 28 n: electrons → 24', backwards:'2− ion with 18 electrons: protons → 16',
   nucleus:'Particles in the nucleus of aluminum‑27 → 27 · charge of an O nucleus → 8+', bohr:'Valence electrons in phosphorus → 5 · sulfur → 2, 8, 6',
   element:'26 protons → Fe · mass number 40, 20 neutrons → Ca', ionsym:'20 protons, 18 electrons → Ca²⁺ · 3+ ion with 10 electrons → Al³⁺',
@@ -788,7 +788,7 @@ function sendToBingo(){
 }
 function copyAsText(){
   const p = payload();
-  const lines = p.items.map(it => it.question + ' | ' + it.answer).join('\n');
+  const lines = p.items.map(it => it.question + ' | ' + it.answer + ' | ' + it.category).join('\n');
   copyText(lines).then(ok => toast(ok ? 'Copied ' + plural(p.items.length, 'line') + '. In Bingo, paste them into the questions box. Decoys aren’t included: use Send or .json for those.'
     : 'Couldn’t copy. Use Download .json instead.', ok ? 'ok' : 'err'));
 }
