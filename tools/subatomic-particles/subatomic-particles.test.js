@@ -59,6 +59,7 @@ test('ions are real elements with a sensible charge, no ion twice', () => {
 const BOHR = ['1', '2', '2,1', '2,2', '2,3', '2,4', '2,5', '2,6', '2,7', '2,8', '2,8,1', '2,8,2', '2,8,3', '2,8,4', '2,8,5', '2,8,6', '2,8,7', '2,8,8',
   '2,8,8,1', '2,8,8,2'].map(s => s.split(',').map(Number));
 const bohr = n => BOHR[n - 1];
+const rounded = e => { const f = e.mass - Math.floor(e.mass); assert.ok(f <= 0.4 || f >= 0.6, e.name + ' is too close to a half to round'); return Math.round(e.mass); };
 const SUPS = '⁰¹²³⁴⁵⁶⁷⁸⁹', SUBS = '₀₁₂₃₄₅₆₇₈₉';
 const fromSup = s => +[...s].map(c => SUPS.indexOf(c)).join(''), fromSub = s => +[...s].map(c => SUBS.indexOf(c)).join('');
 const toSup = n => [...String(n)].map(d => SUPS[d]).join('');
@@ -74,7 +75,13 @@ const ionText = (sym, q) => sym + ({ 1:'', 2:'²', 3:'³', 4:'⁴' })[Math.abs(q
 const W = [
   [/^How many protons are in an atom of (\w+)\?$/, m => byName.get(m[1]).z],
   [/^How many electrons are in a neutral atom of (\w+)\?$/, m => byName.get(m[1]).z],
-  [/^How many neutrons are in an atom of (\S+)\?$/, m => { const i = isoOf(m[1]); return i.A - i.e.z; }],
+  [/^How many neutrons are in an atom of (\w+\u2011\d+)\?$/, m => { const i = isoOf(m[1]); return i.A - i.e.z; }],
+  // no mass number: round the atomic mass (never for an element within 0.1 of a half)
+  [/^How many neutrons are in an atom of (\w+)\?$/, m => rounded(byName.get(m[1])) - byName.get(m[1]).z],
+  [/^What is the mass number of (an?) (\w+) atom\?$/, m => rounded(atomOf(m[1], m[2]))],
+  [/^How many neutrons are in the ion (\S+)\?$/, m => { const i = ionOf(m[1]); return rounded(i.e) - i.e.z; }],
+  [/^How many particles are in the nucleus of (an?) (\w+) atom\?$/, m => rounded(atomOf(m[1], m[2]))],
+  [/^How many protons, neutrons and electrons does (an?) (\w+) atom have altogether\?$/, m => { const e = atomOf(m[1], m[2]); return rounded(e) + e.z; }],
   [/^How many electrons are in the ion (\S+)\?$/, m => { const i = ionOf(m[1]); return i.e.z - i.q; }],
   [/^An atom has (\d+) protons? and (\d+) neutrons?\. What is its mass number\?$/, m => +m[1] + +m[2]],
   [/^An atom with mass number (\d+) has (\d+) neutrons?\. What is its atomic number\?$/, m => +m[1] - +m[2]],
@@ -130,8 +137,8 @@ test('every question has the right answer for what it asks', () => {
   assert.equal(new Set(K.ALL.map(x => x.q)).size, K.ALL.length, 'no question is worded twice');
   K.ALL.forEach(x => assert.ok(x.a.length <= 24, 'fits a bingo square: ' + x.a));
 });
-test('the simple category: protons and electrons in atoms, neutrons and protons in isotopes', () => {
-  assert.deepEqual(plain([...new Set(P.atoms.map(x => x.kind))].sort()), ['e', 'n', 'p', 'xIsoP']);
+test('the simple category: protons and electrons in atoms, neutrons and protons in isotopes, neutrons by rounding', () => {
+  assert.deepEqual(plain([...new Set(P.atoms.map(x => x.kind))].sort()), ['e', 'n', 'nR', 'p', 'xIsoP']);
   assert.equal(K.TYPE_SHORT.atoms, 'Simple');
   assert.ok(!P.extra.some(x => x.kind === 'xIsoP'));
 });
@@ -220,10 +227,15 @@ test('mistakes are the ones named', () => {
   assert.deepEqual(m('i:Mg:2'), [['wrongWay', '14'], ['ignoredCharge', '12']]);
   assert.deepEqual(m('m:Cl-35'), [['subtracted', '1'], ['withElectrons', '52']]);
   assert.deepEqual(m('z:Cl-35'), [['added', '53'], ['neutrons', '18']]);
+  assert.deepEqual(m('nr:Li'), [['massNumber', '7'], ['protons', '3'], ['cutOff', '3'], ['added', '10']]);   // 6.94
+  assert.deepEqual(m('mr:Na'), [['atomic', '11'], ['cutOff', '22'], ['unrounded', '22.99']]);
+  assert.deepEqual(m('xnr:Na:1'), [['chargeOnN', '11'], ['protons', '11'], ['electrons', '10'], ['cutOff', '11']]);
+  assert.deepEqual(['Cl', 'Cu', 'Rb'].map(s => K.ALL.some(x => x.id === 'nr:' + s)), [false, false, false]);
+  assert.equal(K.ALL.filter(x => /^(nr|mr|unr|utr):/.test(x.id) && x.z <= 36).length, 4 * 34);
   assert.deepEqual(m('np:Cl-35'), [['massNumber', '35'], ['protons', '17'], ['added', '52']]);
   assert.equal(K.ALL.find(x => x.id === 'np:Cl-35').q, 'An atom has 17 protons and a mass number of 35. How many neutrons does it have?');
   assert.equal(K.ALL.find(x => x.id === 'np:H-1').q, 'An atom has 1 proton and a mass number of 1. How many neutrons does it have?');
-  assert.deepEqual(plain([...new Set(P.mass.map(x => x.kind))].sort()), ['atomic', 'mass', 'neutronsPA']);
+  assert.deepEqual(plain([...new Set(P.mass.map(x => x.kind))].sort()), ['atomic', 'mass', 'massR', 'neutronsPA']);
   assert.deepEqual(m('c:Mg:2'), [['wrongSign', '2\u2212']]);
   // the newer kinds
   assert.deepEqual(m('xp:Na:1'), [['electrons', '10'], ['chargeOnP', '12']]);

@@ -156,7 +156,7 @@
             <h3 class="section-title">Question types</h3>
             <div class="types" id="types"></div>
             <label class="check heavy" style="margin-top:12px"><input type="checkbox" id="heavy"><span class="tx"><span>Heavier elements too</span><span class="ex">Rubidium, strontium, silver, tin, iodine, xenon, cesium, barium, gold, lead, uranium</span></span></label>
-            <p class="hint">Elements 1 to 36, hydrogen to krypton, unless <b>Heavier elements</b> is ticked. Bohr–Rutherford questions always use elements 1 to 20. Students need a periodic table. Neutron questions name the isotope (chlorine‑35), so there is no rounding to do.</p>
+            <p class="hint">Elements 1 to 36, hydrogen to krypton, unless <b>Heavier elements</b> is ticked. Bohr–Rutherford questions always use elements 1 to 20. Students need a periodic table. Some questions name the isotope (chlorine‑35). Others give only the element, and students round the atomic mass on their periodic table (sodium 22.99 → 23). Chlorine, copper and rubidium are left out of those: their atomic masses are too close to a half to round the same way on every table.</p>
           </div>
           <div class="opt">
             <div class="row">
@@ -239,7 +239,11 @@ const SubatomicCore = (function(){
       [79, 'Au', 'gold', 196.967, [197]], [82, 'Pb', 'lead', 207.21, [208, 206]],
       [92, 'U', 'uranium', 238.029, [238, 235]]
     ].map(([z, sym, name, mass, isotopes]) => ({ z, sym, name, mass, isotopes })));
-  const LIGHT_MAX = 36;   // elements above this only come up when heavier elements are ticked
+  const LIGHT_MAX = 36;
+  /* Questions that give only the element (no mass number) use the rounded atomic mass as the mass number. An element
+     whose atomic mass is within 0.1 of a half is left out of those: a table that prints one decimal (chlorine 35.5,
+     not 35.45) would round it the other way. That leaves out chlorine, copper and rubidium. */
+  const roundable = e => Math.abs(e.mass - Math.floor(e.mass) - 0.5) >= 0.1;   // elements above this only come up when heavier elements are ticked
   const BY_SYM = new Map(ELEMENTS.map(e => [e.sym, e]));
   const BY_Z = new Map(ELEMENTS.map(e => [e.z, e]));
 
@@ -347,6 +351,18 @@ const SubatomicCore = (function(){
         X('extra', 'xMassE', 'xme:' + sym, cap(name) + '’s atomic mass is ' + e.mass + '. How many electrons does a neutral ' + name + ' atom have?', z,
           'Electrons, atomic mass ' + e.mass, 'same as protons: ' + z + ' (the atomic mass doesn’t matter)', { m });
       }
+      /* no mass number given: students round the atomic mass on their own periodic table */
+      if(roundable(e)){
+        const N = m - z, R = { m, N, mass:e.mass }, how = e.mass + ' rounds to ' + m;
+        X('atoms', 'nR', 'nr:' + sym, 'How many neutrons are in an atom of ' + name + '?', N,
+          'Neutrons in ' + name, how + ', ' + m + ' ' + MINUS + ' ' + z + ' = ' + N, R);
+        X('mass', 'massR', 'mr:' + sym, 'What is the mass number of ' + anAtom(name) + '?', m,
+          'Mass number of ' + name, how, R);
+        X('nucleus', 'uNucR', 'unr:' + sym, 'How many particles are in the nucleus of ' + anAtom(name) + '?', m,
+          'Nucleus of ' + name, how + ': ' + z + ' protons + ' + N + ' neutrons', R);
+        X('nucleus', 'uTotR', 'utr:' + sym, 'How many protons, neutrons and electrons does ' + anAtom(name) + ' have altogether?', z + m,
+          'All particles in ' + name, how + ': ' + z + ' + ' + N + ' + ' + z + ' = ' + (z + m), R);
+      }
       /* nucleus */
       X('nucleus', 'uCh', 'uc:' + sym, 'What is the charge of the nucleus of ' + anAtom(name) + '?', chargeText(z),
         'Charge of the ' + name + ' nucleus', z + ' protons, so ' + chargeText(z));
@@ -399,6 +415,11 @@ const SubatomicCore = (function(){
       const e = BY_SYM.get(sym), { z, name } = e, el = z - q, ion = ionLabel(sym, q), ct = chargeText(q), base = { charge:q, el };
       const step = (q > 0 ? ' ' + MINUS + ' ' : ' + ') + Math.abs(q);
       const X = (type, kind, id, qq, a, short, note, more) => add(Object.assign({ id, type, kind, q:qq, a, short, note, sym, z }, base, more || {}));
+      if(roundable(e)){
+        const m = Math.round(e.mass), N = m - z;
+        X('extra', 'xIonNR', 'xnr:' + sym + ':' + q, 'How many neutrons are in the ion ' + ion + '?', N,
+          'Neutrons in ' + ion, e.mass + ' rounds to ' + m + ', ' + m + ' ' + MINUS + ' ' + z + ' = ' + N + ' (the charge doesn’t matter)', { m, N, mass:e.mass });
+      }
       X('extra', 'xIonP', 'xp:' + sym + ':' + q, 'How many protons are in the ion ' + ion + '?', z,
         'Protons in ' + ion, 'atomic number ' + z + ' (the charge only changes electrons)');
       X('backwards', 'bGL', 'bg:' + sym + ':' + q, 'How many electrons does ' + anAtom(name) + (q > 0 ? ' lose' : ' gain') + ' to become ' + ion + '?', Math.abs(q),
@@ -546,7 +567,23 @@ const SubatomicCore = (function(){
     // working back from the electrons: protons = electrons + charge; the wrong way round is electrons − charge
     const backWhy = q > 0 ? 'took the charge away, but a positive ion has fewer electrons than protons' : 'added the charge, but a negative ion has more electrons than protons';
     const e1 = (name, n, why) => { const e = elem(n); if(e) add(name, e.sym, why); };
+    const cut = x.mass != null ? Math.floor(x.mass) : null;   // cut off the decimal instead of rounding
     switch(x.kind){
+      case 'nR':
+        add('massNumber', x.m, 'gave the mass number'); if(N !== z) add('protons', z, 'gave the protons');
+        add('cutOff', cut - z, 'cut off the decimal instead of rounding'); add('added', x.m + z, 'added instead of taking away'); break;
+      case 'massR':
+        add('atomic', z, 'gave the atomic number'); add('cutOff', cut, 'cut off the decimal instead of rounding');
+        add('unrounded', x.mass, 'gave the atomic mass without rounding'); break;
+      case 'xIonNR':
+        add('chargeOnN', N - q, 'changed the neutrons by the charge'); if(N !== z) add('protons', z, 'gave the protons');
+        add('electrons', el, 'gave the electrons'); add('cutOff', cut - z, 'cut off the decimal instead of rounding'); break;
+      case 'uNucR':
+        add('withElectrons', x.m + z, 'counted the electrons too'); add('protons', z, 'counted only the protons');
+        add('cutOff', cut, 'cut off the decimal instead of rounding'); break;
+      case 'uTotR':
+        add('noElectrons', x.m, 'forgot the electrons'); add('noNeutrons', 2 * z, 'forgot the neutrons');
+        add('cutOff', cut + z, 'cut off the decimal instead of rounding'); break;
       case 'xMassP': case 'xMassE':
         add('roundedMass', x.m, 'gave the rounded atomic mass'); add('massMinusZ', x.m - z, 'worked out the neutrons'); break;
       case 'xIsoP':
