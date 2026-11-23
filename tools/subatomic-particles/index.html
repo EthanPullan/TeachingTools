@@ -95,6 +95,9 @@
   .types{display:flex;flex-direction:column;gap:10px;}
   .types .tx,.check.heavy .tx{display:flex;flex-direction:column;min-width:0;}
   .types .ex,.check.heavy .ex{color:var(--muted);font-size:12px;}
+  .types .group{margin:6px 0 -2px;font-size:12px;font-weight:700;color:var(--board);}
+  .types .group:first-child{margin-top:0;}
+  .types .group small{font-weight:500;color:var(--muted);}
   .types .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap;padding-top:1px;}
   .send .btn.big{width:100%;}
   .send .row .btn{flex:1;justify-content:center;}
@@ -251,13 +254,19 @@ const SubatomicCore = (function(){
     ['Rb', 1], ['Cs', 1], ['Ag', 1], ['Au', 1], ['Au', 3], ['Sr', 2], ['Ba', 2], ['Sn', 2], ['Sn', 4], ['Pb', 2], ['Pb', 4], ['I', -1]
   ];
 
-  const TYPES = ['atoms', 'ions', 'mass', 'charge', 'extra', 'notation', 'backwards', 'nucleus', 'symbols', 'bohr'];
+  /* The checkboxes, in two groups by what goes on the card: a number (or a charge, or a shell arrangement like
+     2, 8, 6), or an element or ion symbol. */
+  const GROUPS = [
+    { name:'Numbers', hint:'the answers are numbers', types:['atoms', 'ions', 'mass', 'charge', 'extra', 'backwards', 'nucleus', 'bohr'] },
+    { name:'Symbols', hint:'the answers are element or ion symbols', types:['element', 'ionsym', 'same'] }
+  ];
+  const TYPES = GROUPS.reduce((a, g) => a.concat(g.types), []);
   const DEFAULT_TYPES = ['atoms', 'ions', 'mass', 'charge'];
   const TYPE_NAME = { atoms:'Protons, neutrons, electrons', ions:'Electrons in ions', mass:'Mass and atomic number', charge:'Ion charge',
-    extra:'Extra information (watch out!)', notation:'Isotope notation', backwards:'Ions, working backwards',
-    nucleus:'Nucleus and totals', symbols:'Name the element or ion', bohr:'Bohr–Rutherford shells (elements 1 to 20)' };
-  const TYPE_SHORT = { atoms:'Atoms', ions:'Ions', mass:'Mass number', charge:'Charge', extra:'Extra info', notation:'Notation',
-    backwards:'Backwards', nucleus:'Nucleus', symbols:'Symbols', bohr:'Bohr' };
+    extra:'Extra information (watch out!)', backwards:'Ions, working backwards', nucleus:'Nucleus and totals',
+    bohr:'Bohr–Rutherford shells (elements 1 to 20)', element:'Name the element', ionsym:'Name the ion', same:'Same electrons as an ion' };
+  const TYPE_SHORT = { atoms:'Atoms', ions:'Ions', mass:'Mass number', charge:'Charge', extra:'Extra info', backwards:'Backwards',
+    nucleus:'Nucleus', bohr:'Bohr', element:'Element', ionsym:'Ion symbol', same:'Same electrons' };
   const MINUS = '−';   // − a real minus sign (Bingo treats it and "-" alike)
   const NBH = '‑';     // ‑ a hyphen that never breaks the line; Bingo would draw a plain "-" before a digit as a minus
 
@@ -273,14 +282,10 @@ const SubatomicCore = (function(){
   const n1 = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
   // How Bingo compares answers: spaces ignored, every minus sign alike.
   const keyOf = s => String(s).replace(/[−–]/g, '-').replace(/\s+/g, '');
-  const SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹', SUB = '₀₁₂₃₄₅₆₇₈₉';
-  const sup = n => String(n).split('').map(d => SUP[d]).join('');
-  const sub = n => String(n).split('').map(d => SUB[d]).join('');
-  const isoSym = (e, A) => sup(A) + e.sym;               // ³⁷Cl
-  const isoFull = (e, A) => sup(A) + sub(e.z) + e.sym;   // ³⁷₁₇Cl
   const cap = s => s[0].toUpperCase() + s.slice(1);
   // "an atom of"… "an iron atom", "a uranium atom" (u sounds like "you")
-  const anAtom = name => (/^[aeio]/.test(name) ? 'an ' : 'a ') + name + ' atom';
+  const art = name => /^[aeio]/.test(name) ? 'an ' : 'a ';
+  const anAtom = name => art(name) + name + ' atom';
   const ORD = ['first', 'second', 'third', 'fourth'];
   /* Bohr–Rutherford shells for elements 1 to 20 (the school model: 2, 8, 8, then the rest). → [2, 8, 6] */
   function shellsOf(n, caps){
@@ -343,7 +348,7 @@ const SubatomicCore = (function(){
       X('nucleus', 'uCh', 'uc:' + sym, 'What is the charge of the nucleus of ' + anAtom(name) + '?', chargeText(z),
         'Charge of the ' + name + ' nucleus', z + ' protons, so ' + chargeText(z));
       /* symbols */
-      X('symbols', 'sP', 'sp:' + sym, 'An atom has ' + n1(z, 'proton') + '. What is its element symbol?', sym,
+      X('element', 'sP', 'sp:' + sym, 'An atom has ' + n1(z, 'proton') + '. What is its element symbol?', sym,
         'Element with ' + z + ' p', 'atomic number ' + z + ' is ' + name);
 
       e.isotopes.forEach(A => {
@@ -355,20 +360,6 @@ const SubatomicCore = (function(){
           'Electrons, ' + z + ' p and ' + N + ' n', 'same as protons: ' + z + ' (neutrons don’t matter)', more);
         X('extra', 'xAN', 'xan:' + sym + '-' + A, 'A neutral atom has a mass number of ' + A + ' and ' + n1(N, 'neutron') + '. How many electrons does it have?', z,
           'Electrons, mass ' + A + ' and ' + N + ' n', A + ' ' + MINUS + ' ' + N + ' = ' + z + ' protons, so ' + z + ' electrons', more);
-        /* isotope notation */
-        X('notation', 'tN1', 'tn1:' + sym + '-' + A, 'How many neutrons are in ' + isoSym(e, A) + '?', N,
-          'Neutrons in ' + isoSym(e, A), A + ' ' + MINUS + ' ' + z + ' = ' + N, more);
-        X('notation', 'tN2', 'tn2:' + sym + '-' + A, 'How many neutrons are in ' + sym + NBH + A + '?', N,
-          'Neutrons in ' + sym + NBH + A, A + ' ' + MINUS + ' ' + z + ' = ' + N, more);
-        X('notation', 'tN3', 'tn3:' + sym + '-' + A, 'How many neutrons are in ' + isoFull(e, A) + '?', N,
-          'Neutrons in ' + isoFull(e, A), A + ' ' + MINUS + ' ' + z + ' = ' + N, more);
-        X('notation', 'tZ', 'tz:' + sym + '-' + A, 'What is the atomic number of ' + isoFull(e, A) + '?', z,
-          'Atomic number of ' + isoFull(e, A), 'the bottom number: ' + z, more);
-        X('notation', 'tA', 'ta:' + sym + '-' + A, 'What is the mass number of ' + isoFull(e, A) + '?', A,
-          'Mass number of ' + isoFull(e, A), 'the top number: ' + A, more);
-        if(!(sym === 'C' && A === 12))   // the example in the question
-          X('notation', 'tW', 'tw:' + sym + '-' + A, 'An atom has ' + n1(z, 'proton') + ' and ' + n1(N, 'neutron') + '. What is its isotope symbol, written like ¹²C?', isoSym(e, A),
-            'Symbol, ' + z + ' p and ' + N + ' n', z + ' + ' + N + ' = ' + A + ' on top of ' + sym, more);
         /* nucleus and totals */
         X('nucleus', 'uNuc', 'un:' + sym + '-' + A, 'How many particles are in the nucleus of an atom of ' + iso + '?', A,
           'Nucleus of ' + iso, z + ' protons + ' + N + ' neutrons = ' + A, more);
@@ -377,7 +368,7 @@ const SubatomicCore = (function(){
         if(N > z) X('nucleus', 'uDiff', 'ud:' + sym + '-' + A, 'How many more neutrons than protons are in an atom of ' + iso + '?', N - z,
           'Neutrons ' + MINUS + ' protons in ' + iso, N + ' ' + MINUS + ' ' + z + ' = ' + (N - z), more);
         /* symbols */
-        X('symbols', 'sAN', 'san:' + sym + '-' + A, 'An atom has a mass number of ' + A + ' and ' + n1(N, 'neutron') + '. What is its element symbol?', sym,
+        X('element', 'sAN', 'san:' + sym + '-' + A, 'An atom has a mass number of ' + A + ' and ' + n1(N, 'neutron') + '. What is its element symbol?', sym,
           'Element, mass ' + A + ' and ' + N + ' n', A + ' ' + MINUS + ' ' + N + ' = ' + z + ', ' + name, more);
       });
       /* two isotopes of one element */
@@ -414,12 +405,12 @@ const SubatomicCore = (function(){
       if(el > 0){
         X('backwards', 'bP', 'bp:' + sym + ':' + q, 'An ion with a ' + ct + ' charge has ' + n1(el, 'electron') + '. How many protons does it have?', z,
           'Protons, ' + ct + ' ion with ' + el + ' e', el + (q > 0 ? ' + ' : ' ' + MINUS + ' ') + Math.abs(q) + ' = ' + z + ' (' + ion + ')');
-        X('symbols', 'sIon', 'si:' + sym + ':' + q, 'A particle has ' + n1(z, 'proton') + ' and ' + n1(el, 'electron') + '. What is its symbol, with the charge?', ion,
+        X('ionsym', 'sIon', 'si:' + sym + ':' + q, 'A particle has ' + n1(z, 'proton') + ' and ' + n1(el, 'electron') + '. What is its symbol, with the charge?', ion,
           'Ion, ' + z + ' p and ' + el + ' e', name + ', ' + z + ' ' + MINUS + ' ' + el + ' = ' + ct);
-        X('symbols', 'sIonE', 'se:' + sym + ':' + q, 'An ion with a ' + ct + ' charge has ' + n1(el, 'electron') + '. What is its symbol, with the charge?', ion,
+        X('ionsym', 'sIonE', 'se:' + sym + ':' + q, 'An ion with a ' + ct + ' charge has ' + n1(el, 'electron') + '. What is its symbol, with the charge?', ion,
           'Ion, ' + ct + ' with ' + el + ' e', el + (q > 0 ? ' + ' : ' ' + MINUS + ' ') + Math.abs(q) + ' = ' + z + ' protons, ' + name);
         const same = BY_Z.get(el);
-        if(same) X('symbols', 'sSame', 'ss:' + sym + ':' + q, 'Which neutral atom has the same number of electrons as ' + ion + '? Give its symbol.', same.sym,
+        if(same) X('same', 'sSame', 'ss:' + sym + ':' + q, 'Which neutral atom has the same number of electrons as ' + ion + '? Give its symbol.', same.sym,
           'Same electrons as ' + ion, ion + ' has ' + el + ' electrons, like ' + same.name);
         if(z <= 20){
           const sh = shellsOf(el);
@@ -430,10 +421,10 @@ const SubatomicCore = (function(){
         }
       }
       e.isotopes.forEach(A => {
-        const N = A - z, ii = sup(A) + ion, more = { A, N };
-        X('extra', 'xIonN', 'xn:' + sym + '-' + A + ':' + q, 'How many neutrons are in the ion ' + ii + '?', N,
+        const N = A - z, ii = isoName(e, A) + ' ion, ' + ion, more = { A, N };   // "a chlorine‑37 ion, Cl⁻"
+        X('extra', 'xIonN', 'xn:' + sym + '-' + A + ':' + q, 'How many neutrons are in ' + art(name) + ii + '?', N,
           'Neutrons in ' + ii, A + ' ' + MINUS + ' ' + z + ' = ' + N + ' (the charge doesn’t matter)', more);
-        X('extra', 'xIonE', 'xe:' + sym + '-' + A + ':' + q, 'How many electrons are in the ion ' + ii + '?', el,
+        X('extra', 'xIonE', 'xe:' + sym + '-' + A + ':' + q, 'How many electrons are in ' + art(name) + ii + '?', el,
           'Electrons in ' + ii, z + step + ' = ' + el + ' (the mass number doesn’t matter)', more);
         if(el > 0){
           X('extra', 'xIonA', 'xa:' + sym + '-' + A + ':' + q, 'An ion has ' + n1(z, 'proton') + ', ' + n1(N, 'neutron') + ' and ' + n1(el, 'electron') + '. What is its mass number?', A,
@@ -569,15 +560,6 @@ const SubatomicCore = (function(){
         add('wrongSign', chargeText(-q), q > 0 ? 'more protons than electrons is positive' : 'more electrons than protons is negative');
         const d = N - el; if(d !== 0) add('neutronsVsE', chargeText(d), 'compared the neutrons with the electrons'); break;
       }
-      case 'tN1': case 'tN2': case 'tN3':
-        add('massNumber', A, 'gave the mass number'); if(N !== z) add('protons', z, 'gave the protons'); add('added', A + z, 'added instead of taking away'); break;
-      case 'tZ':
-        add('massNumber', A, 'gave the top number (the mass number)'); if(N !== z) add('neutrons', N, 'worked out the neutrons'); break;
-      case 'tA':
-        add('atomic', z, 'gave the bottom number (the atomic number)'); if(N !== z) add('neutrons', N, 'gave the neutrons'); break;
-      case 'tW':
-        add('neutronsTop', sup(N) + sym, 'put the neutrons on top'); add('protonsTop', sup(z) + sym, 'put the atomic number on top');
-        { const w = elem(N); if(w) add('fromNeutrons', sup(A) + w.sym, 'found the element from the neutrons'); } break;
       case 'uNuc':
         add('withElectrons', A + z, 'counted the electrons too'); add('protons', z, 'counted only the protons'); break;
       case 'uTot':
@@ -667,7 +649,7 @@ const SubatomicCore = (function(){
       decoys:decoys.map(d => ({ answer:d.answer, mistake:d.mistake })) };
   }
 
-  return { ELEMENTS, IONS, LIGHT_MAX, TYPES, DEFAULT_TYPES, TYPE_NAME, shellsOf, TYPE_SHORT, ALL, esc, ionLabel, chargeText, keyOf, pools,
+  return { ELEMENTS, IONS, LIGHT_MAX, GROUPS, TYPES, DEFAULT_TYPES, TYPE_NAME, shellsOf, TYPE_SHORT, ALL, esc, ionLabel, chargeText, keyOf, pools,
     makeRng, shuffle, pickSet, replaceOne, mistakesFor, makeDecoys, typesTitle, payload };
 })();
 /* </subatomic-core> */
@@ -681,9 +663,10 @@ const LS_STATE = 'subatomicparticles.v1.state';
 const HANDOFF_KEY = 'teachingtools.handoff.v1';   // read by tools/bingo (receiveHandoff)
 const BINGO_URL = '../bingo/index.html';
 const EXAMPLE = { atoms:'Neutrons in chlorine‑35 → 18', ions:'Electrons in O²⁻ → 10', mass:'17 protons, 18 neutrons → 35', charge:'12 protons, 10 electrons → 2+',
-  extra:'Protons in Na⁺ → 11 · 24 p, 28 n: electrons → 24', notation:'Neutrons in ⁵⁶Fe → 30 · 17 p, 20 n → ³⁷Cl',
-  backwards:'2− ion with 18 electrons: protons → 16', nucleus:'Particles in the nucleus of aluminum‑27 → 27 · charge of an O nucleus → 8+',
-  symbols:'20 protons, 18 electrons → Ca²⁺ · same electrons as Mg²⁺ → Ne', bohr:'Valence electrons in phosphorus → 5 · sulfur → 2, 8, 6' };
+  extra:'Protons in Na⁺ → 11 · 24 p, 28 n: electrons → 24', backwards:'2− ion with 18 electrons: protons → 16',
+  nucleus:'Particles in the nucleus of aluminum‑27 → 27 · charge of an O nucleus → 8+', bohr:'Valence electrons in phosphorus → 5 · sulfur → 2, 8, 6',
+  element:'26 protons → Fe · mass number 40, 20 neutrons → Ca', ionsym:'20 protons, 18 electrons → Ca²⁺ · 3+ ion with 10 electrons → Al³⁺',
+  same:'Same number of electrons as Mg²⁺ → Ne' };
 let P = K.pools();
 
 /* ---------- small helpers ---------- */
@@ -813,10 +796,10 @@ function copyAsText(){
 /* ---------- render ---------- */
 function render(){
   // types
-  $('types').innerHTML = K.TYPES.map(t =>
+  $('types').innerHTML = K.GROUPS.map(g => '<h4 class="group">' + esc(g.name) + ' <small>' + esc(g.hint) + '</small></h4>' + g.types.map(t =>
     '<label class="check"><input type="checkbox" data-type="' + t + '"' + (st.types.includes(t) ? ' checked' : '') + '>' +
     '<span class="tx"><span>' + esc(K.TYPE_NAME[t]) + '</span><span class="ex">' + esc(EXAMPLE[t]) + '</span></span>' +
-    '<span class="n">' + P[t].length + ' possible</span></label>').join('');
+    '<span class="n">' + P[t].length + ' possible</span></label>').join('')).join('');
   $('heavy').checked = st.heavy;
   // counts
   if(document.activeElement !== $('count')) $('count').value = st.count;
