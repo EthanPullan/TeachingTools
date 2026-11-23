@@ -1,4 +1,4 @@
-// Unit tests for the Bingo core (the <bingo-core> block in index.html). So far: the shareable page.
+// Unit tests for the Bingo core (the <bingo-core> block in index.html): the shareable page, patterns, categories.
 // Run:  node --test tools/bingo/bingo.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -73,4 +73,77 @@ test('simulate takes a custom pattern, and a smaller one is won sooner than the 
   const one = C.simulate(pool, cards, size, false, { name:'one', hint:'', targets:() => [[0]] }, 100);
   const full = C.simulate(pool, cards, size, false, 'full', 100);
   assert.ok(one.first < full.first && one.winnable === 12, JSON.stringify([one, full]));
+});
+
+/* ---------- categories: a third column, and picking a set spread across them ---------- */
+const plain = v => JSON.parse(JSON.stringify(v));
+const row = it => [it.q, it.a, it.cat];
+test('a third column is the category; a question’s own |x| bars don’t get mistaken for one', () => {
+  const p = C.parseItems([
+    '6 × 7 | 42 | Times tables',
+    '12 ÷ 4 | 3',
+    'Evaluate |−5| | 5',
+    'Evaluate |−6| | 6 | Absolute value',
+    '| 99 | Answers only',
+    '  2 + 2   |  4  |   Adding   things  '
+  ].join('\n'));
+  assert.deepEqual(plain(p.items.map(row)), [
+    ['6 × 7', '42', 'Times tables'], ['12 ÷ 4', '3', ''], ['Evaluate |−5|', '5', ''],
+    ['Evaluate |−6|', '6', 'Absolute value'], ['', '99', 'Answers only'], ['2 + 2', '4', 'Adding things']]);
+  assert.deepEqual(plain(p.problems), []);
+  // and back to a line that reads the same
+  p.items.forEach(it => assert.deepEqual(plain(row(C.parseItems(C.itemLine(it)).items[0])), plain(row(it)), C.itemLine(it)));
+  assert.equal(C.itemLine({ q:'6 × 7', a:'42' }), '6 × 7 | 42');
+  assert.equal(C.itemLine({ q:'', a:'42' }), '42');
+  assert.equal(C.itemLine({ q:'Q', a:'1', cat:'A | B' }), 'Q | 1 | A B');
+});
+test('categories come in from a draft (JSON) and a spreadsheet', () => {
+  const d = C.readDraft({ items:[{ question:'6 × 7', answer:'42', category:'Times' }, { question:'Q', answer:'1' }] });
+  assert.ok(d.ok);
+  assert.deepEqual(plain(d.items), [{ q:'6 × 7', a:'42', cat:'Times' }, { q:'Q', a:'1' }]);
+  const t = C.readTable([['question', 'answer', 'category'], ['6 × 7', '42', 'Times'], ['Q', '1', '']]);
+  assert.deepEqual(plain(t.items), [{ q:'6 × 7', a:'42', cat:'Times' }, { q:'Q', a:'1' }]);
+});
+
+// A bank: category A has 20 questions, B 20, C 5 (answers 1..45, all different).
+const bank = C.parseItems(Array.from({ length:45 }, (_, i) => 'Q' + i + ' | ' + (i + 1) + ' | ' + (i < 20 ? 'A' : i < 40 ? 'B' : 'C')).join('\n')).items;
+const count = (r, items) => { const n = {}; r.picked.forEach(i => { n[items[i].cat] = (n[items[i].cat] || 0) + 1; }); return n; };
+test('categoriesOf lists each category once, in order, with how many different answers it has', () => {
+  assert.deepEqual(plain(C.categoriesOf(bank)), [{ name:'A', n:20 }, { name:'B', n:20 }, { name:'C', n:5 }]);
+  const dup = C.parseItems('a | 1 | X\nb | 1 | X\nc | 2').items;
+  assert.deepEqual(plain(C.categoriesOf(dup)), [{ name:'X', n:1 }, { name:'', n:1 }]);
+});
+test('picking evenly: the same share each, and a small category gives what it has', () => {
+  for(let seed = 1; seed <= 30; seed++){
+    const r = C.pickByCategory(bank, { count:12 }, C.makeRng(seed));
+    assert.deepEqual(count(r, bank), { A:4, B:4, C:4 });
+    assert.equal(r.short, 0);
+    assert.deepEqual(plain(r.picked), plain(r.picked.slice().sort((a, b) => a - b)), 'in the order of the box');
+    const big = C.pickByCategory(bank, { count:30 }, C.makeRng(seed));
+    const n = count(big, bank);
+    assert.equal(n.C, 5); assert.equal(n.A + n.B, 25); assert.ok(Math.abs(n.A - n.B) <= 1);
+  }
+});
+test('picking with weights: 2 gets twice the share of 1, and 0 leaves a category out', () => {
+  for(let seed = 1; seed <= 30; seed++){
+    assert.deepEqual(count(C.pickByCategory(bank, { count:15, weights:{ A:2, B:1, C:0 } }, C.makeRng(seed)), bank), { A:10, B:5 });
+    // 12 split 3 : 1 : 1 is 7.2, 2.4, 2.4: each within 1 of its exact share
+    const n = count(C.pickByCategory(bank, { count:12, weights:{ A:3, B:1 } }, C.makeRng(seed)), bank);
+    assert.equal(n.A + n.B + n.C, 12);
+    [['A', 7.2], ['B', 2.4], ['C', 2.4]].forEach(([c, x]) => assert.ok(Math.abs(n[c] - x) < 1, c + ' ' + n[c]));
+  }
+  const r = C.pickByCategory(bank, { count:50, weights:{ C:0 } }, C.makeRng(1));
+  assert.equal(r.picked.length, 40); assert.equal(r.short, 10);
+  assert.equal(C.pickByCategory(bank, { count:10, weights:{ A:0, B:0, C:0 } }, C.makeRng(1)).picked.length, 0);
+});
+test('picking never takes two questions with the same answer, and differs from seed to seed', () => {
+  const items = C.parseItems(Array.from({ length:40 }, (_, i) => 'Q' + i + ' | ' + (i % 10) + ' | ' + (i % 2 ? 'Odd' : 'Even')).join('\n')).items;
+  for(let seed = 1; seed <= 20; seed++){
+    const r = C.pickByCategory(items, { count:40 }, C.makeRng(seed));
+    assert.equal(new Set(r.picked.map(i => items[i].v.key)).size, r.picked.length);
+    assert.equal(r.picked.length, 10);
+  }
+  const a = C.pickByCategory(bank, { count:12 }, C.makeRng(1)).picked, b = C.pickByCategory(bank, { count:12 }, C.makeRng(2)).picked;
+  assert.notDeepEqual(plain(a), plain(b));
+  assert.deepEqual(plain(a), plain(C.pickByCategory(bank, { count:12 }, C.makeRng(1)).picked), 'the same seed gives the same pick');
 });

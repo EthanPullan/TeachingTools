@@ -136,6 +136,18 @@
   .ptable .an{font-family:var(--mono);font-weight:600;white-space:nowrap;}
   .ptable .ty{font-family:var(--mono);font-size:10.5px;color:var(--muted);width:1%;}
   .ptable tr.warn td{background:#fff8ec;} .ptable tr.err td{background:#fdf0ef;}
+  .ptable tr.out td{opacity:.42;}
+  .ptable .ca{font-size:11.5px;color:var(--muted);white-space:nowrap;}
+  .pick{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel-2);}
+  .pick .row{margin-top:8px;}
+  .pick table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px;}
+  .pick th{text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:4px 6px;border-bottom:1px solid var(--line);}
+  .pick td{padding:4px 6px;border-bottom:1px solid var(--grid-line, var(--line));}
+  .pick tr:last-child td{border-bottom:none;}
+  .pick td.num{font-family:var(--mono);width:1%;white-space:nowrap;text-align:right;}
+  .pick td.wt{width:1%;}
+  .pick input[type=number]{width:64px;}
+  .pick tr.off td:not(.wt){opacity:.45;}
   .ptable .note{display:block;font-size:11.5px;color:var(--accent-deep);margin-top:2px;}
   .ptable tr.err .note{color:var(--danger);}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
@@ -397,8 +409,10 @@
               placeholder="6 × 7 | 42&#10;Solve 2x + 3 = 11 | 4&#10;{3}/{4} of 20 | 15&#10;&#10;…or only the answers:  42, 4, 15, -3, 0.5, 3/4"></textarea>
             <p class="hint">One per line: <code>question | answer</code>. You can also paste two columns from a spreadsheet, or type only the answers (<code>12, 7, -3, 0.5, 3/4</code>) if your slides are made somewhere else.
               Answers can be whole numbers, negatives, decimals, fractions (<code>3/4</code>, <code>1 1/2</code>) or short text (<code>x = 5</code>).
+              Add a category as a third column (<code>6 × 7 | 42 | Times tables</code>) to pick a set spread across categories.
               In questions: <code>x^2</code> powers, <code>x_1</code> subscripts, <code>sqrt(x)</code>, <code>{3}/{4}</code> a stacked fraction, <code>*</code> for ×.</p>
             <label class="check" style="margin-top:8px" title="For chemistry: numbers after a letter become subscripts (CaCl2 shows as CaCl₂), and CaCl_2 counts as CaCl2. Capital letters still matter: Co is not CO."><input type="checkbox" id="formulaChk"> Chemical formulas: show CaCl2 as CaCl<sub>2</sub></label>
+            <div id="pickBox"></div>
             <div id="itemPreview"></div>
           </div>
 
@@ -712,7 +726,13 @@ const BingoCore = (function(){
       return bareSplit(filled[0] || '').map(a => ({ q:'', a, sep:false }));
     }
     if(raw.indexOf('|') >= 0){
+      // An even number of "|" means a third column, the category: "question | answer | category". A question's own
+      // bars come in pairs (|x|), so they never change whether the count is odd or even.
       const at = raw.lastIndexOf('|');
+      if((raw.match(/\|/g).length) % 2 === 0){
+        const at2 = raw.lastIndexOf('|', at - 1);
+        return [{ q:raw.slice(0, at2).trim(), a:raw.slice(at2 + 1, at).trim(), cat:raw.slice(at + 1).trim().replace(/\s+/g, ' '), sep:true }];
+      }
       return [{ q:raw.slice(0, at).trim(), a:raw.slice(at + 1).trim(), sep:true }];
     }
     return bareSplit(raw.trim()).map(a => ({ q:'', a, sep:false }));
@@ -725,7 +745,7 @@ const BingoCore = (function(){
       const line = li + 1;
       splitLine(raw).forEach(p => {
         if(!p.a){ problems.push({ line, level:'err', msg:'No answer after the last “|”.' }); return; }
-        const it = { q:p.q, a:p.a, line, v:valueInfo(p.a, opt) };
+        const it = { q:p.q, a:p.a, cat:p.cat || '', line, v:valueInfo(p.a, opt) };
         if(!p.sep && it.v.type === 'text'){
           const at = p.a.lastIndexOf('=');
           if(at > 0 && p.a.slice(0, at).trim() && parseNumber(p.a.slice(at + 1)))
@@ -1218,7 +1238,7 @@ const BingoCore = (function(){
     return { ok:false, error:'This isn’t valid JSON. Ask the AI to reply with only the JSON, in one code block.' };
   }
   // A question list written by an AI (or by hand, or sent by a generator tool such as Compound Naming):
-  // { format, title, items:[{question, answer}], decoys:[{answer, mistake} | "41"], formulas?:true, size?:3|4|5 }
+  // { format, title, items:[{question, answer, category?}], decoys:[{answer, mistake} | "41"], formulas?:true, size?:3|4|5 }
   // → { ok, title, items:[{q,a}], decoys:[{a,why}], errors:[...], formulas, size }. Never throws.
   function readDraft(d){
     const errors = [], items = [], decoys = [];
@@ -1238,7 +1258,8 @@ const BingoCore = (function(){
       if(!a){ err(n + ' has no "answer".'); return; }
       if(a.indexOf('|') >= 0){ err(n + ': the answer “' + a + '” has a “|” in it. Answers can’t contain “|”.'); return; }
       if(a.length > 24) err(n + ': the answer “' + a + '” is too long for a bingo square (24 characters at most).');
-      items.push({ q, a });
+      const cat = one(it.category != null ? it.category : it.cat);
+      items.push(cat ? { q, a, cat } : { q, a });
     });
     (Array.isArray(d.decoys) ? d.decoys : []).forEach((x, i) => {
       const a = one(typeof x === 'object' && x ? (x.answer != null ? x.answer : x.a) : x);
@@ -1275,9 +1296,10 @@ const BingoCore = (function(){
     const items = [], decoys = [];
     if(!rows.length) return { items, decoys };
     const h = rows[0].map(c => c.toLowerCase());
-    let qi = -1, ai = -1, ki = -1, wi = -1, start = 0;
+    let qi = -1, ai = -1, ki = -1, wi = -1, ci = -1, start = 0;
     if(h.some(c => /^(question|answer|kind|type)$/.test(c))){
       qi = h.indexOf('question'); ai = h.indexOf('answer'); ki = h.indexOf('kind') >= 0 ? h.indexOf('kind') : h.indexOf('type');
+      ci = h.indexOf('category');
       wi = h.indexOf('mistake') >= 0 ? h.indexOf('mistake') : h.indexOf('note'); start = 1;
     }
     for(let r = start; r < rows.length; r++){
@@ -1288,14 +1310,54 @@ const BingoCore = (function(){
       q = q.replace(/\s+/g, ' ').trim(); a = a.replace(/\s+/g, ' ').trim();
       if(!a) continue;
       if(ki >= 0 && /^decoy/i.test(row[ki] || '')) decoys.push({ a, why:wi >= 0 ? (row[wi] || '').trim() : '' });
-      else items.push({ q, a });
+      else { const cat = ci >= 0 ? (row[ci] || '').replace(/\s+/g, ' ').trim() : ''; items.push(cat ? { q, a, cat } : { q, a }); }
     }
     return { items, decoys };
   }
+  /* ---------- picking questions from a bank, by category ----------
+     items: parseItems' items (each has .cat, '' for none, and .v.key). The categories in the order they first come up.
+     → [{ name, n }] where n is how many different answers the category has. */
+  function categoriesOf(items){
+    const m = new Map();
+    items.forEach(it => { if(!m.has(it.cat)) m.set(it.cat, new Set()); m.get(it.cat).add(it.v.key); });
+    return [...m].map(([name, keys]) => ({ name, n:keys.size }));
+  }
+  /* opt: { count, weights:{ category:weight } } (a missing weight is 1; 0 leaves the category out).
+     One question at a time goes to the category furthest behind its share: with weights 2 and 1 the first gets two for
+     every one of the second. A category that runs out drops out and the rest carry on. No two picked questions share
+     an answer (they would mark the same square). The picking is shuffled within each category, and ties between
+     categories go to a shuffled order. → { picked:[item indexes, in the original order], per:{ name:count }, short } */
+  function pickByCategory(items, opt, rng){
+    const weights = opt.weights || {}, w = c => { const x = weights[c]; return Number.isFinite(x) && x >= 0 ? x : 1; };
+    const want = Math.max(0, opt.count | 0);
+    const cats = shuffle(categoriesOf(items).map(c => c.name).filter(c => w(c) > 0), rng);
+    const cand = new Map(cats.map(c => [c, []]));
+    items.forEach((it, i) => { if(cand.has(it.cat)) cand.get(it.cat).push(i); });
+    cand.forEach(list => shuffle(list, rng));
+    const taken = new Set(), picked = [], per = {}, open = cats.slice();
+    cats.forEach(c => { per[c] = 0; });
+    while(picked.length < want && open.length){
+      let best = null, low = Infinity;
+      // Webster's rounding (count halves): stays within 1 of each category's exact share
+      open.forEach(c => { const t = (per[c] + 0.5) / w(c); if(t < low){ low = t; best = c; } });
+      const list = cand.get(best);
+      while(list.length && taken.has(items[list[list.length - 1]].v.key)) list.pop();
+      if(!list.length){ open.splice(open.indexOf(best), 1); continue; }
+      const i = list.pop();
+      taken.add(items[i].v.key); picked.push(i); per[best]++;
+    }
+    return { picked:picked.sort((a, b) => a - b), per, short:Math.max(0, want - picked.length) };
+  }
+
   const csvCell = s => /[",\n\r]/.test(s) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s);
   function toCsv(rows){ return rows.map(r => r.map(c => csvCell(c == null ? '' : c)).join(',')).join('\r\n') + '\r\n'; }
   // Items back into the text box: "question | answer", or the answer alone.
-  const itemLine = it => it.q ? it.q.replace(/\s+/g, ' ') + ' | ' + it.a : it.a;
+  // With a category: "question | answer | category" (no question: "| answer | category").
+  const itemLine = it => {
+    const q = it.q ? it.q.replace(/\s+/g, ' ') : '', cat = it.cat ? String(it.cat).replace(/[|\s]+/g, ' ').trim() : '';
+    if(cat) return (q ? q + ' ' : '') + '| ' + it.a + ' | ' + cat;
+    return q ? q + ' | ' + it.a : it.a;
+  };
 
   /* ---------- a shareable page ----------
      One game as a web page that works on its own: this tool's own style, markup and script (src), with the game in a
@@ -1311,7 +1373,7 @@ const BingoCore = (function(){
   return { rat, rkey, rnum, normNum, parseNumber, valueInfo, parseItems, parseList, esc, renderMath, renderAnswer,
     answerShape, makeRng, shuffle, choose, geometry, PATTERNS, PATTERN_ORDER, patternShape, targetName, decoyLayouts,
     generateCards, analyseCards, checkCard, simulate, makeDecoys, cardSetKey,
-    extractJson, readDraft, readDecoyReply, parseDelimited, readTable, toCsv, itemLine, sharePage };
+    extractJson, readDraft, readDecoyReply, parseDelimited, readTable, toCsv, itemLine, sharePage, categoriesOf, pickByCategory };
 })();
 /* </bingo-core> */
 
@@ -1389,6 +1451,7 @@ function segSet(el, v){ el.querySelectorAll('button').forEach(b => { const on = 
 function blankGame(name){
   return { id:uid(), name:name || '', created:Date.now(), updated:Date.now(),
     itemsText:'', formulas:false, decoys:[], dopt:{ count:null, style:'mistakes', signs:false },
+    pick:{ on:false, count:null, weights:{}, seed:1 },
     set:{ size:5, free:true, count:30, d:null },
     cards:null,
     play:{ pattern:'line', custom:null, overlay:{ on:false, fx:0.985, fy:0.08, s:16 }, round:1, log:[], order:'shuffle', skip:true, strip:true, reveal:false, near:false, showDecoys:false },
@@ -1416,11 +1479,17 @@ function normalizeGame(g){
   const out = { id:isStr(g.id) && g.id ? g.id : b.id, name:isStr(g.name) ? g.name.slice(0, 80) : '', created:+g.created || Date.now(), updated:+g.updated || Date.now(),
     itemsText:isStr(g.itemsText) ? g.itemsText : '', formulas:g.formulas === true,
     decoys:(Array.isArray(g.decoys) ? g.decoys : []).filter(d => d && isStr(d.a) && d.a.trim()).map(d => ({ a:d.a.trim(), why:isStr(d.why) ? d.why : '', auto:!!d.auto, lock:!!d.lock })),
-    dopt:Object.assign({}, b.dopt), set:Object.assign({}, b.set), cards:cleanCards(g.cards), play:Object.assign({}, b.play), print:Object.assign({}, b.print) };
+    dopt:Object.assign({}, b.dopt), pick:{ on:false, count:null, weights:{}, seed:1 }, set:Object.assign({}, b.set), cards:cleanCards(g.cards), play:Object.assign({}, b.play), print:Object.assign({}, b.print) };
   const o = g.dopt || {};
   if(Number.isInteger(o.count) && o.count > 0) out.dopt.count = Math.min(o.count, 100);
   if(o.style === 'range') out.dopt.style = 'range';
   out.dopt.signs = !!o.signs;
+  const pk = g.pick || {};
+  out.pick.on = pk.on === true;
+  if(Number.isInteger(pk.count) && pk.count > 0) out.pick.count = Math.min(pk.count, 1000);
+  if(Number.isInteger(pk.seed)) out.pick.seed = pk.seed >>> 0;
+  if(pk.weights && typeof pk.weights === 'object') Object.keys(pk.weights).forEach(k => {
+    const w = pk.weights[k]; if(Number.isInteger(w) && w >= 0 && w <= 10) out.pick.weights[k] = w; });
   const s = g.set || {};
   if([3, 4, 5].includes(s.size)) out.set.size = s.size;
   if(typeof s.free === 'boolean') out.set.free = s.free;
@@ -1486,9 +1555,17 @@ function switchGame(id){
 /* ---------- what the current text and settings add up to ---------- */
 let dvCache = null;
 function derive(){
-  const sig = game.id + '\u0000' + game.formulas + '\u0000' + game.itemsText + '\u0000' + JSON.stringify(game.decoys) + '\u0000' + JSON.stringify(game.set);
+  const sig = game.id + '\u0000' + game.formulas + '\u0000' + game.itemsText + '\u0000' + JSON.stringify(game.decoys) + '\u0000' + JSON.stringify(game.set) + '\u0000' + JSON.stringify(game.pick);
   if(dvCache && dvCache.sig === sig) return dvCache.val;
-  const parsed = PI(game.itemsText);
+  // all: every line in the box. parsed: the questions the game uses (all of them, or the ones picked by category).
+  const all = PI(game.itemsText), cats = C.categoriesOf(all.items), hasCats = cats.some(c => c.name);
+  let parsed = all, pick = null;
+  if(game.pick.on && hasCats){
+    pick = C.pickByCategory(all.items, { count:pickCount(all), weights:game.pick.weights }, C.makeRng(game.pick.seed));
+    pick.set = new Set(pick.picked);
+    const items = pick.picked.map(i => all.items[i]);
+    parsed = { items, answers:items.map(it => ({ a:it.a, k:it.v.key, v:it.v, line:it.line })), problems:all.problems };
+  }
   const ansKeys = new Map(parsed.answers.map(a => [a.k, a.a]));
   const seen = new Map();
   const decoys = game.decoys.map((d, idx) => {
@@ -1499,10 +1576,12 @@ function derive(){
     return { idx, a:d.a, k:v.key, v, why:d.why || '', auto:d.auto, lock:d.lock, bad };
   });
   const valid = decoys.filter(d => !d.bad);
-  const val = { parsed, decoys, valid, plan:makePlan(parsed, valid) };
+  const val = { all, cats, hasCats, pick, parsed, decoys, valid, plan:makePlan(parsed, valid) };
   dvCache = { sig, val };
   return val;
 }
+// How many questions to pick: the teacher's number, or 30 (or all of them, if there are fewer).
+const pickCount = all => game.pick.count || Math.min(30, all.answers.length);
 function suggestedDecoys(A, S){
   if(!A) return 10;
   return clamp(Math.max(Math.ceil(A / 3), S > A ? (S - A) + Math.ceil(S / 4) : 0, 4), 1, 100);
@@ -1658,8 +1737,9 @@ function renderSetup(){
   setVal($('items'), game.itemsText);
   $('formulaChk').checked = game.formulas;
   const nq = dv.parsed.items.filter(i => i.q).length;
-  $('itemCount').textContent = nq ? plural(dv.parsed.items.length, 'question') + ' · ' + plural(dv.parsed.answers.length, 'answer')
-    : plural(dv.parsed.answers.length, 'answer');
+  $('itemCount').textContent = dv.pick ? dv.parsed.items.length + ' of ' + plural(dv.all.items.length, nq ? 'question' : 'answer') + ' picked'
+    : nq ? plural(dv.parsed.items.length, 'question') + ' · ' + plural(dv.parsed.answers.length, 'answer') : plural(dv.parsed.answers.length, 'answer');
+  renderPick(dv);
   renderPreview(dv);
   // decoys
   setVal($('dCount'), game.dopt.count || suggestedDecoys(dv.parsed.answers.length, p.S));
@@ -1714,26 +1794,65 @@ function renderSetup(){
   renderAi();
 }
 function renderPreview(dv){
-  const items = dv.parsed.items, probs = dv.parsed.problems;
+  const items = dv.all.items, probs = dv.all.problems, pk = dv.pick, anyCat = dv.hasCats;
   if(!items.length && !probs.length){ $('itemPreview').innerHTML = ''; return; }
   const byItem = new Map();
   probs.forEach(pr => { if(pr.item != null){ if(!byItem.has(pr.item)) byItem.set(pr.item, []); byItem.get(pr.item).push(pr); } });
-  const rows = items.map((it, i) => ({ line:it.line, it, probs:byItem.get(i) || [] }))
+  const rows = items.map((it, i) => ({ line:it.line, it, i, probs:byItem.get(i) || [] }))
     .concat(probs.filter(pr => pr.item == null).map(pr => ({ line:pr.line, it:null, probs:[pr] })))
     .sort((a, b) => a.line - b.line);
   const anyQ = items.some(it => it.q);
   const html = rows.slice(0, 600).map(r => {
     const lvl = r.probs.some(x => x.level === 'err') ? 'err' : r.probs.length ? 'warn' : '';
     const notes = r.probs.map(x => '<span class="note">' + (x.level === 'err' ? '✕ ' : '⚠ ') + esc(x.msg) + '</span>').join('');
-    if(!r.it) return '<tr class="err"><td class="ln">' + r.line + '</td><td colspan="3">' + notes + '</td></tr>';
-    return '<tr class="' + lvl + '"><td class="ln">' + r.line + '</td>' +
+    if(!r.it) return '<tr class="err"><td class="ln">' + r.line + '</td><td colspan="' + (3 + anyCat) + '">' + notes + '</td></tr>';
+    const out = pk && !pk.set.has(r.i);
+    return '<tr class="' + lvl + (out ? ' out' : '') + '"' + (out ? ' title="Not picked for this game"' : '') + '><td class="ln">' + r.line + '</td>' +
       (anyQ ? '<td>' + (r.it.q ? RM(r.it.q) : '<span class="hint">no question: the answer is called on its own</span>') + notes + '</td>' : '') +
-      '<td class="an">' + RA(r.it.a, r.it.v.type) + (anyQ ? '' : notes) + '</td><td class="ty">' + TYPE_LABEL[r.it.v.type] + '</td></tr>';
+      '<td class="an">' + RA(r.it.a, r.it.v.type) + (anyQ ? '' : notes) + '</td>' + (anyCat ? '<td class="ca">' + esc(r.it.cat) + '</td>' : '') +
+      '<td class="ty">' + TYPE_LABEL[r.it.v.type] + '</td></tr>';
   }).join('');
   $('itemPreview').innerHTML = '<div class="ptable-wrap"><table class="ptable"><thead><tr><th>Line</th>' + (anyQ ? '<th>Question (as it will be shown)</th>' : '') +
-    '<th>Answer</th><th>Kind</th></tr></thead><tbody>' + html + '</tbody></table></div>' +
+    '<th>Answer</th>' + (anyCat ? '<th>Category</th>' : '') + '<th>Kind</th></tr></thead><tbody>' + html + '</tbody></table></div>' +
+    (pk ? '<p class="hint">Greyed lines are not picked for this game.</p>' : '') +
     (rows.length > 600 ? '<p class="hint">Showing the first 600 lines.</p>' : '');
 }
+
+/* Picking a set from a bank of questions, spread across their categories (shown once any line has a category). */
+function renderPick(dv){
+  const box = $('pickBox');
+  if(!dv.hasCats){ box.innerHTML = ''; return; }
+  if(box.contains(document.activeElement) && document.activeElement.type === 'number') return;   // don't redraw under the teacher's typing
+  const on = !!dv.pick, total = dv.all.answers.length;
+  let html = '<div class="pick"><label class="check"><input type="checkbox" id="pickOn"' + (on ? ' checked' : '') + '>' +
+    '<span>Pick some of these questions, spread across the categories</span></label>';
+  if(on){
+    html += '<div class="row"><span class="lab">Questions in the game</span><input type="number" id="pickCount" min="1" max="' + total + '" value="' + pickCount(dv.all) + '" aria-label="Questions in the game">' +
+      '<span class="hint" style="margin:0">of ' + total + '</span><span class="spacer"></span><button type="button" class="btn small" id="pickNew" title="Pick again, with the same weights">↻ New pick</button></div>' +
+      '<table><thead><tr><th>Category</th><th style="text-align:right">Has</th><th>Weight</th><th style="text-align:right">Picked</th></tr></thead><tbody>' +
+      dv.cats.map((c, i) => {
+        const w = game.pick.weights[c.name] != null ? game.pick.weights[c.name] : 1;
+        return '<tr' + (w ? '' : ' class="off"') + '><td>' + (c.name ? esc(c.name) : '<span class="hint" style="margin:0">no category</span>') + '</td><td class="num">' + c.n + '</td>' +
+          '<td class="wt"><input type="number" min="0" max="10" step="1" value="' + w + '" data-w="' + i + '" aria-label="Weight for ' + esc(c.name || 'no category') + '"></td>' +
+          '<td class="num">' + (w ? dv.pick.per[c.name] || 0 : '–') + '</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<p class="hint">All weights 1 gives each category the same share. A 2 gets twice the share of a 1, and 0 leaves a category out. A category with too few questions gives what it has, and the others make up the rest.' +
+      (dv.pick.short ? ' <b>Only ' + dv.pick.picked.length + ' can be picked</b> with these weights (no two questions in a game can share an answer).' : '') +
+      ' Cards and calling use only the picked questions. The rest stay in the box for another game.</p>';
+  }
+  box.innerHTML = html + '</div>';
+}
+$('pickBox').addEventListener('change', e => {
+  const t = e.target;
+  if(t.id === 'pickOn') game.pick.on = t.checked;
+  else if(t.id === 'pickCount'){ const v = parseInt(t.value, 10); game.pick.count = v > 0 ? Math.min(v, 1000) : null; }
+  else if(t.dataset.w != null){
+    const c = derive().cats[+t.dataset.w]; if(!c) return;
+    const v = parseInt(t.value, 10); game.pick.weights[c.name] = clamp(isNaN(v) ? 1 : v, 0, 10);
+  } else return;
+  t.blur(); changed();
+});
+$('pickBox').addEventListener('click', e => { if(e.target.closest('#pickNew')){ game.pick.seed = newSeed(); changed(); } });
 
 /* ---------- Setup actions ---------- */
 function changed(){ save(); renderAll(); }
@@ -2536,10 +2655,11 @@ function exportGame(){
 }
 function exportCsv(){
   const dv = derive();
-  if(!dv.parsed.items.length && !game.decoys.length){ toast('There are no questions to export yet.', 'warn'); return; }
-  const rows = [['question', 'answer', 'kind', 'mistake']];
-  dv.parsed.items.forEach(it => rows.push([it.q, it.a, 'item', '']));
-  game.decoys.forEach(d => rows.push(['', d.a, 'decoy', d.why || '']));
+  if(!dv.all.items.length && !game.decoys.length){ toast('There are no questions to export yet.', 'warn'); return; }
+  // every question in the box (not only the picked ones), with its category if any have one
+  const rows = [['question', 'answer', 'kind', 'mistake'].concat(dv.hasCats ? ['category'] : [])];
+  dv.all.items.forEach(it => rows.push([it.q, it.a, 'item', ''].concat(dv.hasCats ? [it.cat] : [])));
+  game.decoys.forEach(d => rows.push(['', d.a, 'decoy', d.why || ''].concat(dv.hasCats ? [''] : [])));
   download('bingo-' + fileSafe(game.name) + '.csv', new Blob(['﻿' + C.toCsv(rows)], { type:'text/csv' }));
   toast('Questions saved as a spreadsheet (.csv).', 'ok');
 }
@@ -2571,7 +2691,7 @@ async function importFile(file){
   try { text = await file.text(); } catch(e){ toast('That file couldn’t be read.', 'err'); return; }
   const name = file.name || 'the file';
   if(/\.(csv|tsv)$/i.test(name)) return offerDraft(Object.assign({ title:name.replace(/\.[^.]+$/, '') }, C.readTable(C.parseDelimited(text))), name);
-  if(/\.txt$/i.test(name) && !/^\s*[[{`]/.test(text)) return offerDraft({ title:name.replace(/\.[^.]+$/, ''), items:PI(text).items.map(it => ({ q:it.q, a:it.a })), decoys:[] }, name);
+  if(/\.txt$/i.test(name) && !/^\s*[[{`]/.test(text)) return offerDraft({ title:name.replace(/\.[^.]+$/, ''), items:PI(text).items.map(it => ({ q:it.q, a:it.a, cat:it.cat })), decoys:[] }, name);
   importText(text, name, false);
 }
 function importText(text, name, fromPaste){
@@ -2580,14 +2700,14 @@ function importText(text, name, fromPaste){
     // not JSON: maybe plain "question | answer" lines were pasted
     if(fromPaste){
       const p = PI(text);
-      if(p.items.length) return offerDraft({ title:'', items:p.items.map(it => ({ q:it.q, a:it.a })), decoys:[] }, name);
+      if(p.items.length) return offerDraft({ title:'', items:p.items.map(it => ({ q:it.q, a:it.a, cat:it.cat })), decoys:[] }, name);
     }
     showErrors('This couldn’t be read', [j.error]); return;
   }
   const v = j.value;
   if(fromPaste && (!v || typeof v !== 'object')){
     const p = PI(text);
-    if(p.items.length) return offerDraft({ title:'', items:p.items.map(it => ({ q:it.q, a:it.a })), decoys:[] }, name);
+    if(p.items.length) return offerDraft({ title:'', items:p.items.map(it => ({ q:it.q, a:it.a, cat:it.cat })), decoys:[] }, name);
   }
   if(v && v.type === DATA_TYPE) return importGame(v, name);
   if(v && typeof v === 'object' && (v.format === 'teachingtools-bingo-decoys' || (!Array.isArray(v) && !v.items && !v.questions && Array.isArray(v.decoys)))) return applyDecoyReply(v, name);
