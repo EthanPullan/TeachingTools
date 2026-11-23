@@ -364,8 +364,8 @@ const SubatomicCore = (function(){
           'All particles in ' + name, how + ': ' + z + ' + ' + N + ' + ' + z + ' = ' + (z + m), R);
       }
       /* nucleus */
-      X('nucleus', 'uCh', 'uc:' + sym, 'What is the charge of the nucleus of ' + anAtom(name) + '?', chargeText(z),
-        'Charge of the ' + name + ' nucleus', z + ' protons, so ' + chargeText(z));
+      X('nucleus', 'uOut', 'uo:' + sym, 'How many electrons are outside the nucleus of ' + anAtom(name) + '?', z,
+        'Electrons outside the ' + name + ' nucleus', 'same as protons: ' + z, { m, N:m - z });
       /* symbols */
       X('element', 'sP', 'sp:' + sym, 'An atom has ' + n1(z, 'proton') + '. What is its element symbol?', sym,
         'Element with ' + z + ' p', 'atomic number ' + z + ' is ' + name);
@@ -612,8 +612,8 @@ const SubatomicCore = (function(){
         add('neutrons', N, 'gave the neutrons'); add('added', N + z, 'added instead of taking away'); break;
       case 'uIso':
         add('neutrons', N, 'gave the neutrons in the heavier one'); add('neutronsLight', x.N1, 'gave the neutrons in the lighter one'); break;
-      case 'uCh':
-        add('neutral', '0', 'gave the charge of the whole atom'); add('wrongSign', chargeText(-z), 'the nucleus holds the protons, so it is positive'); break;
+      case 'uOut':
+        add('massNumber', x.m, 'gave the rounded atomic mass'); if(x.N !== z) add('neutrons', x.N, 'gave the neutrons'); break;
       case 'sP': {
         const mm = byMass(z); if(mm) add('massMatch', mm.sym, 'matched the atomic mass, not the atomic number');
         e1('nextBox', z + 1, 'read the next box on the periodic table'); break;
@@ -708,7 +708,7 @@ const HANDOFF_KEY = 'teachingtools.handoff.v1';   // read by tools/bingo (receiv
 const BINGO_URL = '../bingo/index.html';
 const EXAMPLE = { atoms:'Protons in carbon‑14 → 6 · electrons in sodium → 11 · neutrons in chlorine‑35 → 18', ions:'Electrons in O²⁻ → 10', mass:'17 protons, 18 neutrons → 35 · 17 protons, mass number 35 → 18 neutrons', charge:'12 protons, 10 electrons → 2+',
   extra:'Protons in Na⁺ → 11 · 24 p, 28 n: electrons → 24', backwards:'2− ion with 18 electrons: protons → 16',
-  nucleus:'Particles in the nucleus of aluminum‑27 → 27 · charge of an O nucleus → 8+', bohr:'Valence electrons in phosphorus → 5 · sulfur → 2, 8, 6',
+  nucleus:'Particles in the nucleus of aluminum‑27 → 27 · electrons outside an O nucleus → 8', bohr:'Valence electrons in phosphorus → 5 · sulfur → 2, 8, 6',
   element:'26 protons → Fe · mass number 40, 20 neutrons → Ca', ionsym:'20 protons, 18 electrons → Ca²⁺ · 3+ ion with 10 electrons → Al³⁺',
   same:'Same number of electrons as Mg²⁺ → Ne' };
 let P = K.pools();

@@ -104,7 +104,7 @@ const W = [
   [/^How many protons, neutrons and electrons does an atom of (\S+) have altogether\?$/, m => { const i = isoOf(m[1]); return i.A + i.e.z; }],
   [/^How many more neutrons than protons are in an atom of (\S+)\?$/, m => { const i = isoOf(m[1]); return i.A - 2 * i.e.z; }],
   [/^How many more neutrons does (\S+) have than (\S+)\?$/, m => { const a = isoOf(m[1]), b = isoOf(m[2]); assert.equal(a.e, b.e); return a.A - b.A; }],
-  [/^What is the charge of the nucleus of (an?) (\w+) atom\?$/, m => chg(atomOf(m[1], m[2]).z)],
+  [/^How many electrons are outside the nucleus of (an?) (\w+) atom\?$/, m => atomOf(m[1], m[2]).z],
   // symbols
   [/^An atom has (\d+) protons?\. What is its element symbol\?$/, m => zSym(+m[1])],
   [/^An atom has a mass number of (\d+) and (\d+) neutrons?\. What is its element symbol\?$/, m => zSym(+m[1] - +m[2])],
@@ -243,7 +243,9 @@ test('mistakes are the ones named', () => {
   assert.deepEqual(m('xan:Cr-52'), [['neutrons', '28'], ['massNumber', '52'], ['added', '80']]);
   assert.deepEqual(m('xmp:Cl'), [['roundedMass', '35'], ['massMinusZ', '18']]);
   assert.deepEqual(m('xn:Cl-37:-1'), [['chargeOnN', '21'], ['protons', '17'], ['electrons', '18']]);
-  assert.deepEqual(m('uc:O'), [['neutral', '0'], ['wrongSign', '8\u2212']]);
+  assert.deepEqual(m('uo:O'), [['massNumber', '16']]);              // 15.999: 16, and 8 neutrons is the answer too
+  assert.deepEqual(m('uo:Na'), [['massNumber', '23'], ['neutrons', '12']]);
+  assert.ok(!K.ALL.some(x => /charge of the nucleus/.test(x.q)), 'no nucleus-charge questions');
   assert.deepEqual(m('si:Ca:2'), [['wrongSign', 'Ca²⁻'], ['fromElectrons', 'Ar']]);
   assert.deepEqual(m('se:Al:3'), [['wrongWay', 'N³⁺'], ['fromElectrons', 'Ne']]);
   assert.deepEqual(m('ss:Mg:2'), [['parent', 'Mg'], ['wrongWay', 'Si']]);
