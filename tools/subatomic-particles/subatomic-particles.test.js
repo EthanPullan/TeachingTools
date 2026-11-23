@@ -15,13 +15,22 @@ const bySym = new Map(K.ELEMENTS.map(e => [e.sym, e]));
 const byName = new Map(K.ELEMENTS.map(e => [e.name, e]));
 
 /* ---------- data ---------- */
-test('elements 1 to 36 match the Periodic Table tool (symbol, name, atomic mass)', () => {
+test('elements match the Periodic Table tool (symbol, name, atomic mass): all of 1 to 36, then the heavier ones', () => {
   const html = fs.readFileSync(path.join(__dirname, '../periodic-table/index.html'), 'utf8');
-  const raw = /const RAW = `([\s\S]*?)`/.exec(html)[1].trim().split('\n').slice(0, 36).map(l => l.trim().split(' '));
-  assert.equal(K.ELEMENTS.length, 36);
-  raw.forEach(([z, sym, name, mass], i) => {
-    const e = K.ELEMENTS[i];
+  const raw = new Map(/const RAW = `([\s\S]*?)`/.exec(html)[1].trim().split('\n').map(l => l.trim().split(' ')).map(r => [+r[0], r]));
+  K.ELEMENTS.slice(0, 36).forEach((e, i) => assert.equal(e.z, i + 1));
+  assert.equal(K.LIGHT_MAX, 36);
+  assert.equal(new Set(K.ELEMENTS.map(e => e.z)).size, K.ELEMENTS.length);
+  K.ELEMENTS.forEach(e => {
+    const [z, sym, name, mass] = raw.get(e.z);
     assert.deepEqual([e.z, e.sym, e.name, e.mass], [+z, sym, name.toLowerCase(), +mass]);
+  });
+  assert.deepEqual(plain(K.ELEMENTS.filter(e => e.z > 36).map(e => e.sym)), ['Rb', 'Sr', 'Ag', 'Sn', 'I', 'Xe', 'Cs', 'Ba', 'Au', 'Pb', 'U']);
+});
+test('the heavier ions are the ones on the Compound Naming chart', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../compound-naming/index.html'), 'utf8');
+  K.IONS.filter(([sym]) => bySym.get(sym).z > 36).forEach(([sym, q]) => {
+    if(q > 0) assert.match(html, new RegExp("\\['" + sym + "', \\[[^\\]]*\\b" + q + "\\b"), sym + q);
   });
 });
 test('isotopes are plausible: the first is within 1 of the rounded atomic mass, none has fewer than 0 neutrons', () => {
@@ -46,23 +55,96 @@ test('ions are real elements with a sensible charge, no ion twice', () => {
 });
 
 /* ---------- the questions: every answer is worked out again from the words on the slide ---------- */
+/* Bohr–Rutherford arrangements for 1 to 20, written out by hand (not worked out by the code under test). */
+const BOHR = ['1', '2', '2,1', '2,2', '2,3', '2,4', '2,5', '2,6', '2,7', '2,8', '2,8,1', '2,8,2', '2,8,3', '2,8,4', '2,8,5', '2,8,6', '2,8,7', '2,8,8',
+  '2,8,8,1', '2,8,8,2'].map(s => s.split(',').map(Number));
+const bohr = n => BOHR[n - 1];
+const SUPS = '⁰¹²³⁴⁵⁶⁷⁸⁹', SUBS = '₀₁₂₃₄₅₆₇₈₉';
+const fromSup = s => +[...s].map(c => SUPS.indexOf(c)).join(''), fromSub = s => +[...s].map(c => SUBS.indexOf(c)).join('');
+const toSup = n => [...String(n)].map(d => SUPS[d]).join('');
+const ionOf = s => { const m = /^([⁰¹²³⁴-⁹]*)([A-Z][a-z]?)([²³⁴]?)([⁺⁻])$/.exec(s); assert.ok(m, 'ion ' + s);
+  return { pre:m[1] ? fromSup(m[1]) : null, e:bySym.get(m[2]), q:({ '':1, '²':2, '³':3, '⁴':4 })[m[3]] * (m[4] === '⁻' ? -1 : 1) }; };
+const chg = q => Math.abs(q) + (q < 0 ? '−' : '+');
+const chgOf = s => { const m = /^(\d+)([+−])$/.exec(s); return +m[1] * (m[2] === '+' ? 1 : -1); };
+const isoOf = s => { const m = /^(\w+)‑(\d+)$/.exec(s); const e = byName.get(m[1]); assert.ok(e, s); return { e, A:+m[2] }; };
+const atomOf = (art, name) => { const e = byName.get(name); assert.ok(e, name); assert.equal(art, /^[aeio]/.test(name) ? 'an' : 'a', 'article for ' + name); return e; };
+const zSym = n => { const e = K.ELEMENTS.find(x => x.z === n); assert.ok(e, 'element ' + n); return e.sym; };
+const ionText = (sym, q) => sym + ({ 1:'', 2:'²', 3:'³', 4:'⁴' })[Math.abs(q)] + (q < 0 ? '⁻' : '⁺');
+// [pattern, (match) => the right answer]. Each wording must match exactly one pattern.
+const W = [
+  [/^How many protons are in an atom of (\w+)\?$/, m => byName.get(m[1]).z],
+  [/^How many electrons are in a neutral atom of (\w+)\?$/, m => byName.get(m[1]).z],
+  [/^How many neutrons are in an atom of (\S+)\?$/, m => { const i = isoOf(m[1]); return i.A - i.e.z; }],
+  [/^How many electrons are in the ion (\S+)\?$/, m => { const i = ionOf(m[1]); return i.e.z - i.q; }],
+  [/^An atom has (\d+) protons? and (\d+) neutrons?\. What is its mass number\?$/, m => +m[1] + +m[2]],
+  [/^An atom with mass number (\d+) has (\d+) neutrons?\. What is its atomic number\?$/, m => +m[1] - +m[2]],
+  [/^An ion has (\d+) protons? and (\d+) electrons?\. What is its charge\?$/, m => chg(+m[1] - +m[2])],
+  // extra information
+  [/^(\w+)’s atomic mass is ([\d.]+)\. How many (protons|electrons) does (an?)( neutral)? (\w+) atom have\?$/, m => {
+    const e = m[5] ? byName.get(m[6]) : atomOf(m[4], m[6]); if(m[5]) assert.equal(m[4], 'a'); assert.equal(m[1].toLowerCase(), m[6]); assert.equal(+m[2], e.mass);
+    assert.equal(!!m[5], m[3] === 'electrons'); return e.z; }],
+  [/^How many protons are in an atom of (\w+\u2011\d+)\?$/, m => isoOf(m[1]).e.z],
+  [/^A neutral atom has (\d+) protons? and (\d+) neutrons?\. How many electrons does it have\?$/, m => +m[1]],
+  [/^A neutral atom has a mass number of (\d+) and (\d+) neutrons?\. How many electrons does it have\?$/, m => +m[1] - +m[2]],
+  [/^How many protons are in the ion (\S+)\?$/, m => ionOf(m[1]).e.z],
+  [/^How many neutrons are in the ion (\S+)\?$/, m => { const i = ionOf(m[1]); return i.pre - i.e.z; }],
+  [/^An ion has (\d+) protons?, (\d+) neutrons? and (\d+) electrons?\. What is its mass number\?$/, m => +m[1] + +m[2]],
+  [/^A particle has (\d+) protons?, (\d+) neutrons? and (\d+) electrons?\. What is its charge\?$/, m => chg(+m[1] - +m[3])],
+  // notation
+  [/^How many neutrons are in ([⁰¹²³⁴-⁹]+)([A-Z][a-z]?)\?$/, m => fromSup(m[1]) - bySym.get(m[2]).z],
+  [/^How many neutrons are in ([A-Z][a-z]?)‑(\d+)\?$/, m => +m[2] - bySym.get(m[1]).z],
+  [/^How many neutrons are in ([⁰¹²³⁴-⁹]+)([₀-₉]+)([A-Z][a-z]?)\?$/, m => { assert.equal(fromSub(m[2]), bySym.get(m[3]).z); return fromSup(m[1]) - fromSub(m[2]); }],
+  [/^What is the atomic number of ([⁰¹²³⁴-⁹]+)([₀-₉]+)([A-Z][a-z]?)\?$/, m => { assert.equal(fromSub(m[2]), bySym.get(m[3]).z); return fromSub(m[2]); }],
+  [/^What is the mass number of ([⁰¹²³⁴-⁹]+)([₀-₉]+)([A-Z][a-z]?)\?$/, m => { assert.equal(fromSub(m[2]), bySym.get(m[3]).z); return fromSup(m[1]); }],
+  [/^An atom has (\d+) protons? and (\d+) neutrons?\. What is its isotope symbol, written like ¹²C\?$/, m => toSup(+m[1] + +m[2]) + zSym(+m[1])],
+  // nucleus and totals
+  [/^How many particles are in the nucleus of an atom of (\S+)\?$/, m => isoOf(m[1]).A],
+  [/^How many protons, neutrons and electrons does an atom of (\S+) have altogether\?$/, m => { const i = isoOf(m[1]); return i.A + i.e.z; }],
+  [/^How many more neutrons than protons are in an atom of (\S+)\?$/, m => { const i = isoOf(m[1]); return i.A - 2 * i.e.z; }],
+  [/^How many more neutrons does (\S+) have than (\S+)\?$/, m => { const a = isoOf(m[1]), b = isoOf(m[2]); assert.equal(a.e, b.e); return a.A - b.A; }],
+  [/^What is the charge of the nucleus of (an?) (\w+) atom\?$/, m => chg(atomOf(m[1], m[2]).z)],
+  // symbols
+  [/^An atom has (\d+) protons?\. What is its element symbol\?$/, m => zSym(+m[1])],
+  [/^An atom has a mass number of (\d+) and (\d+) neutrons?\. What is its element symbol\?$/, m => zSym(+m[1] - +m[2])],
+  [/^A particle has (\d+) protons? and (\d+) electrons?\. What is its symbol, with the charge\?$/, m => ionText(zSym(+m[1]), +m[1] - +m[2])],
+  [/^An ion with a (\S+) charge has (\d+) electrons?\. What is its symbol, with the charge\?$/, m => { const q = chgOf(m[1]); return ionText(zSym(+m[2] + q), q); }],
+  [/^Which neutral atom has the same number of electrons as (\S+)\? Give its symbol\.$/, m => { const i = ionOf(m[1]); return zSym(i.e.z - i.q); }],
+  // backwards
+  [/^An ion with a (\S+) charge has (\d+) electrons?\. How many protons does it have\?$/, m => +m[2] + chgOf(m[1])],
+  [/^An ion with a (\S+) charge has (\d+) protons?\. How many electrons does it have\?$/, m => +m[2] - chgOf(m[1])],
+  [/^How many electrons does (an?) (\w+) atom (lose|gain) to become (\S+)\?$/, m => { const e = atomOf(m[1], m[2]), i = ionOf(m[4]);
+    assert.equal(i.e, e); assert.equal(m[3], i.q > 0 ? 'lose' : 'gain'); return Math.abs(i.q); }],
+  [/^An ion with a (\S+) charge has (\d+) electrons? and (\d+) neutrons?\. What is its mass number\?$/, m => +m[2] + chgOf(m[1]) + +m[3]],
+  // Bohr–Rutherford
+  [/^How many valence electrons does (an?) (\w+) atom have\?$/, m => bohr(atomOf(m[1], m[2]).z).slice(-1)[0]],
+  [/^How many shells hold electrons in (an?) (\w+) atom\?$/, m => bohr(atomOf(m[1], m[2]).z).length],
+  [/^How many electrons are in the (second|third|fourth) shell of (an?) (\w+) atom\?$/, m => {
+    const v = bohr(atomOf(m[2], m[3]).z)[['first', 'second', 'third', 'fourth'].indexOf(m[1])]; assert.ok(v > 0); return v; }],
+  [/^What is the electron arrangement of (an?) (\w+) atom\? Give the electrons in each shell, from the inside out\.$/, m => bohr(atomOf(m[1], m[2]).z).join(', ')],
+  [/^What is the electron arrangement of the ion (\S+)\? Give the electrons in each shell, from the inside out\.$/, m => { const i = ionOf(m[1]); return bohr(i.e.z - i.q).join(', '); }],
+  [/^How many electrons are in the outer shell of the ion (\S+)\?$/, m => { const i = ionOf(m[1]); return bohr(i.e.z - i.q).slice(-1)[0]; }]
+];
 test('every question has the right answer for what it asks', () => {
-  const ionOf = s => { const m = /^([A-Z][a-z]?)([²³⁴]?)([⁺⁻])$/.exec(s); return { e:bySym.get(m[1]), q:({ '':1, '²':2, '³':3, '⁴':4 })[m[2]] * (m[3] === '⁻' ? -1 : 1) }; };
-  let m;
   K.ALL.forEach(x => {
-    let want;
-    if((m = /^How many protons are in an atom of (\w+)\?$/.exec(x.q))) want = byName.get(m[1]).z;
-    else if((m = /^How many electrons are in a neutral atom of (\w+)\?$/.exec(x.q))) want = byName.get(m[1]).z;
-    else if((m = /^How many neutrons are in an atom of (\w+)\u2011(\d+)\?$/.exec(x.q))) want = +m[2] - byName.get(m[1]).z;
-    else if((m = /^How many electrons are in the ion (\S+)\?$/.exec(x.q))){ const i = ionOf(m[1]); want = i.e.z - i.q; }
-    else if((m = /^An atom has (\d+) protons? and (\d+) neutrons?\. What is its mass number\?$/.exec(x.q))) want = +m[1] + +m[2];
-    else if((m = /^An atom with mass number (\d+) has (\d+) neutrons?\. What is its atomic number\?$/.exec(x.q))) want = +m[1] - +m[2];
-    else if((m = /^An ion has (\d+) protons? and (\d+) electrons?\. What is its charge\?$/.exec(x.q))){ const q = +m[1] - +m[2]; want = Math.abs(q) + (q < 0 ? '\u2212' : '+'); }
-    else assert.fail('unknown wording: ' + x.q);
-    assert.equal(x.a, String(want), x.q);
+    const hits = W.map(([re, f]) => [re.exec(x.q), f]).filter(h => h[0]);
+    if(!hits.length) assert.fail('unknown wording: ' + x.q);
+    assert.equal(hits.length, 1, 'more than one pattern fits: ' + x.q);
+    assert.equal(x.a, String(hits[0][1](hits[0][0])), x.q);
   });
   assert.equal(new Set(K.ALL.map(x => x.id)).size, K.ALL.length, 'ids are unique');
   assert.equal(new Set(K.ALL.map(x => x.q)).size, K.ALL.length, 'no question is worded twice');
+  K.ALL.forEach(x => assert.ok(x.a.length <= 24, 'fits a bingo square: ' + x.a));
+});
+test('every type has questions, and Bohr–Rutherford stays within 1 to 20', () => {
+  K.TYPES.forEach(t => assert.ok(P[t].length >= 30, t));
+  K.ALL.filter(x => x.type === 'bohr').forEach(x => assert.ok(x.z <= 20, x.id));
+  const H = K.pools({ heavy:true });
+  K.TYPES.forEach(t => {
+    assert.ok(P[t].every(x => x.z <= 36), t + ': no heavier elements unless asked');
+    assert.ok(H[t].length >= P[t].length);
+    if(t !== 'bohr') assert.ok(H[t].some(x => x.z > 36), t + ': heavier elements when asked');
+  });
+  assert.equal(new Set(P.bohr.filter(x => x.kind === 'rArr').map(x => x.a)).size, 20, 'every element 1 to 20 has its own arrangement');
 });
 test('singular and plural read properly', () => {
   const q = id => K.ALL.find(x => x.id === id).q;
@@ -75,11 +157,14 @@ test('singular and plural read properly', () => {
 /* ---------- picking a set ---------- */
 test('a set has the number asked for, only ticked types, spread evenly, every answer different', () => {
   for(let seed = 1; seed <= 40; seed++){
-    const r = K.pickSet(P, { types:K.TYPES, count:30 }, K.makeRng(seed));
+    const r = K.pickSet(P, { types:K.DEFAULT_TYPES, count:30 }, K.makeRng(seed));
     assert.equal(r.list.length, 30); assert.equal(r.short, 0);
     assert.equal(new Set(r.list.map(x => K.keyOf(x.a))).size, 30, 'answers differ (seed ' + seed + ')');
     const n = t => r.list.filter(x => x.type === t).length;
-    assert.deepEqual(plain(K.TYPES.map(n)).sort(), [7, 7, 8, 8]);
+    assert.deepEqual(plain(K.DEFAULT_TYPES.map(n)).sort(), [7, 7, 8, 8]);
+    const all = K.pickSet(P, { types:K.TYPES, count:30 }, K.makeRng(seed)).list;
+    assert.equal(all.length, 30); assert.equal(new Set(all.map(x => K.keyOf(x.a))).size, 30);
+    assert.deepEqual(plain(K.TYPES.map(t => all.filter(x => x.type === t).length)), plain(K.TYPES.map(() => 3)));
     // protons, neutrons and electrons all come up
     assert.deepEqual([...new Set(r.list.filter(x => x.type === 'atoms').map(x => x.kind))].sort(), ['e', 'n', 'p']);
     const two = K.pickSet(P, { types:['ions', 'mass'], count:20 }, K.makeRng(seed));
@@ -128,6 +213,26 @@ test('mistakes are the ones named', () => {
   assert.deepEqual(m('m:Cl-35'), [['subtracted', '1'], ['withElectrons', '52']]);
   assert.deepEqual(m('z:Cl-35'), [['added', '53'], ['neutrons', '18']]);
   assert.deepEqual(m('c:Mg:2'), [['wrongSign', '2\u2212']]);
+  // the newer kinds
+  assert.deepEqual(m('xp:Na:1'), [['electrons', '10'], ['chargeOnP', '12']]);
+  assert.deepEqual(m('xpn:Cr-52'), [['neutrons', '28'], ['pPlusN', '52']]);
+  assert.deepEqual(m('xan:Cr-52'), [['neutrons', '28'], ['massNumber', '52'], ['added', '80']]);
+  assert.deepEqual(m('xmp:Cl'), [['roundedMass', '35'], ['massMinusZ', '18']]);
+  assert.deepEqual(m('xn:Cl-37:-1'), [['chargeOnN', '21'], ['protons', '17'], ['electrons', '18']]);
+  assert.deepEqual(m('tw:Cl-37'), [['neutronsTop', '²⁰Cl'], ['protonsTop', '¹⁷Cl'], ['fromNeutrons', '³⁷Ca']]);
+  assert.deepEqual(m('uc:O'), [['neutral', '0'], ['wrongSign', '8\u2212']]);
+  assert.deepEqual(m('si:Ca:2'), [['wrongSign', 'Ca²⁻'], ['fromElectrons', 'Ar']]);
+  assert.deepEqual(m('se:Al:3'), [['wrongWay', 'N³⁺'], ['fromElectrons', 'Ne']]);
+  assert.deepEqual(m('ss:Mg:2'), [['parent', 'Mg'], ['wrongWay', 'Si']]);
+  assert.deepEqual(m('bp:S:-2'), [['electrons', '18'], ['wrongWay', '20']]);
+  assert.deepEqual(m('rv:P'), [['group', '15'], ['shells', '3'], ['all', '15']]);
+  assert.deepEqual(m('ra:K'), [['firstShell8', '8, 8, 3'], ['bigThird', '2, 8, 9'], ['reversed', '1, 8, 8, 2']]);
+  assert.deepEqual(m('ri:Mg:2'), [['atom', '2, 8, 2'], ['wrongWay', '2, 8, 4']]);
+  // a wrong-answer element past krypton only for a question that is itself past krypton
+  K.ALL.filter(x => x.z <= 36).forEach(x => K.mistakesFor(x).forEach(d => {
+    const sym = /^[⁰¹²³⁴-⁹]*([A-Z][a-z]?)[²³⁴]?[⁺⁻]?$/.exec(d.answer);
+    if(sym && bySym.has(sym[1])) assert.ok(bySym.get(sym[1]).z <= 36, x.id + ' → ' + d.answer);
+  }));
   K.ALL.forEach(x => K.mistakesFor(x).forEach(d => {
     assert.notEqual(K.keyOf(d.answer), K.keyOf(x.a), x.id + ': a mistake is never the right answer');
     assert.ok(d.why.startsWith(x.short + ': ') && d.why.length <= 160);
@@ -156,6 +261,8 @@ test('titles', () => {
   assert.equal(K.typesTitle(K.TYPES), 'Subatomic particles');
   assert.equal(K.typesTitle(['ions']), 'Subatomic particles: ions');
   assert.equal(K.typesTitle(['charge', 'atoms', 'ions']), 'Subatomic particles: atoms, ions and charge');
+  assert.equal(K.typesTitle(K.DEFAULT_TYPES), 'Subatomic particles');
+  assert.equal(K.typesTitle(['bohr', 'symbols']), 'Subatomic particles: symbols and Bohr');
 });
 test('Bingo reads the game with no errors and no warnings; charges are not mistaken for numbers', () => {
   for(let seed = 1; seed <= 20; seed++){
@@ -170,6 +277,24 @@ test('Bingo reads the game with no errors and no warnings; charges are not mista
     const keys = new Set(parsed.answers.map(a => a.k));
     d.decoys.forEach(x => assert.ok(!keys.has(Bingo.valueInfo(x.a).key), 'decoy ' + x.a + ' is not an answer in Bingo either'));
   }
+  // every type, heavier elements too: symbols, ions and shell arrangements are text answers Bingo keeps apart
+  const H = K.pools({ heavy:true });
+  for(let seed = 1; seed <= 20; seed++){
+    const set = K.pickSet(H, { types:K.TYPES, count:50 }, K.makeRng(seed)).list;
+    assert.equal(set.length, 50);
+    const p = plain(K.payload(set, K.makeDecoys(set, 15, K.makeRng(seed)), 'Subatomic particles'));
+    const d = Bingo.readDraft(p);
+    assert.ok(d.ok, d.errors.join(' '));
+    const parsed = Bingo.parseItems(d.items.map(Bingo.itemLine).join('\n'));
+    assert.deepEqual(plain(parsed.problems), []);
+    assert.equal(parsed.answers.length, 50);
+    const keys = new Set(parsed.answers.map(a => a.k));
+    d.decoys.forEach(x => assert.ok(!keys.has(Bingo.valueInfo(x.a).key), 'decoy ' + x.a));
+  }
+  assert.notEqual(Bingo.valueInfo('2, 8').key, Bingo.valueInfo('2, 8, 8').key);
+  assert.equal(Bingo.valueInfo('2, 8, 6').type, 'text');
+  assert.equal(Bingo.renderMath('How many neutrons are in ⁵⁶₂₆Fe?'), 'How many neutrons are in ⁵⁶₂₆Fe?');
+  assert.equal(Bingo.renderMath('How many neutrons are in Fe\u201156?'), 'How many neutrons are in Fe\u201156?');
   assert.equal(Bingo.valueInfo('2+').type, 'text');
   assert.notEqual(Bingo.valueInfo('2+').key, Bingo.valueInfo('2').key);
   assert.notEqual(Bingo.valueInfo('2+').key, Bingo.valueInfo('2\u2212').key);
