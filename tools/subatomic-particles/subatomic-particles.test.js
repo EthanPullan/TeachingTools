@@ -78,6 +78,7 @@ const W = [
   [/^How many electrons are in the ion (\S+)\?$/, m => { const i = ionOf(m[1]); return i.e.z - i.q; }],
   [/^An atom has (\d+) protons? and (\d+) neutrons?\. What is its mass number\?$/, m => +m[1] + +m[2]],
   [/^An atom with mass number (\d+) has (\d+) neutrons?\. What is its atomic number\?$/, m => +m[1] - +m[2]],
+  [/^An atom has (\d+) protons? and a mass number of (\d+)\. How many neutrons does it have\?$/, m => +m[2] - +m[1]],
   [/^An ion has (\d+) protons? and (\d+) electrons?\. What is its charge\?$/, m => chg(+m[1] - +m[2])],
   // extra information
   [/^(\w+)’s atomic mass is ([\d.]+)\. How many (protons|electrons) does (an?)( neutral)? (\w+) atom have\?$/, m => {
@@ -219,6 +220,10 @@ test('mistakes are the ones named', () => {
   assert.deepEqual(m('i:Mg:2'), [['wrongWay', '14'], ['ignoredCharge', '12']]);
   assert.deepEqual(m('m:Cl-35'), [['subtracted', '1'], ['withElectrons', '52']]);
   assert.deepEqual(m('z:Cl-35'), [['added', '53'], ['neutrons', '18']]);
+  assert.deepEqual(m('np:Cl-35'), [['massNumber', '35'], ['protons', '17'], ['added', '52']]);
+  assert.equal(K.ALL.find(x => x.id === 'np:Cl-35').q, 'An atom has 17 protons and a mass number of 35. How many neutrons does it have?');
+  assert.equal(K.ALL.find(x => x.id === 'np:H-1').q, 'An atom has 1 proton and a mass number of 1. How many neutrons does it have?');
+  assert.deepEqual(plain([...new Set(P.mass.map(x => x.kind))].sort()), ['atomic', 'mass', 'neutronsPA']);
   assert.deepEqual(m('c:Mg:2'), [['wrongSign', '2\u2212']]);
   // the newer kinds
   assert.deepEqual(m('xp:Na:1'), [['electrons', '10'], ['chargeOnP', '12']]);

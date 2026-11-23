@@ -317,6 +317,9 @@ const SubatomicCore = (function(){
         add({ id:'z:' + sym + '-' + A, type:'mass', kind:'atomic', sym, z, A, N,
           q:'An atom with mass number ' + A + ' has ' + n1(N, 'neutron') + '. What is its atomic number?', a:z,
           short:'Atomic number, mass ' + A + ' and ' + N + ' n', note:A + ' ' + MINUS + ' ' + N + ' = ' + z + ' (' + iso + ')' });
+        add({ id:'np:' + sym + '-' + A, type:'mass', kind:'neutronsPA', sym, z, A, N,
+          q:'An atom has ' + n1(z, 'proton') + ' and a mass number of ' + A + '. How many neutrons does it have?', a:N,
+          short:'Neutrons, ' + z + ' p and mass ' + A, note:A + ' ' + MINUS + ' ' + z + ' = ' + N + ' (' + iso + ')' });
       });
     });
     IONS.forEach(([sym, q]) => {
@@ -518,6 +521,10 @@ const SubatomicCore = (function(){
     } else if(x.kind === 'mass'){
       if(N !== z) add('subtracted', Math.abs(N - z), 'took away instead of adding');
       add('withElectrons', 2 * z + N, 'counted the electrons too');
+    } else if(x.kind === 'neutronsPA'){
+      add('massNumber', A, 'gave the mass number');
+      if(N !== z) add('protons', z, 'gave the protons');
+      add('added', A + z, 'added instead of taking away');
     } else if(x.kind === 'atomic'){
       add('added', A + N, 'added instead of taking away');
       if(N !== z) add('neutrons', N, 'gave the neutrons');
@@ -662,7 +669,7 @@ const $ = id => document.getElementById(id);
 const LS_STATE = 'subatomicparticles.v1.state';
 const HANDOFF_KEY = 'teachingtools.handoff.v1';   // read by tools/bingo (receiveHandoff)
 const BINGO_URL = '../bingo/index.html';
-const EXAMPLE = { atoms:'Protons in carbon‑14 → 6 · electrons in sodium → 11 · neutrons in chlorine‑35 → 18', ions:'Electrons in O²⁻ → 10', mass:'17 protons, 18 neutrons → 35', charge:'12 protons, 10 electrons → 2+',
+const EXAMPLE = { atoms:'Protons in carbon‑14 → 6 · electrons in sodium → 11 · neutrons in chlorine‑35 → 18', ions:'Electrons in O²⁻ → 10', mass:'17 protons, 18 neutrons → 35 · 17 protons, mass number 35 → 18 neutrons', charge:'12 protons, 10 electrons → 2+',
   extra:'Protons in Na⁺ → 11 · 24 p, 28 n: electrons → 24', backwards:'2− ion with 18 electrons: protons → 16',
   nucleus:'Particles in the nucleus of aluminum‑27 → 27 · charge of an O nucleus → 8+', bohr:'Valence electrons in phosphorus → 5 · sulfur → 2, 8, 6',
   element:'26 protons → Fe · mass number 40, 20 neutrons → Ca', ionsym:'20 protons, 18 electrons → Ca²⁺ · 3+ ion with 10 electrons → Al³⁺',
