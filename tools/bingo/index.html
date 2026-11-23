@@ -357,6 +357,12 @@
     .per2 .sheet{gap:14mm;} .per2 .bcard{width:120mm;}
     .per4 .sheet{display:grid;grid-template-columns:88mm 88mm;gap:10mm;justify-content:center;}
     .per4 .bcard{width:88mm;}
+    /* 8 a page: landscape, 4 across and 2 down. 16 a page: portrait, 4 by 4. Sized to fit Letter and A4 with 10mm
+       margins. The small print (card number, game name, Name line) is made relatively bigger so it stays readable. */
+    .per8 .sheet,.per16 .sheet{display:grid;justify-content:center;align-content:start;}
+    .per8 .sheet{grid-template-columns:repeat(4,58mm);gap:6mm;height:184mm;align-content:space-evenly;} .per8 .bcard{width:58mm;}
+    .per16 .sheet{grid-template-columns:repeat(4,44mm);gap:4mm;} .per16 .bcard{width:44mm;border-radius:7px;border-width:1.5px;}
+    .per8 .bn,.per16 .bn{font-size:5cqw;} .per8 .bt,.per16 .bt{font-size:4.6cqw;} .per8 .bname,.per16 .bname{font-size:5cqw;}
     .bcard{break-inside:avoid;border-color:#000;box-shadow:none;}
     .bgrid,.bc{border-color:#000;}
     .bw{color:#000;}
@@ -533,7 +539,7 @@
         <div class="cards-bar">
           <div class="grp"><span class="lab">Per page</span>
             <div class="seg" id="perSeg" role="group" aria-label="Cards per printed page">
-              <button type="button" data-v="1">1</button><button type="button" data-v="2">2</button><button type="button" data-v="4">4</button>
+              <button type="button" data-v="1">1</button><button type="button" data-v="2">2</button><button type="button" data-v="4">4</button><button type="button" data-v="8" title="Small cards, 4 across and 2 down on a landscape page">8</button><button type="button" data-v="16" title="Very small cards, 4 by 4 on a portrait page. Best with 3×3 or 4×4 cards and short answers.">16</button>
             </div></div>
           <label class="check"><input type="checkbox" id="pTitle"> Game name</label>
           <label class="check"><input type="checkbox" id="pName"> Name line</label>
@@ -1513,7 +1519,7 @@ function normalizeGame(g){
     out.play.log = p.log.filter(e => e && isStr(e.k) && keys.has(e.k)).map(e => ({ k:e.k, i:Number.isInteger(e.i) && e.i >= 0 && e.i < out.cards.items.length ? e.i : -1, q:isStr(e.q) ? e.q : '', r:!!e.r }));
   }
   const pr = g.print || {};
-  if([1, 2, 4].includes(pr.per)) out.print.per = pr.per;
+  if([1, 2, 4, 8, 16].includes(pr.per)) out.print.per = pr.per;
   ['title', 'name', 'decoys'].forEach(k => { if(typeof pr[k] === 'boolean') out.print[k] = pr[k]; });
   return out;
 }
@@ -2173,7 +2179,7 @@ function buildCardSheets(){
     sheets.push('<div class="sheet">' + h + '</div>');
   }
   area.className = 'per' + per; area.innerHTML = sheets.join('');
-  setPage(per === 2 ? 'landscape' : 'portrait');
+  setPage(per === 2 || per === 8 ? 'landscape' : 'portrait');
   cs.printed = true; save();
 }
 function buildKeySheet(){
