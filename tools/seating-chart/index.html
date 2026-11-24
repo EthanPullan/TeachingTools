@@ -257,6 +257,27 @@
   .toast.ok{border-left-color:var(--ok);}
   @keyframes tin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 
+  /* test mode */
+  .btn.test-toggle.on{background:var(--accent);border-color:var(--accent-deep);color:#fff;}
+  .test-banner{display:none;align-items:center;gap:8px;font-size:12.5px;color:var(--accent-deep);font-weight:600;}
+  .test-banner .tag{background:var(--accent-soft);border:1px solid var(--accent);border-radius:6px;padding:3px 8px;
+    font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;}
+  body.test-mode .test-banner{display:inline-flex;}
+  body.test-mode #room{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow);}
+  .desk.test-desk{border-color:var(--accent);background:#fffaf1;}
+  .desk.test-desk.empty{border-color:var(--accent);background:repeating-linear-gradient(135deg,#fffaf1,#fffaf1 6px,rgba(224,152,46,.08) 6px,rgba(224,152,46,.08) 12px);}
+  .desk.test-desk .num{color:var(--accent-deep);opacity:1;}
+  .test-note{display:none;border:1px solid var(--accent);background:var(--accent-soft);border-radius:9px;padding:9px 10px;
+    font-size:12.5px;line-height:1.5;margin-bottom:10px;}
+  body.test-mode .test-note{display:block;}
+  .test-note .field-row{margin:7px 0 0;}
+  .roster li.absent{background:var(--panel-2);border-style:dashed;}
+  .roster li.absent .nm{color:var(--muted);text-decoration:line-through;}
+  .roster li.absent .grip{visibility:hidden;}
+  .roster li .abs-tag{font-family:var(--mono);font-size:10.5px;color:var(--danger);text-transform:uppercase;letter-spacing:.06em;}
+  body.test-mode .roster li .xbtn:hover{color:var(--accent-deep);background:var(--accent-soft);}
+  @media print{ .desk.test-desk{background:#fff;border-style:dashed;} }
+
   /* print header (screen-hidden) */
   #printHeader{display:none;}
 
@@ -306,6 +327,7 @@
       <input id="className" type="text" placeholder="Class name" title="Rename the current class" aria-label="Current class name">
     </div>
     <div class="spacer"></div>
+    <button class="btn test-toggle" id="testBtn" title="A temporary seating plan for a test — its own seats, extra desks and absences; your normal plan is untouched"><span class="ic">✎</span> Test mode</button>
     <button class="btn" id="fillBtn" title="Keep students already at a desk; seat only the rest"><span class="ic">＋</span> Fill remaining</button>
     <button class="btn primary" id="genBtn"><span class="ic">⚄</span> Generate</button>
     <button class="btn" id="printBtn"><span class="ic">⎙</span> Print</button>
@@ -327,6 +349,11 @@
         <!-- Students -->
         <section class="tabpanel active" data-panel="students">
           <h3 class="section-title">Class list <span class="count-pill" id="studentCount">0</span></h3>
+          <div class="test-note" id="testNote">
+            <b>Test mode.</b> Tap <b>×</b> to mark a student absent for this test only — tap again to bring them back.
+            Your class list isn’t changed.
+            <div class="field-row"><button class="btn small" id="allPresentBtn">Everyone present</button></div>
+          </div>
           <textarea id="addBox" placeholder="Paste names, one per line"></textarea>
           <div class="field-row" style="margin-top:10px;">
             <button class="btn small primary" id="addStudentsBtn">Add to list</button>
@@ -465,6 +492,7 @@
           <button data-mode="move" class="active">Move desks</button>
           <button data-mode="swap">Swap seats</button>
         </div>
+        <span class="test-banner"><span class="tag">Test plan</span><button class="btn small" id="addTestDeskBtn" title="Add a desk that only exists in test mode — e.g. your teacher desk. Drag it into place.">+ Test desk</button><span class="hint" style="color:inherit;font-weight:500;">Test desks (amber) stay saved for next time. Normal seating and history aren’t changed.</span></span>
       </div>
       <div class="canvas-scroll">
         <div id="printHeader"><h1 id="printTitle">Seating chart</h1><div class="pmeta" id="printMeta"></div></div>
@@ -521,6 +549,7 @@ const state = {
   features:[],                       // [{id,type,x,y,w0,h0,v}]  reference furniture — shared
   assignment:{},                     // deskId -> name  (active class)
   history:[],                        // [{date, pairs:[[a,b],...]}] oldest..newest (active class)
+  absent:[],                         // names marked absent for the test plan (active class)
   settings:{ ...DEFAULTS }           // shared
 };
 
@@ -533,6 +562,10 @@ const FEATURE_DEFS = {
 };
 
 let mode = 'move';                   // 'move' | 'swap'
+/* Test mode: a temporary plan. Each class keeps a separate testAssignment and an
+   absent list; desks flagged {test:true} exist only in test mode (shared room).
+   Generating a test plan honours keep-apart only and is not recorded in history. */
+let testMode = false;
 let sel = null;                      // {kind:'desk'|'feature', id} | null
 let defaultVertical = false;         // shape for newly added desks (false = wide)
 let showLinks = false;
@@ -550,7 +583,15 @@ function shuffle(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const
 function sanitize(s){ return (s||'').trim().replace(/[^a-z0-9\-_ ]/gi,'').replace(/\s+/g,'-').toLowerCase() || 'class'; }
 
 /* ---------------- Classes (shared room, separate rosters) ---------------- */
-function blankClass(name){ return { name:name||'', students:[], pairs:{apart:[],together:[]}, assignment:{}, history:[] }; }
+function blankClass(name){ return { name:name||'', students:[], pairs:{apart:[],together:[]}, assignment:{}, history:[], testAssignment:{}, absent:[] }; }
+// desks shown/used right now: test desks only appear in test mode (after the regular ones)
+function visibleDesks(){
+  const reg=state.desks.filter(d=>!d.test);
+  return testMode ? reg.concat(state.desks.filter(d=>d.test)) : reg;
+}
+const absentSet=()=>new Set(testMode ? state.absent : []);
+// students who can be seated right now (absent students skipped in test mode)
+function presentStudents(){ const a=absentSet(); return state.students.filter(n=>!a.has(n)); }
 // Default startup roster: pick up the class lists saved on the home page (and
 // contributed by other tools), keeping each class's name. Falls back to two
 // blank classes when nothing has been saved yet.
@@ -573,12 +614,15 @@ function loadClassesFromRoster(){
 function commitActiveClass(){
   const c=state.classes[state.activeClass]; if(!c) return;
   c.name=state.className; c.students=state.students; c.pairs=state.pairs;
-  c.assignment=state.assignment; c.history=state.history;
+  if(testMode) c.testAssignment=state.assignment; else c.assignment=state.assignment;
+  c.history=state.history; c.absent=state.absent;
 }
 function loadActiveClass(){
   const c=state.classes[state.activeClass]; if(!c) return;
+  if(!c.testAssignment) c.testAssignment={};
+  if(!Array.isArray(c.absent)) c.absent=[];
   state.className=c.name; state.students=c.students; state.pairs=c.pairs;
-  state.assignment=c.assignment; state.history=c.history;
+  state.assignment=testMode ? c.testAssignment : c.assignment; state.history=c.history; state.absent=c.absent;
 }
 function refreshAfterClassChange(){
   conflictDeskIds.clear(); lastStamp=null;   // keep `sel` — the room (desks) is shared across classes
@@ -607,12 +651,42 @@ function removeActiveClass(){
 }
 // desks are shared, so removing/clearing them must update every class's seating
 function purgeDeskFromAllClasses(id){
-  delete state.assignment[id];
-  for(const c of state.classes){ if(c.assignment && c.assignment!==state.assignment) delete c.assignment[id]; }
+  commitActiveClass();
+  for(const c of state.classes){ if(c.assignment) delete c.assignment[id]; if(c.testAssignment) delete c.testAssignment[id]; }
 }
-function clearSeatsAllClasses(){
-  state.assignment={};
-  state.classes.forEach((c,i)=>{ if(i!==state.activeClass) c.assignment={}; });
+// clear the seating in every class for the given desks (default: all desks)
+function clearSeatsAllClasses(ids){
+  commitActiveClass();
+  for(const c of state.classes) for(const key of ['assignment','testAssignment']){
+    if(!ids) c[key]={}; else if(c[key]) ids.forEach(id=>delete c[key][id]);
+  }
+  loadActiveClass();
+}
+
+/* ---------------- Test mode ---------------- */
+function setTestMode(on){
+  if(on===testMode) return;
+  commitActiveClass();
+  testMode=on; loadActiveClass();
+  if(sel && sel.kind==='desk') sel=null;
+  conflictDeskIds.clear(); lastStamp=null;
+  syncTestUI();
+  renderAll();
+  if(testMode) toast('Test mode — generate a temporary plan. Tap × on a student to mark them absent.','ok');
+  else toast('Back to the normal seating plan.');
+}
+function syncTestUI(){
+  document.body.classList.toggle('test-mode',testMode);
+  $('testBtn').classList.toggle('on',testMode);
+  $('testBtn').innerHTML = testMode ? '<span class="ic">✓</span> Exit test mode' : '<span class="ic">✎</span> Test mode';
+  document.querySelector('.front-bar').textContent = testMode ? 'Front of room · Test plan' : 'Front of room';
+}
+function toggleAbsent(name){
+  const i=state.absent.indexOf(name);
+  if(i>=0) state.absent.splice(i,1);
+  else { state.absent.push(name); for(const id in state.assignment){ if(state.assignment[id]===name) delete state.assignment[id]; } }
+  conflictDeskIds.clear();
+  renderStudents(); renderRoom(); renderStatus();
 }
 function renderClassBar(){
   const bar=$('classBar'); if(!bar) return;
@@ -654,7 +728,11 @@ function addStudents(names){
   return {added, dupes};
 }
 function removeStudent(name){
+  if(testMode){ toggleAbsent(name); return; }       // test mode: × marks absent instead
   state.students = state.students.filter(n=>n!==name);
+  state.absent = state.absent.filter(n=>n!==name);
+  const ta=state.classes[state.activeClass].testAssignment||{};
+  for(const id in ta){ if(ta[id]===name) delete ta[id]; }
   state.pairs.apart = state.pairs.apart.filter(p=>!p.includes(name));
   state.pairs.together = state.pairs.together.filter(p=>!p.includes(name));
   for(const id in state.assignment){ if(state.assignment[id]===name) delete state.assignment[id]; }
@@ -684,6 +762,7 @@ function attachStudentDrag(li, name){
   const grip = li.querySelector('.grip');
   grip.addEventListener('pointerdown', e=>{
     if(e.button!=null && e.button!==0) return;
+    if(testMode && state.absent.includes(name)) return;   // absent students can't be seated
     e.preventDefault();
     const x0=e.clientX, y0=e.clientY;
     let ghost=null, overDesk=null;
@@ -731,7 +810,8 @@ function attachStudentDrag(li, name){
 
 function renderStudents(){
   const ul=$('roster'); ul.innerHTML='';
-  $('studentCount').textContent = state.students.length;
+  const absent=absentSet();
+  $('studentCount').textContent = testMode && absent.size ? (state.students.length-absent.size)+' / '+state.students.length : state.students.length;
   $('rosterEmpty').style.display = state.students.length ? 'none' : 'block';
   const deskNo = deskNumbers();
   const seatByName={};                       // name -> deskId, built once (avoids a scan per student)
@@ -739,9 +819,13 @@ function renderStudents(){
   for(const name of state.students){
     const li=document.createElement('li');
     const seatId=seatByName[name];
-    const tag = seatId!=null ? `<span class="seat-tag">desk ${deskNo[seatId]||'?'}</span>` : '';
-    li.innerHTML = `<span class="grip" title="Drag onto a desk" aria-hidden="true">⋮⋮</span><span class="nm"></span>${tag}<button class="xbtn" title="Remove">×</button>`;
+    const isAbs=absent.has(name);
+    const tag = isAbs ? '<span class="abs-tag">absent</span>'
+      : seatId!=null ? `<span class="seat-tag">desk ${deskNo[seatId]||'?'}</span>` : '';
+    const xTitle = testMode ? (isAbs ? 'Mark present' : 'Mark absent (this test only)') : 'Remove';
+    li.innerHTML = `<span class="grip" title="Drag onto a desk" aria-hidden="true">⋮⋮</span><span class="nm"></span>${tag}<button class="xbtn" title="${xTitle}">${isAbs?'↺':'×'}</button>`;
     if(seatId!=null) li.classList.add('seated');
+    if(isAbs) li.classList.add('absent');
     li.querySelector('.nm').textContent=name;
     li.querySelector('.xbtn').addEventListener('click',()=>removeStudent(name));
     attachStudentDrag(li, name);
@@ -834,7 +918,7 @@ function fillPairList(listId, emptyId, type){
 }
 
 /* ---------------- Desks / room ---------------- */
-function deskNumbers(){ const m={}; state.desks.forEach((d,i)=>m[d.id]=i+1); return m; }
+function deskNumbers(){ const m={}; visibleDesks().forEach((d,i)=>m[d.id]=i+1); return m; }
 // effective footprint of a draggable item, accounting for rotation (v)
 function baseSize(kind,item){
   if(kind==='feature'){ return { w:item.w0, h:item.h0 }; }
@@ -846,8 +930,9 @@ function clampItem(kind,item){ const s=sizeOf(kind,item);
 function deskCenter(d){ const s=sizeOf('desk',d); return { cx:d.x + s.w/2, cy:d.y + s.h/2 }; }
 function snapVal(v){ const g=state.settings.grid; return state.settings.snap ? Math.round(v/g)*g : Math.round(v); }
 
+// indices refer to visibleDesks()
 function neighborPairsList(){
-  const d=state.desks, dist=state.settings.neighborDist, out=[];
+  const d=visibleDesks(), dist=state.settings.neighborDist, out=[];
   for(let i=0;i<d.length;i++){
     const ci=deskCenter(d[i]);
     for(let j=i+1;j<d.length;j++){
@@ -862,10 +947,11 @@ function neighborPairsList(){
 function addDesk(cx,cy){
   const {roomW,roomH}=state.settings;
   const d={id:uid(),x:0,y:0,v:defaultVertical};
+  if(testMode) d.test=true;
   const s=sizeOf('desk',d);
   let x,y;
   if(cx==null){
-    const i=state.desks.length;
+    const i=visibleDesks().length;
     x = 70 + (i%6)*(s.w+28);
     y = 84 + Math.floor(i/6)*(s.h+34);
   } else { x = cx - s.w/2; y = cy - s.h/2; }
@@ -874,17 +960,25 @@ function addDesk(cx,cy){
   renderRoom(); renderStatus();
 }
 function addGrid(rows,cols,replace){
-  if(replace){ state.desks=[]; clearSeatsAllClasses(); sel=null; }
+  if(replace){
+    // in test mode "replace" only swaps out the test desks
+    const gone=state.desks.filter(d=>!!d.test===testMode).map(d=>d.id);
+    state.desks=state.desks.filter(d=>!gone.includes(d.id));
+    clearSeatsAllClasses(testMode ? gone : null); sel=null;
+  }
   const {roomW,roomH}=state.settings;
   const s=sizeOf('desk',{v:defaultVertical});
   const stepX=s.w+28, stepY=s.h+34, x0=70, y0=84;
   for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
     const x=clamp(x0+c*stepX,0,roomW-s.w), y=clamp(y0+r*stepY,0,roomH-s.h);
-    state.desks.push({id:uid(),x,y,v:defaultVertical});
+    const d={id:uid(),x,y,v:defaultVertical}; if(testMode) d.test=true;
+    state.desks.push(d);
   }
   renderRoom(); renderStatus();
 }
 function deleteDesk(id){
+  const d=state.desks.find(x=>x.id===id);
+  if(testMode && d && !d.test){ toast('That desk is part of your normal room — remove it outside test mode.','warn'); return; }
   state.desks=state.desks.filter(d=>d.id!==id);
   purgeDeskFromAllClasses(id);
   if(sel && sel.kind==='desk' && sel.id===id) sel=null;
@@ -941,11 +1035,11 @@ function renderRoom(){
     room.appendChild(el);
   });
 
-  state.desks.forEach((d,i)=>{
+  visibleDesks().forEach((d,i)=>{
     const el=document.createElement('div');
     const name=state.assignment[d.id];
     const s=sizeOf('desk',d);
-    el.className='desk'+(name?'':' empty')+(isSel('desk',d.id)?' selected':'')+(conflictDeskIds.has(d.id)?' conflict':'');
+    el.className='desk'+(d.test?' test-desk':'')+(name?'':' empty')+(isSel('desk',d.id)?' selected':'')+(conflictDeskIds.has(d.id)?' conflict':'');
     el.style.left=d.x+'px'; el.style.top=d.y+'px';
     el.style.width=s.w+'px'; el.style.height=s.h+'px';
     el.dataset.id=d.id;
@@ -967,8 +1061,9 @@ function drawLinks(){
   svg.setAttribute('height',state.settings.roomH);
   svg.innerHTML='';
   if(!showLinks) return;
+  const vd=visibleDesks();
   for(const [i,j] of neighborPairsList()){
-    const a=deskCenter(state.desks[i]), b=deskCenter(state.desks[j]);
+    const a=deskCenter(vd[i]), b=deskCenter(vd[j]);
     const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
     ln.setAttribute('x1',a.cx); ln.setAttribute('y1',a.cy);
     ln.setAttribute('x2',b.cx); ln.setAttribute('y2',b.cy);
@@ -1089,8 +1184,8 @@ function updateSelUI(){
   if(!sel){ info.textContent='Nothing selected.'; rot.disabled=true; rem.disabled=true; return; }
   rot.disabled=false; rem.disabled=false;
   if(sel.kind==='desk'){
-    const i=state.desks.findIndex(d=>d.id===sel.id);
-    info.textContent = i>=0 ? `Desk ${i+1}${state.desks[i].v?' · tall':''}` : 'Desk';
+    const vd=visibleDesks(), i=vd.findIndex(d=>d.id===sel.id);
+    info.textContent = i>=0 ? `${vd[i].test?'Test desk':'Desk'} ${i+1}${vd[i].v?' · tall':''}` : 'Desk';
   } else {
     const f=state.features.find(x=>x.id===sel.id);
     const def=f&&FEATURE_DEFS[f.type];
@@ -1113,25 +1208,30 @@ function histScores(){
    already at a desk exactly where they are, and seat only the rest in the empty desks.
    Same engine either way — the kept students are just fixed seats the hill-climb never swaps. */
 function generate(keepSeated){
-  if(state.desks.length===0){ toast('Add some desks first (Layout tab).','warn'); return; }
+  const desks=visibleDesks();
+  const students=presentStudents();                 // test mode: absent students skipped
+  if(desks.length===0){ toast('Add some desks first (Layout tab).','warn'); return; }
   if(state.students.length===0){ toast('Add some students first (Students tab).','warn'); return; }
+  if(students.length===0){ toast('Everyone is marked absent.','warn'); return; }
+  // test plans honour keep-apart only — no keep-together, no seatmate rotation
+  const togetherPairs = testMode ? [] : state.pairs.together;
 
-  const N=state.desks.length, M=state.students.length;
+  const N=desks.length;
   const neigh=neighborPairsList();
   const adj=new Set();
   const adjList=Array.from({length:N},()=>[]);    // neighbour seat indices, per seat
   for(const [i,j] of neigh){ adj.add(i+'_'+j); adjList[i].push(j); adjList[j].push(i); }
   const areAdj=(i,j)=>{ if(i===j) return false; return adj.has(i<j?i+'_'+j:j+'_'+i); };
   const hs=histScores();
-  const strength=state.settings.rotationStrength;
+  const strength=testMode ? 0 : state.settings.rotationStrength;
   const w=(x,y)=>(x!=null&&y!=null) ? (hs[pairKey(x,y)]||0) : 0;   // history weight of a seated pair
 
   // fixed[i] = name kept at desk i (only when filling remaining); freeIdx = desks the engine may fill
   const fixed=new Array(N).fill(null);
-  if(keepSeated) state.desks.forEach((d,i)=>{ const nm=state.assignment[d.id]; if(nm!=null && state.students.includes(nm)) fixed[i]=nm; });
+  if(keepSeated) desks.forEach((d,i)=>{ const nm=state.assignment[d.id]; if(nm!=null && students.includes(nm)) fixed[i]=nm; });
   const freeIdx=[...Array(N).keys()].filter(i=>fixed[i]==null);
   const fixedNames=new Set(fixed.filter(x=>x!=null));
-  const pool=shuffle(state.students.filter(n=>!fixedNames.has(n)));
+  const pool=shuffle(students.filter(n=>!fixedNames.has(n)));
   if(keepSeated && pool.length===0){ toast('Everyone is already seated.','ok'); return; }
   const seatNames=pool.slice(0,Math.min(freeIdx.length,pool.length));   // who gets a desk (besides the kept ones)
   const unseated=pool.slice(freeIdx.length);                            // overflow, if any
@@ -1149,7 +1249,7 @@ function generate(keepSeated){
       const ia=pos[a], ib=pos[b];
       if(ia!==undefined&&ib!==undefined&&areAdj(ia,ib)) apart++;
     }
-    for(const [a,b] of state.pairs.together){
+    for(const [a,b] of togetherPairs){
       const ia=pos[a], ib=pos[b];
       if(!(ia!==undefined&&ib!==undefined&&areAdj(ia,ib))) tmiss++;
     }
@@ -1187,13 +1287,16 @@ function generate(keepSeated){
 
   // apply
   state.assignment={};
-  best.seat.forEach((nm,i)=>{ if(nm!=null) state.assignment[state.desks[i].id]=nm; });
+  best.seat.forEach((nm,i)=>{ if(nm!=null) state.assignment[desks[i].id]=nm; });
+  commitActiveClass();
 
-  // record history (neighbour name pairs)
-  const histPairs=[];
-  for(const [i,j] of neigh){ if(best.seat[i]!=null&&best.seat[j]!=null) histPairs.push([best.seat[i],best.seat[j]]); }
-  state.history.push({date:todayStr(),pairs:histPairs});
-  if(state.history.length>60) state.history.shift();
+  // record history (neighbour name pairs) — not for temporary test plans
+  if(!testMode){
+    const histPairs=[];
+    for(const [i,j] of neigh){ if(best.seat[i]!=null&&best.seat[j]!=null) histPairs.push([best.seat[i],best.seat[j]]); }
+    state.history.push({date:todayStr(),pairs:histPairs});
+    if(state.history.length>60) state.history.shift();
+  }
 
   // conflicts for display + summary
   conflictDeskIds.clear();
@@ -1202,12 +1305,12 @@ function generate(keepSeated){
   for(const [a,b] of state.pairs.apart){
     const ia=pos[a], ib=pos[b];
     if(ia!==undefined&&ib!==undefined&&areAdj(ia,ib)){
-      conflictDeskIds.add(state.desks[ia].id); conflictDeskIds.add(state.desks[ib].id);
+      conflictDeskIds.add(desks[ia].id); conflictDeskIds.add(desks[ib].id);
       apartConf.push(`${a} ↮ ${b}`);
     }
   }
   let togMiss=0;
-  for(const [a,b] of state.pairs.together){
+  for(const [a,b] of togetherPairs){
     const ia=pos[a], ib=pos[b];
     if(!(ia!==undefined&&ib!==undefined&&areAdj(ia,ib))) togMiss++;
   }
@@ -1219,7 +1322,8 @@ function generate(keepSeated){
   // summary toast
   const placed=seatNames.length+fixedNames.size;
   const empties=N-placed;
-  let msg=keepSeated ? `Seated ${seatNames.length} more (${fixedNames.size} kept).` : `Seated ${seatNames.length}.`;
+  let msg=(testMode?'Test plan: ':'')+(keepSeated ? `Seated ${seatNames.length} more (${fixedNames.size} kept).` : `Seated ${seatNames.length}.`);
+  if(testMode && state.absent.length) msg+=` ${state.absent.length} absent.`;
   const bits=[];
   if(apartConf.length) bits.push(`⚠ ${apartConf.length} keep-apart conflict${apartConf.length>1?'s':''} (${apartConf.join(', ')}) — the room can’t separate them`);
   if(togMiss) bits.push(`${togMiss} keep-together pair${togMiss>1?'s':''} not adjacent`);
@@ -1232,14 +1336,16 @@ function generate(keepSeated){
 
 /* ---------------- Status & history ---------------- */
 function renderStatus(){
-  const N=state.desks.length, M=state.students.length;
+  const N=visibleDesks().length, M=presentStudents().length, absN=state.students.length-M;
   const seated=Object.keys(state.assignment).length;
   const conf=conflictDeskIds.size? (conflictDeskIds.size/2):0;
   const sb=$('statusbar');
   sb.innerHTML='';
   const add=(html,cls)=>{ const s=document.createElement('span'); s.className='stat'+(cls?' '+cls:''); s.innerHTML=html; sb.appendChild(s); };
   const bar=()=>{ const d=document.createElement('span'); d.className='dotline'; sb.appendChild(d); };
-  add(`<b>${M}</b> students`); bar();
+  if(testMode){ add('<b>TEST</b> plan'); bar(); }
+  add(`<b>${M}</b> ${testMode?'present':'students'}`); bar();
+  if(absN){ add(`<b>${absN}</b> absent`); bar(); }
   add(`<b>${N}</b> desks`); bar();
   add(`<b>${seated}</b> seated`);
   if(M>N){ bar(); add(`<b>${M-N}</b> over capacity`,'warn'); }
@@ -1304,7 +1410,7 @@ function layoutSettings(){
   const s=state.settings;
   return {deskW:s.deskW,deskH:s.deskH,grid:s.grid,snap:s.snap,neighborDist:s.neighborDist,roomW:s.roomW,roomH:s.roomH};
 }
-function mapDesks(arr){ return Array.isArray(arr)?arr.map(x=>({id:x.id||uid(),x:+x.x||0,y:+x.y||0,v:!!x.v})):[]; }
+function mapDesks(arr){ return Array.isArray(arr)?arr.map(x=>{ const d={id:x.id||uid(),x:+x.x||0,y:+x.y||0,v:!!x.v}; if(x.test) d.test=true; return d; }):[]; }
 function mapFeatures(arr){ return Array.isArray(arr)?arr.map(f=>{
   const def=FEATURE_DEFS[f.type]||{w:60,h:16};
   return {id:f.id||uid(),type:f.type,x:+f.x||0,y:+f.y||0,w0:f.w0??def.w,h0:f.h0??def.h,v:!!f.v};
@@ -1325,7 +1431,7 @@ function importLayout(text){
   });
   state.desks=mapDesks(d.desks);
   state.features=mapFeatures(d.features);
-  state.assignment={}; conflictDeskIds.clear(); sel=null;
+  clearSeatsAllClasses(); conflictDeskIds.clear(); sel=null;
   syncControls(); renderRoom(); renderStudents(); renderStatus();
   toast(`Loaded layout — ${state.desks.length} desks${state.features.length?`, ${state.features.length} features`:''}.`,'ok');
 }
@@ -1345,7 +1451,8 @@ function applySnapshot(d){
   state.features=mapFeatures(d.features);
   const mapClass=c=>({ name:c.name||'', students:Array.isArray(c.students)?c.students:[],
     pairs:{apart:(c.pairs&&c.pairs.apart)||[], together:(c.pairs&&c.pairs.together)||[]},
-    assignment:c.assignment||{}, history:Array.isArray(c.history)?c.history:[] });
+    assignment:c.assignment||{}, history:Array.isArray(c.history)?c.history:[],
+    testAssignment:c.testAssignment||{}, absent:Array.isArray(c.absent)?c.absent:[] });
   if(Array.isArray(d.classes) && d.classes.length){
     state.classes=d.classes.map(mapClass);
     state.activeClass=clamp(d.activeClass||0,0,state.classes.length-1);
@@ -1353,6 +1460,7 @@ function applySnapshot(d){
     state.classes=[ mapClass({name:d.className,students:d.students,pairs:d.pairs,assignment:d.assignment,history:d.history}) ];
     state.activeClass=0;
   }
+  testMode=false;               // reopen in the normal plan; test seats/absences are kept
   loadActiveClass();
 }
 // Autosave — keeps the whole plan (room, classes, seating, history) in this
@@ -1378,7 +1486,7 @@ function importSnapshot(text){
   applySnapshot(d);
   conflictDeskIds.clear(); sel=null; lastStamp=null;
   $('className').value=state.className;
-  syncControls(); renderClassBar(); renderAll();
+  syncTestUI(); syncControls(); renderClassBar(); renderAll();
   toast('Backup loaded.','ok');
 }
 
@@ -1414,9 +1522,11 @@ $('modeToggle').addEventListener('click',e=>{
 $('className').addEventListener('input',e=>{ state.className=e.target.value; commitActiveClass(); renderClassBar(); publishRosters(); });
 $('genBtn').addEventListener('click',()=>generate());
 $('fillBtn').addEventListener('click',()=>generate(true));
+$('testBtn').addEventListener('click',()=>setTestMode(!testMode));
+$('allPresentBtn').addEventListener('click',()=>{ state.absent.splice(0); renderStudents(); renderStatus(); toast('Everyone marked present.','ok'); });
 $('printBtn').addEventListener('click',()=>window.print());
 window.addEventListener('beforeprint',()=>{
-  $('printTitle').textContent = state.className.trim() || 'Seating chart';
+  $('printTitle').textContent = (state.className.trim() || 'Seating chart') + (testMode ? ' — Test seating' : '');
   $('printMeta').textContent = new Date().toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});
 });
 
@@ -1432,7 +1542,7 @@ $('addStudentsBtn').addEventListener('click',()=>{
 $('clearStudentsBtn').addEventListener('click',()=>{
   if(!state.students.length) return;
   if(!confirm('Remove all students? Pairs and current seats will be cleared too.')) return;
-  state.students=[]; state.pairs={apart:[],together:[]}; state.assignment={}; conflictDeskIds.clear();
+  state.students=[]; state.pairs={apart:[],together:[]}; state.absent=[]; clearSeatsAllClasses(); conflictDeskIds.clear();
   renderStudents(); renderPairs(); updateSelects(); renderRoom(); renderStatus();
 });
 
@@ -1445,11 +1555,20 @@ $('addGridBtn').addEventListener('click',()=>{
   addGrid(r,c,$('gridReplace').checked);
 });
 $('addDeskBtn').addEventListener('click',()=>addDesk());
+$('addTestDeskBtn').addEventListener('click',()=>{ addDesk(); toast('Added a test desk — drag it into place.'); });
 $('clearSeatsBtn').addEventListener('click',()=>{ state.assignment={}; conflictDeskIds.clear(); renderRoom(); renderStudents(); renderStatus(); });
 $('clearDesksBtn').addEventListener('click',()=>{
-  if(!state.desks.length) return;
+  if(testMode){
+    const gone=state.desks.filter(d=>d.test).map(d=>d.id);
+    if(!gone.length){ toast('No test desks to remove — normal desks can only be removed outside test mode.','warn'); return; }
+    if(!confirm('Remove all test desks?')) return;
+    state.desks=state.desks.filter(d=>!d.test); clearSeatsAllClasses(gone); conflictDeskIds.clear();
+    if(sel && sel.kind==='desk') sel=null;
+    renderRoom(); renderStatus(); renderStudents(); return;
+  }
+  if(!state.desks.some(d=>!d.test)) return;
   if(!confirm('Remove all desks?')) return;
-  state.desks=[]; clearSeatsAllClasses(); conflictDeskIds.clear();
+  state.desks=state.desks.filter(d=>d.test); clearSeatsAllClasses(); conflictDeskIds.clear();
   if(sel && sel.kind==='desk') sel=null;
   renderRoom(); renderStatus(); renderStudents();
 });
@@ -1502,6 +1621,7 @@ $('expSnapBtn').addEventListener('click',exportSnapshot);
 $('resetPlanBtn').addEventListener('click',()=>{
   if(!confirm('Reset the saved plan? This clears everything autosaved in this browser — export a backup first if you want to keep it.')) return;
   try{ localStorage.removeItem(AUTOSAVE_KEY); }catch(e){ /* storage unavailable — ignore */ }
+  testMode=false; syncTestUI();
   state.classes=loadClassesFromRoster() || [ blankClass('Class 1'), blankClass('Class 2') ];
   state.activeClass=0; loadActiveClass();
   state.features=[]; state.settings={ ...DEFAULTS };
