@@ -119,7 +119,8 @@
   .stu{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--fc);border-radius:10px;
     box-shadow:var(--shadow-sm);padding:8px 10px 10px;}
   .stu-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px;}
-  .stu-num{font-family:var(--mono);font-size:11px;font-weight:700;background:var(--fc);color:#fff;border-radius:20px;padding:1px 8px;}
+  .stu-num{font-family:var(--mono);font-size:11px;font-weight:700;background:var(--fc);color:#fff;border-radius:20px;padding:1px 8px;
+    max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .stu-meta{color:var(--muted);font-family:var(--mono);font-size:11.5px;}
   .stu-pages{display:flex;flex-wrap:wrap;gap:4px;align-items:stretch;}
   .tile{position:relative;width:118px;flex:none;border-radius:8px;padding:6px 6px 4px;background:var(--panel-2);
@@ -145,7 +146,7 @@
   .cutbtn[hidden]{display:none;}
 
   /* name preview: draw a box where students write their name, then see that box cut from every page */
-  .stage-bar .btn[hidden],.np-nav[hidden],.np-view[hidden],.students[hidden]{display:none;}
+  .stage-bar .btn[hidden],.chips .btn[hidden],.np-nav[hidden],.np-view[hidden],.students[hidden]{display:none;}
   .np-nav{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;}
   .stage-bar .msg{flex:1;min-width:180px;}
   .np-draw{display:flex;justify-content:center;}
@@ -159,8 +160,8 @@
   .np-row{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
     border-left:5px solid var(--fc);border-radius:8px;padding:5px 10px 5px 8px;}
   .np-row.first{margin-top:10px;} .np-row.first:first-child{margin-top:0;}
-  .np-lab{flex:none;width:92px;display:flex;flex-direction:column;gap:2px;}
-  .np-lab .stu-num{align-self:flex-start;}
+  .np-lab{flex:none;width:150px;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .np-lab .stu-num{align-self:flex-start;max-width:100%;}
   .np-lab .pgno{font-family:var(--mono);font-size:11px;color:var(--muted);}
   .np-crop{flex:none;position:relative;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:4px;overflow:hidden;}
   .np-crop img{display:block;width:100%;height:100%;opacity:0;transition:opacity .15s;}
@@ -193,7 +194,7 @@
     <div class="brand"><span class="mark"></span>Print by Student <small>each student on their own sheets</small></div>
     <div class="spacer"></div>
     <a class="back" href="../index.html">← PDF tools</a>
-    <button class="btn" id="addBtn"><span class="ic">📄</span>Choose PDF…</button>
+    <button class="btn" id="addBtn"><span class="ic">📄</span>Choose PDFs…</button>
     <button class="btn" id="dlBtn" disabled><span class="ic">⬇</span>Download</button>
     <button class="btn primary" id="printBtn" disabled><span class="ic">🖨</span>Print</button>
   </header>
@@ -201,11 +202,12 @@
   <div class="main">
     <aside class="panel">
       <section class="section">
-        <h2 class="section-title">1 · Class set PDF</h2>
+        <h2 class="section-title">1 · Student work</h2>
         <label class="drop" id="drop" for="file">
-          <input type="file" id="file" accept=".pdf,application/pdf">
-          <span id="dropText">Drop the scanned class set here, or click to choose it.</span>
+          <input type="file" id="file" accept=".pdf,application/pdf" multiple>
+          <span id="dropText">Drop the scanned class set here, or one PDF per student (choose several at once). Click to choose.</span>
         </label>
+        <p class="hint">Several PDFs are put in file-name order, and each file starts a new student.</p>
         <div class="error" id="error" role="alert" hidden></div>
       </section>
 
@@ -216,8 +218,9 @@
         <div class="chips" id="nChips">
           <button class="btn small" data-n="1">1 page</button><button class="btn small" data-n="2">2 pages</button>
           <button class="btn small" data-n="3">3 pages</button><button class="btn small" data-n="4">4 pages</button>
+          <button class="btn small" data-n="0" id="perFile" hidden>1 per file</button>
         </div>
-        <p class="hint">Sets an even split as a starting point; fix the students who wrote more or less by clicking under their pages.</p>
+        <p class="hint">Sets an even split as a starting point; fix the students who wrote more or less by clicking under their pages. With several PDFs, a new file always starts a new student.</p>
         <p class="hint"><b>Names</b> (above the pages) shows just the name area of every page, stacked, so you can see at a glance where a new student starts.</p>
       </section>
 
@@ -288,6 +291,7 @@
   }
   function showError(msg){ const e = $('error'); e.textContent = msg || ''; e.hidden = !msg; }
   const baseName = name => name.replace(/\.pdf$/i, '');
+  const safeName = s => s.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 100) || 'student work';
   const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
 
   async function openLib(bytes){
@@ -344,7 +348,7 @@
       const s = state.file.sizes[g.pages[g.pages.length - 1]];
       for (let b = 0; b < g.blanks; b++) out.addPage([s.w, s.h]);
     }
-    out.setTitle(baseName(state.file.name) + ' (print by student)');
+    out.setTitle(state.file.name + ' (print by student)');
     return out.save();
   }
   async function getOutput(){
@@ -432,7 +436,7 @@
       blanks += g.blanks; outPages += g.pages.length + g.blanks;
       const row = document.createElement('div'); row.className = 'stu'; row.style.setProperty('--fc', COLORS[k % COLORS.length]);
       row.innerHTML = '<div class="stu-head"><span class="stu-num"></span><span class="stu-meta"></span></div><div class="stu-pages"></div>';
-      row.querySelector('.stu-num').textContent = 'Student ' + (k + 1);
+      row.querySelector('.stu-num').textContent = studentLabel(k, g.pages[0]);
       const sheets = Math.ceil(g.pages.length / state.sides);
       row.querySelector('.stu-meta').textContent = plural(g.pages.length, 'page') +
         (g.blanks ? ' + ' + plural(g.blanks, 'blank') : '') + ' · ' + plural(sheets, 'sheet');
@@ -475,6 +479,11 @@
       : state.view === 'preview' ? 'The exact file that will print.' : '';
     showView();
     renderNp(gs);
+  }
+  // "Student 3", or "3 · Ada Lovelace.pdf" when this student begins one of several uploaded files.
+  function studentLabel(k, firstPage){
+    const src = state.file.sources.length > 1 && state.file.sources.find(x => x.start === firstPage);
+    return src ? (k + 1) + ' · ' + src.name : 'Student ' + (k + 1);
   }
   const sideLabel = (j, n) => state.sides === 1 ? 'Sheet ' + (j + 1)
     : 'Sheet ' + (Math.floor(j / 2) + 1) + (j % 2 ? ' back' : ' front');
@@ -636,7 +645,7 @@
       const first = o.j === 0;
       row.style.setProperty('--fc', COLORS[o.k % COLORS.length]);
       row.classList.toggle('first', first);
-      const lab = row.querySelector('.stu-num'); lab.textContent = 'Student ' + (o.k + 1); lab.style.visibility = first ? '' : 'hidden';
+      const lab = row.querySelector('.stu-num'); lab.textContent = studentLabel(o.k, i); lab.style.visibility = first ? '' : 'hidden';
       const b = row.querySelector('.newbtn');
       b.classList.toggle('on', first); b.disabled = i === 0;
       b.textContent = first ? '● New student' : 'Same student';
@@ -663,7 +672,7 @@
     state.busy = true; render();
     try {
       const out = await getOutput();
-      const a = document.createElement('a'); a.href = out.url; a.download = baseName(state.file.name) + ' (print by student).pdf';
+      const a = document.createElement('a'); a.href = out.url; a.download = safeName(state.file.name) + ' (print by student).pdf';
       document.body.appendChild(a); a.click(); a.remove();
     } catch(e){ fail(e); }
     finally { state.busy = false; render(); }
@@ -693,43 +702,73 @@
 
   /* ---------- loading ---------- */
 
-  async function loadFile(file){
-    if (!file) return;
-    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf'){ toast('That doesn’t look like a PDF.', 'err'); return; }
+  // One PDF, or several merged in file-name order with each file's first page remembered (sources).
+  async function loadFiles(list){
+    const all = [...(list || [])];
+    const files = all.filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf')
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric:true, sensitivity:'base' }));
+    if (!files.length){ if (all.length) toast(all.length > 1 ? 'Those don’t look like PDFs.' : 'That doesn’t look like a PDF.', 'err'); return; }
     initPdfJs(); showError('');
-    $('dropText').textContent = 'Reading ' + file.name + '…';
+    const skipped = [];
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      let lib;
-      try { lib = await openLib(bytes); }
-      catch(e){ throw new UserError('“' + file.name + '” ' + (e instanceof UserError ? e.message : 'could not be read as a PDF.')); }
+      let lib, bytes; const sources = [];
+      if (files.length === 1){
+        $('dropText').textContent = 'Reading ' + files[0].name + '…';
+        bytes = new Uint8Array(await files[0].arrayBuffer());
+        try { lib = await openLib(bytes); }
+        catch(e){ throw new UserError('“' + files[0].name + '” ' + (e instanceof UserError ? e.message : 'could not be read as a PDF.')); }
+        sources.push({ name:baseName(files[0].name), start:0, count:lib.getPageCount() });
+      } else {
+        lib = await PDFLib.PDFDocument.create();
+        for (let n = 0; n < files.length; n++){
+          const file = files[n];
+          $('dropText').textContent = 'Reading ' + (n + 1) + ' of ' + files.length + ': ' + file.name + '…';
+          let one;
+          try { one = await openLib(new Uint8Array(await file.arrayBuffer())); }
+          catch(e){ skipped.push('“' + file.name + '” ' + (e instanceof UserError ? e.message : 'could not be read as a PDF.')); continue; }
+          sources.push({ name:baseName(file.name), start:lib.getPageCount(), count:one.getPageCount() });
+          for (const pg of await lib.copyPages(one, one.getPageIndices())) lib.addPage(pg);
+        }
+        if (!sources.length) throw new UserError('None of those PDFs could be read. ' + skipped.join(' '));
+        $('dropText').textContent = 'Putting ' + plural(sources.length, 'file') + ' together…';
+        bytes = await lib.save();
+      }
       let js = null; try { js = await openJs(bytes); } catch(e){ /* no thumbnails */ }
       const old = state.file; gen++;
       for (const p of thumbs.values()) p.then(u => URL.revokeObjectURL(u), () => {});
       thumbs.clear(); if (old && old.js) old.js.destroy();
-      const f = { name:file.name, lib, js, count:lib.getPageCount(), sizes:[] };
+      const name = sources.length === 1 ? sources[0].name : 'Class set (' + sources.length + ' files)';
+      const f = { name, lib, js, count:lib.getPageCount(), sizes:[], sources };
       for (let i = 0; i < f.count; i++){
         const pg = lib.getPage(i), cb = pg.getCropBox(), swap = pg.getRotation().angle % 180 === 90;
         f.sizes.push({ w:swap ? cb.height : cb.width, h:swap ? cb.width : cb.height });
       }
       state.file = f; state.cuts.clear(); state.outFor = ''; previewFor = ''; clearCrops(); npDrawKey = '';
-      // Start with one student per page; "Join" pulls a student's next page in with them.
-      setEvery(1, true);
+      // One file: one student per page to start ("Join" pulls a student's next page in).
+      // Several files: one student per file.
+      setEvery(sources.length > 1 ? 0 : 1, true);
       const drop = $('drop'); drop.classList.add('has-file');
       $('dropText').innerHTML = '<div class="fname"></div><div class="meta"></div>';
-      drop.querySelector('.fname').textContent = file.name;
+      drop.querySelector('.fname').textContent = sources.length === 1 ? files[0].name : plural(sources.length, 'PDF') + ' · one per student';
       drop.querySelector('.meta').textContent = plural(f.count, 'page');
+      $('perFile').hidden = sources.length < 2;
       buildTiles();
+      if (skipped.length) showError('Left out: ' + skipped.join(' '));
     } catch(e){
-      $('dropText').textContent = state.file ? state.file.name : 'Drop the scanned class set here, or click to choose it.';
-      showError(e instanceof UserError ? e.message : '“' + file.name + '” could not be read as a PDF.');
+      $('dropText').textContent = state.file ? state.file.name : 'Drop the scanned class set here, or one PDF per student (choose several at once). Click to choose.';
+      showError(e instanceof UserError ? e.message : 'Those files could not be read as PDFs.');
     }
     render();
   }
+  // n pages per student, counted afresh in each uploaded file; n = 0 means one student per file.
   function setEvery(n, quiet){
     if (!state.file) return;
     state.cuts.clear();
-    for (let i = n - 1; i < state.file.count - 1; i += n) state.cuts.add(i);
+    for (const src of state.file.sources){
+      const end = src.start + src.count - 1;
+      if (n) for (let i = src.start + n - 1; i < end; i += n) state.cuts.add(i);
+      if (end < state.file.count - 1) state.cuts.add(end);
+    }
     if (!quiet) render();
   }
 
@@ -755,7 +794,7 @@
     tiles[i].querySelector('.cutbtn').focus({ preventScroll:true });
   });
   $('addBtn').onclick = () => $('file').click();
-  $('file').onchange = e => { loadFile(e.target.files[0]); e.target.value = ''; };
+  $('file').onchange = e => { loadFiles(e.target.files); e.target.value = ''; };
   $('printBtn').onclick = print;
   $('dlBtn').onclick = download;
   const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
@@ -763,7 +802,7 @@
   window.addEventListener('dragleave', e => { if (e.relatedTarget === null) $('drop').classList.remove('over'); });
   window.addEventListener('drop', e => {
     if (!hasFiles(e)) return;
-    e.preventDefault(); $('drop').classList.remove('over'); loadFile(e.dataTransfer.files[0]);
+    e.preventDefault(); $('drop').classList.remove('over'); loadFiles(e.dataTransfer.files);
   });
   loadNp();
   render();
