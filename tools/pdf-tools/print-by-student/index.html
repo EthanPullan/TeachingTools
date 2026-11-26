@@ -59,6 +59,11 @@
     color:var(--muted);margin-bottom:5px;}
   .hint{font-size:12px;color:var(--muted);line-height:1.5;margin:8px 0 0;}
   .chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .qs{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .qs input{width:72px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel-2);
+    font-family:var(--mono);font-size:14px;font-weight:600;text-align:center;}
+  .qs .seg{display:inline-flex;} .qs .seg button{flex:none;padding:6px 12px;}
+  .qs-unit{font-size:13px;font-weight:600;color:var(--muted);} .qs-unit[hidden],.qs .seg[hidden]{display:none;}
   .check{display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;user-select:none;margin-top:10px;}
   .check input{width:16px;height:16px;accent-color:var(--board);margin:1px 0 0;flex:none;}
 
@@ -162,6 +167,7 @@
   .np-row.first{margin-top:10px;} .np-row.first:first-child{margin-top:0;}
   .np-lab{flex:none;width:150px;min-width:0;display:flex;flex-direction:column;gap:2px;}
   .np-lab .stu-num{align-self:flex-start;max-width:100%;}
+  .stu-num{cursor:default;}
   .np-lab .pgno{font-family:var(--mono);font-size:11px;color:var(--muted);}
   .np-crop{flex:none;position:relative;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:4px;overflow:hidden;}
   .np-crop img{display:block;width:100%;height:100%;opacity:0;transition:opacity .15s;}
@@ -214,13 +220,20 @@
       <section class="section">
         <h2 class="section-title">2 · Group the students</h2>
         <p class="hint" style="margin:0 0 9px;">Under each page, <b>✂ New student next</b> starts a new student after that page, and <b>Join</b> puts the next page back with this student.</p>
-        <span class="field-label">Quick start: every student has</span>
-        <div class="chips" id="nChips">
-          <button class="btn small" data-n="1">1 page</button><button class="btn small" data-n="2">2 pages</button>
-          <button class="btn small" data-n="3">3 pages</button><button class="btn small" data-n="4">4 pages</button>
-          <button class="btn small" data-n="0" id="perFile" hidden>1 per file</button>
+        <label class="field-label" for="nIn">Quick start: every student has</label>
+        <div class="qs">
+          <input type="number" id="nIn" min="1" max="999" value="1" inputmode="numeric">
+          <div class="seg" id="unitSeg" hidden>
+            <button data-v="pages" class="active">pages</button>
+            <button data-v="files">files</button>
+          </div>
+          <span class="qs-unit" id="unitText">pages</span>
         </div>
-        <p class="hint">Sets an even split as a starting point; fix the students who wrote more or less by clicking under their pages. With several PDFs, a new file always starts a new student.</p>
+        <div class="chips" id="nChips" style="margin-top:7px;">
+          <button class="btn small" data-n="1">1</button><button class="btn small" data-n="2">2</button>
+          <button class="btn small" data-n="3">3</button><button class="btn small" data-n="4">4</button>
+        </div>
+        <p class="hint" id="qsHint"></p>
         <p class="hint"><b>Names</b> (above the pages) shows just the name area of every page, stacked, so you can see at a glance where a new student starts.</p>
       </section>
 
@@ -329,7 +342,7 @@
   const SIDES_LS = 'teachingtools:printByStudent:sides', PAPER_LS = 'teachingtools:printByStudent:paper';
   const PAPER = { letter:{ w:612, h:792 }, a4:{ w:595.28, h:841.89 } };   // PDF points, portrait
   const MARGIN = 14;   // pt kept clear inside each half of a 4-per-sheet side
-  const state = { file:null, bytes:null, cuts:new Set(), sides:2, paper:'letter', view:'group', out:null, outFor:'', busy:false };
+  const state = { file:null, bytes:null, cuts:new Set(), unit:'pages', sides:2, paper:'letter', view:'group', out:null, outFor:'', busy:false };
   try {
     const v = +localStorage.getItem(SIDES_LS); if ([1, 2, 4].includes(v)) state.sides = v;
     if (localStorage.getItem(PAPER_LS) === 'a4') state.paper = 'a4';
@@ -490,7 +503,7 @@
       blanks += g.blanks; outPages += (g.pages.length + g.blanks) / (state.sides === 4 ? 2 : 1);
       const row = document.createElement('div'); row.className = 'stu'; row.style.setProperty('--fc', COLORS[k % COLORS.length]);
       row.innerHTML = '<div class="stu-head"><span class="stu-num"></span><span class="stu-meta"></span></div><div class="stu-pages"></div>';
-      row.querySelector('.stu-num').textContent = studentLabel(k, g.pages[0]);
+      { const t = row.querySelector('.stu-num'); t.textContent = t.title = studentLabel(k, g); }
       const sheets = Math.ceil(g.pages.length / state.sides);
       row.querySelector('.stu-meta').textContent = plural(g.pages.length, 'page') +
         (g.blanks ? ' + ' + plural(g.blanks, 'blank') : '') + ' · ' + plural(sheets, 'sheet');
@@ -542,11 +555,14 @@
       : state.view === 'preview' ? 'The exact file that will print.' : '';
     showView();
     renderNp(gs);
+    renderQs();
   }
-  // "Student 3", or "3 · Ada Lovelace.pdf" when this student begins one of several uploaded files.
-  function studentLabel(k, firstPage){
-    const src = state.file.sources.length > 1 && state.file.sources.find(x => x.start === firstPage);
-    return src ? (k + 1) + ' · ' + src.name : 'Student ' + (k + 1);
+  // "Student 3", or "3 · Ada Lovelace" when this student begins one of several uploaded files
+  // ("3 · Ada Lovelace + Ada page 2" when their pages take in more than one file).
+  function studentLabel(k, g){
+    const first = g.pages[0], last = g.pages[g.pages.length - 1], srcs = state.file.sources;
+    if (srcs.length < 2 || !srcs.some(x => x.start === first)) return 'Student ' + (k + 1);
+    return (k + 1) + ' · ' + srcs.filter(x => x.start >= first && x.start <= last).map(x => x.name).join(' + ');
   }
   const sideLabel = (j, n) => state.sides === 1 ? 'Sheet ' + (j + 1)
     : state.sides === 2 ? 'Sheet ' + (Math.floor(j / 2) + 1) + (j % 2 ? ' back' : ' front')
@@ -709,7 +725,7 @@
       const first = o.j === 0;
       row.style.setProperty('--fc', COLORS[o.k % COLORS.length]);
       row.classList.toggle('first', first);
-      const lab = row.querySelector('.stu-num'); lab.textContent = studentLabel(o.k, i); lab.style.visibility = first ? '' : 'hidden';
+      const lab = row.querySelector('.stu-num'); lab.textContent = lab.title = studentLabel(o.k, gs[o.k]); lab.style.visibility = first ? '' : 'hidden';
       const b = row.querySelector('.newbtn');
       b.classList.toggle('on', first); b.disabled = i === 0;
       b.textContent = first ? '● New student' : 'Same student';
@@ -810,12 +826,12 @@
       state.file = f; state.cuts.clear(); state.outFor = ''; previewFor = ''; clearCrops(); npDrawKey = '';
       // One file: one student per page to start ("Join" pulls a student's next page in).
       // Several files: one student per file.
-      setEvery(sources.length > 1 ? 0 : 1, true);
+      state.unit = sources.length > 1 ? 'files' : 'pages'; $('nIn').value = 1;
+      setEvery(1, true);
       const drop = $('drop'); drop.classList.add('has-file');
       $('dropText').innerHTML = '<div class="fname"></div><div class="meta"></div>';
       drop.querySelector('.fname').textContent = sources.length === 1 ? files[0].name : plural(sources.length, 'PDF') + ' · one per student';
       drop.querySelector('.meta').textContent = plural(f.count, 'page');
-      $('perFile').hidden = sources.length < 2;
       buildTiles();
       if (skipped.length) showError('Left out: ' + skipped.join(' '));
     } catch(e){
@@ -825,20 +841,47 @@
     render();
   }
   // n pages per student, counted afresh in each uploaded file; n = 0 means one student per file.
+  // Every student has n pages (counted afresh in each uploaded file, so a new file always starts a new
+  // student) or n files (taken in order: files 1-2 are student 1, files 3-4 student 2, and so on).
   function setEvery(n, quiet){
     if (!state.file) return;
+    n = Math.max(1, Math.floor(n) || 1);
     state.cuts.clear();
-    for (const src of state.file.sources){
+    const last = state.file.count - 1;
+    state.file.sources.forEach((src, j) => {
       const end = src.start + src.count - 1;
-      if (n) for (let i = src.start + n - 1; i < end; i += n) state.cuts.add(i);
-      if (end < state.file.count - 1) state.cuts.add(end);
-    }
+      if (state.unit === 'files'){ if ((j + 1) % n === 0 && end < last) state.cuts.add(end); return; }
+      for (let i = src.start + n - 1; i < end; i += n) state.cuts.add(i);
+      if (end < last) state.cuts.add(end);
+    });
     if (!quiet) render();
+  }
+  function renderQs(){
+    const multi = !!state.file && state.file.sources.length > 1;
+    if (!multi) state.unit = 'pages';
+    const n = +$('nIn').value || 1, one = n === 1;
+    $('unitSeg').hidden = !multi; $('unitText').hidden = multi;
+    $('unitText').textContent = one ? 'page' : 'pages';
+    [...$('unitSeg').children].forEach(b => {
+      b.classList.toggle('active', b.dataset.v === state.unit);
+      b.textContent = b.dataset.v === 'files' ? (one ? 'file' : 'files') : (one ? 'page' : 'pages');
+    });
+    $('qsHint').textContent = state.unit === 'files'
+      ? (one ? 'Each file is one student.' : 'Files are taken in file-name order: files 1–' + n + ' are the first student, files ' + (n + 1) + '–' + (2 * n) + ' the next, and so on.')
+      : 'An even split to start from; fix the students who wrote more or less by clicking under their pages.' +
+        (multi ? ' Counted within each file: a new file always starts a new student.' : '');
   }
 
   /* ---------- wiring ---------- */
 
-  $('nChips').addEventListener('click', e => { const b = e.target.closest('[data-n]'); if (b) setEvery(+b.dataset.n); });
+  $('nChips').addEventListener('click', e => { const b = e.target.closest('[data-n]'); if (b){ $('nIn').value = b.dataset.n; setEvery(+b.dataset.n); } });
+  // Typing a number applies it straight away (it's only a starting point, so there's nothing to confirm).
+  $('nIn').addEventListener('input', () => { const n = +$('nIn').value; if (n >= 1) setEvery(n); else renderQs(); });
+  $('nIn').addEventListener('change', () => { const n = Math.max(1, Math.floor(+$('nIn').value) || 1); $('nIn').value = n; setEvery(n); });
+  $('unitSeg').addEventListener('click', e => {
+    const b = e.target.closest('[data-v]'); if (!b) return;
+    state.unit = b.dataset.v; setEvery(+$('nIn').value || 1);
+  });
   $('sidesSeg').addEventListener('click', e => {
     const b = e.target.closest('[data-v]'); if (!b) return;
     state.sides = +b.dataset.v;
