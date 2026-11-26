@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A digital class corkboard — notes, checklists, calendar, clock, timer, random student picker and text boxes on a custom background. Runs offline, saves to your browser.">
+<meta name="description" content="A digital class corkboard — notes, checklists, calendar, clock, timer, random student picker, polls and text boxes on a custom background. Runs offline, saves to your browser.">
 <meta name="theme-color" content="#1f3d35">
 <title>Class Board</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23c0904f'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23c43d35'/%3E%3C/svg%3E">
@@ -354,6 +354,63 @@
   .tx-measure{position:absolute;visibility:hidden;left:-99999px;top:0;white-space:pre-wrap;
     overflow-wrap:normal;word-break:normal;line-height:1.15;font-family:var(--sans);}
 
+  /* ---- poll (tap a face / choice to vote) ---- */
+  .card.poll{min-width:250px;min-height:220px;}
+  .poll .head .title{min-width:0;}
+  .poll .pl-mode{border:1px solid var(--line);border-radius:7px;background:var(--panel-2);font-size:11.5px;
+    padding:3px 4px;max-width:46%;flex:none;}
+  .poll .pl-body{flex:1;min-height:0;display:flex;flex-direction:column;gap:6px;container-type:size;}
+  .poll .pl-vote{flex:1 1 0;min-height:38%;display:flex;gap:2.5cqw;justify-content:center;align-items:stretch;}
+  .poll .pl-opt{flex:1 1 0;min-width:0;max-width:26cqw;border:none;background:none;cursor:pointer;padding:3px;
+    border-radius:12px;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    transition:background .12s,transform .08s;container-type:size;--lab:max(10px,min(15cqw,11cqh));}
+  .poll .pl-opt:hover{background:rgba(40,24,8,.06);}
+  .poll .pl-opt:active{transform:scale(.95);}
+  .poll .pl-art{position:relative;flex:none;display:block;aspect-ratio:4/5;
+    width:min(100cqw, calc((100cqh - var(--lab)*1.3 - 6px) * .8));}
+  .poll .pl-art.face{aspect-ratio:1;width:min(100cqw, calc(100cqh - var(--lab)*1.3 - 6px));}
+  .poll .pl-opt.nolab .pl-art{width:min(100cqw, 80cqh);}
+  .poll .pl-art svg{width:100%;height:100%;display:block;filter:drop-shadow(0 2px 2px rgba(40,24,8,.25));}
+  .poll .pl-glyph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+    border-radius:14%;color:#fff;font-weight:800;font-size:min(48cqw,36cqh);line-height:1;text-align:center;
+    overflow:hidden;box-shadow:inset 0 -3px 0 rgba(0,0,0,.15),0 2px 3px rgba(40,24,8,.2);
+    text-shadow:0 1px 1px rgba(0,0,0,.25);}
+  .poll .pl-glyph.long{font-size:min(28cqw,22cqh);}
+  .poll .pl-lab{font-size:var(--lab);line-height:1.3;font-weight:700;color:var(--ink);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;max-width:100%;flex:none;}
+  .poll .pl-badge{position:absolute;top:-4px;right:-4px;background:var(--board);color:#fff;font-family:var(--mono);
+    font-size:max(10px,min(11cqw,8cqh));font-weight:700;border-radius:10px;padding:1px 6px;box-shadow:var(--shadow-sm);line-height:1.3;}
+  .poll .pl-opt.bump .pl-art{animation:bump .35s ease;}
+  @keyframes bump{40%{transform:scale(1.18);}}
+  .poll .pl-plus{position:absolute;top:0;left:50%;transform:translateX(-50%);font-family:var(--mono);
+    font-weight:800;color:var(--board);font-size:max(13px,min(18cqw,12cqh));pointer-events:none;animation:rise .8s ease-out forwards;
+    text-shadow:0 0 3px #fff,0 0 6px #fff;}
+  @keyframes rise{to{transform:translate(-50%,-160%);opacity:0;}}
+  .poll.cool .pl-opt{pointer-events:none;}
+  .poll.locked .pl-opt{cursor:not-allowed;opacity:.4;filter:grayscale(.7);}
+  .poll .pl-sum{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);flex:none;}
+  .poll .pl-sum b{color:var(--ink);font-family:var(--mono);}
+  .poll .pl-tag{background:var(--danger-soft);color:var(--danger);border-radius:10px;padding:0 7px;font-weight:700;font-size:10.5px;}
+  .poll .pl-res{flex:0 0 auto;max-height:52%;overflow:auto;display:flex;flex-direction:column;gap:2px;}
+  .poll .pl-row{display:grid;grid-template-columns:minmax(0,7.5em) 1fr auto;gap:7px;align-items:center;font-size:11px;line-height:1.25;}
+  .poll .pl-rl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;}
+  .poll .pl-track{height:8px;background:rgba(40,24,8,.08);border-radius:5px;overflow:hidden;}
+  .poll .pl-fill{display:block;height:100%;border-radius:5px;transition:width .35s ease;}
+  .poll .pl-n{font-family:var(--mono);font-size:10.5px;color:var(--muted);min-width:5.5em;text-align:right;}
+  .poll .pl-edit{flex:1;min-height:60px;width:100%;resize:none;border:1px solid var(--line);border-radius:7px;
+    background:var(--panel-2);font-size:12.5px;padding:6px 8px;line-height:1.4;}
+  .poll .pl-hist{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:5px;}
+  .poll .pl-hrow{border:1px solid var(--line);border-radius:8px;padding:5px 7px;background:#fff;}
+  .poll .pl-htop{display:flex;align-items:center;gap:6px;font-size:11.5px;}
+  .poll .pl-htop b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .poll .pl-htop span{color:var(--muted);font-size:10.5px;white-space:nowrap;}
+  .poll .pl-htop .mini{padding:1px 6px;font-size:10.5px;}
+  .poll .pl-hline{font-size:11px;color:var(--ink);margin-top:2px;line-height:1.35;}
+  .poll .pl-empty{color:var(--muted);font-size:12px;text-align:center;margin:auto;padding:10px;line-height:1.5;}
+  .poll .pl-foot{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px;flex:none;}
+  .poll .pl-foot .mini{padding:2px 7px;font-size:10.5px;}
+  .mini[disabled]{opacity:.4;cursor:not-allowed;}
+
   /* ---- background picker ---- */
   .bgpop{position:fixed;z-index:1200;width:292px;background:#fff;border:1px solid var(--line);border-radius:12px;
     box-shadow:0 12px 32px rgba(20,40,33,.22);padding:12px;}
@@ -446,6 +503,7 @@
     <button class="btn" id="addClock" title="Clock — current time, analog or digital"><span class="ic">🕒</span><span class="lbl">Clock</span></button>
     <button class="btn" id="addTimer" title="Countdown timer"><span class="ic">⏱</span><span class="lbl">Timer</span></button>
     <button class="btn" id="addPicker" title="Random student picker"><span class="ic">🎲</span><span class="lbl">Picker</span></button>
+    <button class="btn" id="addPoll" title="Poll — tap a smiley face or choice to vote"><span class="ic">🙂</span><span class="lbl">Poll</span></button>
     <div class="zoom" role="group" aria-label="Zoom">
       <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
       <button class="lvl" id="zoomLvl" title="Reset to 100%" aria-label="Reset zoom">100%</button>
@@ -466,7 +524,7 @@
       <div class="surface bgv bg-cork" id="surface">
         <div class="emptyhint" id="emptyHint">
           <b>The board is empty.</b><br>
-          Add a sticky note, checklist, text box, clock, timer or picker — or double-click the board.
+          Add a sticky note, checklist, text box, clock, timer, picker or poll — or double-click the board.
         </div>
       </div>
     </div>
@@ -524,6 +582,9 @@
      switch to a fixed size (A−/A+). Clock = current time (analog/digital/
      both). Timer = digital countdown with a chime. Picker = random student
      from the shared Class Lists (teachingtools:rosters) or pasted names.
+     Poll = tap-to-vote card: 5 smiley faces (green smile → red frown),
+     thumbs, yes/no, fist to five or custom choices; live bars, hide
+     results, close voting, undo, saved rounds (history) and copy-as-text.
    • Board background: preset (cork, chalkboard, whiteboard, felt…), a solid
      colour, or an uploaded image (downscaled; stored under its own key).
    • State auto-saves to this browser (localStorage). No network, no
@@ -627,6 +688,7 @@ const SIZE = {
   clock:  { w:220, h:250, minW:150, minH:160 },
   timer:  { w:250, h:210, minW:190, minH:170 },
   picker: { w:270, h:240, minW:200, minH:190 },
+  poll:   { w:400, h:380, minW:250, minH:220 },
 };
 
 /* ---- state ---- */
@@ -852,6 +914,8 @@ function addItem(type, extra){
 const addText   = ()=> addItem('text',   { rot:0, text:'', fit:true, fs:40, color:'#16241f', back:'white', bold:true, align:'left' });
 const addClock  = ()=> addItem('clock',  { face:'analog' });
 const addTimer  = ()=> addItem('timer',  { title:'Timer', dur:300, left:300, endAt:null, running:false });
+const addPoll   = ()=> addItem('poll',   { title:'How are you feeling today?', mode:'faces', options:null, votes:[0,0,0,0,0],
+  log:[], hidden:false, locked:false, sound:false, rounds:[] });
 const addPicker = ()=> addItem('picker', { title:'Random picker', src:defaultRosterName(), names:[], noRepeat:true, picked:[], last:'' });
 
 function removeItem(item){
@@ -907,6 +971,7 @@ function mountCard(item, animate){
   else if(item.type==='clock')  buildClock(item, inner, el);
   else if(item.type==='timer')  buildTimer(item, inner, el);
   else if(item.type==='picker') buildPicker(item, inner);
+  else if(item.type==='poll')   buildPoll(item, inner, el);
 
   // resize grip (bottom-right corner)
   const rs = document.createElement('div');
@@ -1734,6 +1799,308 @@ function buildPicker(item, inner){
 // another tab (home page / Seating Chart) changed Class Lists
 window.addEventListener('storage', e=>{ if(e.key === ROSTER_LS) pickerEls.forEach(p => p.render()); });
 
+/* ---------------- poll (smiley faces, thumbs, yes/no, fist to five, custom) ---------------- */
+const POLL_FACES = [
+  { label:'Great',     c:'#2e9d57', k:20  },
+  { label:'Good',      c:'#8bc34a', k:10  },
+  { label:'Okay',      c:'#f2c12e', k:0   },
+  { label:'Not great', c:'#f08a3c', k:-10 },
+  { label:'Bad',       c:'#d8443a', k:-18 },
+];
+const POLL_PALETTE = ['#2f6f9f','#e0982e','#7a52c0','#3f9e6b','#c43d35','#1f8a8a','#b5568c','#6b7a2f'];
+const POLL_MODES = {
+  faces:   { name:'Smiley faces' },
+  thumbs:  { name:'Thumbs',       labels:['Got it','Sort of','Not yet'], glyphs:['👍','✋','👎'], colors:['#2e9d57','#f2c12e','#d8443a'] },
+  yesno:   { name:'Yes / No',     labels:['Yes','Not sure','No'],        glyphs:['✓','?','✗'],   colors:['#2e9d57','#f2c12e','#d8443a'] },
+  fist:    { name:'Fist to five', labels:['0','1','2','3','4','5'],      colors:['#d8443a','#ec6c3b','#f2a52e','#e3c52c','#93c047','#2e9d57'] },
+  choices: { name:'Custom choices' },
+};
+const POLL_MAX_OPTIONS = 8;
+// Labels, colours and (optional) glyphs for an item's current poll type.
+function pollCfg(item){
+  if(item.mode === 'faces') return { labels:POLL_FACES.map(f=>f.label), colors:POLL_FACES.map(f=>f.c), faces:true };
+  if(item.mode === 'choices'){
+    const labels = (item.options && item.options.length) ? item.options : ['A','B','C','D'];
+    // short choices (A, B, Yes…) go on the tile; longer ones get a letter tile + label underneath
+    const short = labels.every(l => l.length <= 3);
+    return { labels, colors:labels.map((_,i)=>POLL_PALETTE[i % POLL_PALETTE.length]),
+      glyphs: short ? labels : labels.map((_,i)=> String.fromCharCode(65 + i)), sublabel: !short };
+  }
+  const m = POLL_MODES[item.mode] || POLL_MODES.thumbs;
+  return { labels:m.labels, colors:m.colors, glyphs:m.glyphs || m.labels };
+}
+function faceSvg(f){
+  const svg = svgEl('svg', { viewBox:'0 0 100 100', 'aria-hidden':'true' });
+  svg.appendChild(svgEl('circle', { cx:50, cy:50, r:46, fill:f.c, stroke:'rgba(0,0,0,.18)', 'stroke-width':3 }));
+  svg.appendChild(svgEl('ellipse', { cx:36, cy:26, rx:17, ry:9, fill:'rgba(255,255,255,.28)', transform:'rotate(-25 36 26)' }));
+  const ink = '#2a2118';
+  svg.appendChild(svgEl('ellipse', { cx:35, cy:40, rx:5, ry:6.5, fill:ink }));
+  svg.appendChild(svgEl('ellipse', { cx:65, cy:40, rx:5, ry:6.5, fill:ink }));
+  if(f.k <= -18){   // worried brows on the saddest face
+    svg.appendChild(svgEl('path', { d:'M26 29 L42 25', stroke:ink, 'stroke-width':4, 'stroke-linecap':'round' }));
+    svg.appendChild(svgEl('path', { d:'M74 29 L58 25', stroke:ink, 'stroke-width':4, 'stroke-linecap':'round' }));
+  }
+  const y = f.k >= 0 ? 62 : 72;
+  const d = f.k === 0 ? 'M32 66 L68 66' : 'M29 ' + y + ' Q50 ' + (y + f.k*1.3) + ' 71 ' + y;
+  svg.appendChild(svgEl('path', { d, fill:'none', stroke:ink, 'stroke-width':6, 'stroke-linecap':'round' }));
+  return svg;
+}
+function pollTally(item, cfg){
+  const votes = item.votes, total = votes.reduce((a,b)=>a+b, 0);
+  let summary = '';
+  if(total){
+    if(item.mode === 'faces'){
+      // 5 = Great … 1 = Bad
+      const avg = votes.reduce((s,n,i)=> s + n*(5-i), 0) / total;
+      summary = 'Class mood ' + avg.toFixed(1) + ' / 5 · ' + POLL_FACES[clamp(Math.round(5-avg),0,4)].label;
+    }else if(item.mode === 'fist'){
+      const avg = votes.reduce((s,n,i)=> s + n*i, 0) / total;
+      summary = 'Average ' + avg.toFixed(1) + ' / 5';
+    }else{
+      const max = Math.max(...votes), top = votes.map((n,i)=> n===max ? i : -1).filter(i=>i>=0);
+      summary = top.length > 1 ? 'Tie: ' + top.map(i=>cfg.labels[i]).join(' / ')
+                               : 'Most votes: ' + cfg.labels[top[0]] + ' (' + Math.round(max/total*100) + '%)';
+    }
+  }
+  return { total, summary };
+}
+function pollText(title, mode, labels, votes){
+  const total = votes.reduce((a,b)=>a+b, 0);
+  const lines = [(title || 'Poll') + ' — ' + (POLL_MODES[mode] ? POLL_MODES[mode].name : 'Poll')];
+  labels.forEach((l,i)=> lines.push(l + ': ' + (votes[i]||0) + (total ? ' (' + Math.round((votes[i]||0)/total*100) + '%)' : '')));
+  lines.push('Total: ' + total + ' vote' + (total===1?'':'s'));
+  const s = pollTally({ mode, votes }, { labels }).summary;
+  if(s) lines.push(s);
+  return lines.join('\n');
+}
+function copyText(txt){
+  const fallback = ()=>{
+    const ta = mk('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try{ ok = document.execCommand('copy'); }catch(e){}
+    ta.remove();
+    toast(ok ? 'Results copied.' : 'Couldn’t copy — your browser blocked it.', ok ? 'ok' : 'err');
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(txt).then(()=> toast('Results copied.', 'ok'), fallback);
+  else fallback();
+}
+function tick(){
+  const ac = audioCtx; if(!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = 'triangle'; o.frequency.setValueAtTime(660, t); o.frequency.exponentialRampToValueAtTime(990, t + .08);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.15, t + .01);
+  g.gain.exponentialRampToValueAtTime(.0001, t + .18);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + .2);
+}
+
+function buildPoll(item, inner, el){
+  if(!Array.isArray(item.votes)) item.votes = [];
+  if(!Array.isArray(item.log)) item.log = [];
+  if(!Array.isArray(item.rounds)) item.rounds = [];
+
+  const head = mk('div', 'head');
+  const sel = mk('select', 'pl-mode');
+  sel.setAttribute('aria-label', 'Poll type');
+  for(const k in POLL_MODES){ const o = mk('option', null, POLL_MODES[k].name); o.value = k; sel.appendChild(o); }
+  head.append(titleInput(item, 'Poll question'), sel);
+  inner.appendChild(head);
+
+  const body = mk('div', 'pl-body');
+  const opts = mk('div', 'pl-vote');
+  const sum = mk('div', 'pl-sum');
+  const res = mk('div', 'pl-res');
+  const edit = mk('textarea', 'pl-edit');
+  edit.placeholder = 'One choice per line (up to ' + POLL_MAX_OPTIONS + ')';
+  edit.setAttribute('aria-label', 'Poll choices');
+  const hist = mk('div', 'pl-hist');
+  body.append(opts, sum, res, edit, hist);
+  inner.appendChild(body);
+
+  const foot = mk('div', 'pl-foot hov');
+  const bUndo  = miniBtn('↶ Undo', 'Take back the last vote');
+  const bHide  = miniBtn('', 'Hide or show the results');
+  const bLock  = miniBtn('', 'Close or open voting');
+  const bSave  = miniBtn('Save round', 'Keep these results in History and start a fresh round');
+  const bReset = miniBtn('Reset', 'Clear all votes');
+  const bCopy  = miniBtn('Copy', 'Copy the results as text');
+  const bHist  = miniBtn('', 'Past rounds');
+  const bEdit  = miniBtn('✎ Choices', 'Edit the choices');
+  const bSnd   = miniBtn('', 'Sound on each vote');
+  foot.append(bUndo, bHide, bLock, bSave, bReset, bCopy, bHist, bEdit, bSnd);
+  inner.appendChild(foot);
+
+  let view = 'vote';            // 'vote' | 'edit' | 'hist'
+  let optEls = [], cfg = null, cooling = false;
+
+  function fitVotes(){
+    const n = cfg.labels.length;
+    item.votes = Array.from({ length:n }, (_,i)=> item.votes[i] || 0);
+    item.log = item.log.filter(i => i < n);
+  }
+  function buildOptions(){
+    cfg = pollCfg(item); fitVotes();
+    opts.innerHTML = ''; optEls = [];
+    cfg.labels.forEach((label, i)=>{
+      const b = mk('button', 'pl-opt'); b.type = 'button';
+      b.setAttribute('aria-label', 'Vote: ' + label);
+      const art = mk('span', 'pl-art' + (cfg.faces ? ' face' : ''));
+      if(cfg.faces) art.appendChild(faceSvg(POLL_FACES[i]));
+      else{
+        const g = mk('span', 'pl-glyph' + ([...cfg.glyphs[i]].length > 1 ? ' long' : ''), cfg.glyphs[i]);
+        g.style.background = cfg.colors[i];
+        art.appendChild(g);
+      }
+      const badge = mk('span', 'pl-badge'); art.appendChild(badge);
+      b.appendChild(art);
+      if(cfg.faces || cfg.sublabel || item.mode === 'thumbs' || item.mode === 'yesno'){
+        const lab = mk('span', 'pl-lab', label); lab.title = label; b.appendChild(lab);
+      }else b.classList.add('nolab');
+      b.addEventListener('click', ()=> vote(i));
+      opts.appendChild(b); optEls.push({ b, badge });
+    });
+    el.classList.toggle('many', cfg.labels.length > 5);
+  }
+  function render(){
+    sel.value = item.mode;
+    const { total, summary } = pollTally(item, cfg);
+    el.classList.toggle('locked', !!item.locked);
+    opts.style.display = view === 'vote' ? '' : 'none';
+    sum.style.display = view === 'vote' ? '' : 'none';
+    res.style.display = view === 'vote' && !item.hidden ? '' : 'none';
+    edit.style.display = view === 'edit' ? '' : 'none';
+    hist.style.display = view === 'hist' ? '' : 'none';
+
+    optEls.forEach(({ badge }, i)=>{
+      badge.textContent = item.votes[i];
+      badge.style.display = item.hidden || !item.votes[i] ? 'none' : '';
+    });
+    sum.innerHTML = '';
+    const tot = mk('b', null, total + ' vote' + (total===1?'':'s'));
+    sum.appendChild(tot);
+    if(item.locked) sum.appendChild(mk('span', 'pl-tag', 'Closed'));
+    if(item.hidden) sum.appendChild(mk('span', null, total ? 'results hidden' : 'tap to vote'));
+    else if(summary) sum.appendChild(mk('span', null, summary));
+    else sum.appendChild(mk('span', null, item.locked ? 'voting is closed' : 'tap a choice to vote'));
+
+    res.innerHTML = '';
+    if(!item.hidden){
+      const max = Math.max(1, ...item.votes);
+      cfg.labels.forEach((label, i)=>{
+        const n = item.votes[i];
+        const row = mk('div', 'pl-row');
+        const lab = mk('span', 'pl-rl', (cfg.faces || !cfg.glyphs || cfg.glyphs[i] === label) ? label : cfg.glyphs[i] + ' ' + label);
+        const tr = mk('span', 'pl-track'), fill = mk('i', 'pl-fill');
+        fill.style.width = (n / max * 100) + '%'; fill.style.background = cfg.colors[i];
+        tr.appendChild(fill);
+        row.append(lab, tr, mk('span', 'pl-n', n + (total ? ' · ' + Math.round(n/total*100) + '%' : '')));
+        res.appendChild(row);
+      });
+    }
+    if(view === 'hist') renderHist();
+
+    bUndo.disabled = !item.log.length;
+    bHide.textContent = item.hidden ? '👁 Show' : '🙈 Hide';
+    bLock.textContent = item.locked ? '🔓 Open' : '🔒 Close';
+    bLock.classList.toggle('on', !!item.locked);
+    bHist.textContent = view === 'hist' ? '← Back' : 'History' + (item.rounds.length ? ' (' + item.rounds.length + ')' : '');
+    bHist.classList.toggle('on', view === 'hist');
+    bEdit.style.display = item.mode === 'choices' ? '' : 'none';
+    bEdit.classList.toggle('on', view === 'edit');
+    bSnd.textContent = item.sound ? '🔔' : '🔕';
+    bSnd.classList.toggle('on', !!item.sound);
+  }
+  function renderHist(){
+    hist.innerHTML = '';
+    if(!item.rounds.length){
+      hist.appendChild(mk('div', 'pl-empty', 'No saved rounds yet. “Save round” keeps the current results here and starts fresh.'));
+      return;
+    }
+    const df = new Intl.DateTimeFormat(undefined, { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+    item.rounds.forEach((r, ri)=>{
+      const row = mk('div', 'pl-hrow');
+      const top = mk('div', 'pl-htop');
+      top.append(mk('b', null, r.title || 'Poll'), mk('span', null, df.format(new Date(r.at))));
+      const cp = miniBtn('Copy', 'Copy this round');
+      cp.addEventListener('click', ()=> copyText(pollText(r.title, r.mode, r.labels, r.votes)));
+      const rm = miniBtn('×', 'Delete this round');
+      rm.addEventListener('click', ()=>{ item.rounds.splice(ri, 1); render(); save(); });
+      top.append(cp, rm);
+      const total = r.votes.reduce((a,b)=>a+b, 0);
+      const line = r.labels.map((l,i)=> l + ' ' + r.votes[i]).join(' · ');
+      const s = pollTally({ mode:r.mode, votes:r.votes }, { labels:r.labels }).summary;
+      row.append(top, mk('div', 'pl-hline', line + ' — ' + total + ' total' + (s ? '. ' + s : '')));
+      hist.appendChild(row);
+    });
+  }
+
+  function vote(i){
+    if(item.locked){ toast('Voting is closed — click 🔓 Open to start again.'); return; }
+    if(cooling || view !== 'vote') return;
+    item.votes[i]++; item.log.push(i);
+    if(item.log.length > 1000) item.log.splice(0, item.log.length - 1000);
+    if(item.sound){ audio(); tick(); }
+    const { b } = optEls[i];
+    if(!REDUCED){
+      b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump');
+      const plus = mk('span', 'pl-plus', '+1'); b.firstChild.appendChild(plus);
+      setTimeout(()=> plus.remove(), 800);
+    }
+    // short pause so a double-tap from one student counts once
+    cooling = true; el.classList.add('cool');
+    setTimeout(()=>{ cooling = false; el.classList.remove('cool'); }, 600);
+    render(); save();
+  }
+  function resetVotes(){ item.votes = item.votes.map(()=>0); item.log = []; }
+
+  bUndo.addEventListener('click', ()=>{
+    const i = item.log.pop();
+    if(i != null && item.votes[i] > 0) item.votes[i]--;
+    render(); save();
+  });
+  bHide.addEventListener('click', ()=>{ item.hidden = !item.hidden; render(); save(); });
+  bLock.addEventListener('click', ()=>{ item.locked = !item.locked; render(); save(); });
+  bReset.addEventListener('click', ()=>{
+    if(item.votes.some(n=>n) && !confirm('Clear all votes on this poll?')) return;
+    resetVotes(); render(); save();
+  });
+  bSave.addEventListener('click', ()=>{
+    if(!item.votes.some(n=>n)){ toast('No votes yet — nothing to save.', 'err'); return; }
+    item.rounds.unshift({ at:Date.now(), title:item.title, mode:item.mode, labels:cfg.labels.slice(), votes:item.votes.slice() });
+    if(item.rounds.length > 50) item.rounds.length = 50;
+    resetVotes(); item.locked = false; render(); save();
+    toast('Round saved — ready for a fresh vote.', 'ok');
+  });
+  bCopy.addEventListener('click', ()=> copyText(pollText(item.title, item.mode, cfg.labels, item.votes)));
+  bHist.addEventListener('click', ()=>{ view = view === 'hist' ? 'vote' : 'hist'; render(); });
+  bEdit.addEventListener('click', ()=>{
+    view = view === 'edit' ? 'vote' : 'edit';
+    if(view === 'edit'){ edit.value = cfg.labels.join('\n'); render(); edit.focus(); } else render();
+  });
+  bSnd.addEventListener('click', ()=>{ item.sound = !item.sound; if(item.sound){ audio(); tick(); } render(); save(); });
+  edit.addEventListener('input', ()=>{
+    const lines = edit.value.split('\n').map(s=>s.trim()).filter(Boolean).slice(0, POLL_MAX_OPTIONS);
+    item.options = lines.length ? lines : null;
+    buildOptions(); render(); save();
+  });
+  edit.addEventListener('keydown', e=>{ if(e.key === 'Escape'){ view = 'vote'; render(); } });
+  sel.addEventListener('change', ()=>{
+    if(item.votes.some(n=>n) && !confirm('Changing the poll type clears the current votes. Continue?')){ sel.value = item.mode; return; }
+    item.mode = sel.value; resetVotes();
+    buildOptions();
+    view = 'vote'; render(); save();
+  });
+  // number keys vote while the poll has focus (0–5 for fist to five, else 1…n)
+  el.addEventListener('keydown', e=>{
+    if(e.target.closest('input,textarea,select') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if(!/^[0-9]$/.test(e.key)) return;
+    const i = item.mode === 'fist' ? +e.key : +e.key - 1;
+    if(i >= 0 && i < cfg.labels.length){ e.preventDefault(); vote(i); }
+  });
+
+  buildOptions(); render();
+}
+
 /* ---------------- board background ---------------- */
 const BG_IMG_KEY = STORE_KEY + '.bgimage';
 const BG_PRESETS = [
@@ -2059,6 +2426,7 @@ $('addText').addEventListener('click', ()=> addText());
 $('addClock').addEventListener('click', ()=> addClock());
 $('addTimer').addEventListener('click', ()=> addTimer());
 $('addPicker').addEventListener('click', ()=> addPicker());
+$('addPoll').addEventListener('click', ()=> addPoll());
 $('bgBtn').addEventListener('click', openBgPop);
 $('bgColor').addEventListener('input', e=> setBg({ kind:'color', color:e.target.value }));
 $('bgUpload').addEventListener('click', ()=> $('bgFile').click());
