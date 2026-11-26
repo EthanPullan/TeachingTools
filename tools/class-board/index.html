@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A digital class corkboard — pin a calendar and a year-end countdown. Runs offline, saves to your browser.">
+<meta name="description" content="A digital class corkboard — notes, checklists, calendar, clock, timer, random student picker and text boxes on a custom background. Runs offline, saves to your browser.">
 <meta name="theme-color" content="#1f3d35">
 <title>Class Board</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23c0904f'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23c43d35'/%3E%3C/svg%3E">
@@ -75,8 +75,9 @@
   .board-wrap.dragging{cursor:grabbing;}
   .board{position:relative;width:100%;height:100%;}
   .surface{position:absolute;top:0;left:0;width:100%;height:100%;
-    transform-origin:0 0;border-radius:6px;
-    background-color:var(--cork);
+    transform-origin:0 0;border-radius:6px;}
+  /* board backgrounds — .bgv is shared by the surface and the picker swatches */
+  .bgv.bg-cork{background-color:var(--cork);
     /* speckled cork grain from layered radial-gradients */
     background-image:
       radial-gradient(rgba(120,72,28,.30) 16%, transparent 17%),
@@ -257,6 +258,146 @@
   .daypop textarea::placeholder{color:rgba(51,39,15,.4);}
   .daypop .dp-hint{font-size:9.5px;color:rgba(51,39,15,.55);margin-top:4px;text-align:right;}
 
+  /* ---- shared: hover-only card controls ---- */
+  .hov{opacity:0;transition:opacity .12s;}
+  .card:hover .hov,.card:focus-within .hov{opacity:1;}
+
+  /* ---- clock (current time: analog / digital / both) ---- */
+  .card.clock{min-width:150px;min-height:160px;}
+  .clock .cl-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:4px;container-type:size;}
+  .clock .cl-face{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center;}
+  .clock svg{width:100%;height:100%;display:block;}
+  .clock .cl-dig{font-family:var(--mono);font-weight:700;color:var(--board);line-height:1;
+    font-size:min(24cqw,40cqh);font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .clock .cl-dig .sec{font-size:.42em;color:var(--muted);margin-left:.12em;}
+  .clock .cl-dig .ap{font-size:.36em;color:var(--muted);margin-left:.18em;letter-spacing:.04em;}
+  .clock.both .cl-dig{font-size:min(14cqw,15cqh);}
+  .clock .cl-date{font-size:max(10px,min(6cqw,8cqh));font-weight:600;color:var(--muted);
+    letter-spacing:.04em;text-align:center;white-space:nowrap;}
+  .clock .cl-foot{display:flex;justify-content:center;margin-top:4px;flex:none;}
+
+  /* ---- countdown timer (digital) ---- */
+  .card.timer{min-width:190px;min-height:170px;}
+  .timer .tm-body{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;container-type:size;}
+  .timer .tm-dig{font-family:var(--mono);font-weight:700;color:var(--board);line-height:1;
+    font-size:min(26cqw,80cqh);font-variant-numeric:tabular-nums;cursor:text;border:none;
+    background:transparent;padding:0 .08em;border-radius:6px;white-space:nowrap;}
+  .timer .tm-dig:hover{background:rgba(40,24,8,.05);}
+  .timer.running .tm-dig{cursor:default;} .timer.running .tm-dig:hover{background:transparent;}
+  .timer.low .tm-dig{color:var(--accent-deep);}
+  .timer.done .tm-dig{color:var(--danger);}
+  .timer.done{animation:flash 1s ease-in-out 4;}
+  @keyframes flash{50%{background-color:var(--danger-soft);}}
+  .timer .tm-edit{font-family:var(--mono);font-weight:700;font-size:min(16cqw,50cqh);width:5.2em;
+    text-align:center;border:2px solid var(--accent);border-radius:8px;background:#fff;color:var(--board);padding:0;}
+  .timer .tm-bar{height:5px;border-radius:3px;background:rgba(40,24,8,.10);overflow:hidden;flex:none;margin:4px 0 6px;}
+  .timer .tm-bar i{display:block;height:100%;background:var(--board);width:100%;transition:width .25s linear;}
+  .timer.low .tm-bar i{background:var(--accent);} .timer.done .tm-bar i{background:var(--danger);}
+  .timer .tm-ctl{display:flex;gap:5px;justify-content:center;flex:none;flex-wrap:wrap;}
+  .timer .tm-pre{display:flex;gap:3px;justify-content:center;flex:none;flex-wrap:wrap;margin-top:5px;}
+  .mini{border:1px solid var(--line);background:var(--panel);border-radius:7px;cursor:pointer;
+    font-size:11.5px;font-weight:600;padding:3px 8px;color:var(--ink);font-family:var(--sans);}
+  .mini:hover{background:var(--panel-2);}
+  .mini.go{background:var(--board);border-color:var(--board);color:#fff;}
+  .mini.go:hover{background:var(--board-2);}
+  .mini.on{background:var(--board);border-color:var(--board);color:#fff;}
+  .tm-pre .mini{font-family:var(--mono);padding:2px 6px;font-size:10.5px;}
+
+  /* ---- random student picker ---- */
+  .card.picker{min-width:200px;min-height:190px;}
+  .picker .head .title{min-width:0;}
+  .picker .pk-src{border:1px solid var(--line);border-radius:7px;background:var(--panel-2);font-size:11.5px;
+    padding:3px 4px;max-width:52%;flex:none;}
+  .picker .pk-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;text-align:center;
+    padding:4px 2px;overflow:hidden;}
+  .picker .pk-name{font-family:var(--sans);font-weight:800;color:var(--board);line-height:1.15;overflow-wrap:normal;}
+  .picker .pk-name.idle{color:var(--muted);font-weight:600;font-size:13px !important;white-space:normal;}
+  .picker .pk-name.spin{color:var(--ink);opacity:.75;}
+  .picker .pk-name.land{animation:land .35s cubic-bezier(.2,.8,.3,1.3);}
+  @keyframes land{from{transform:scale(.7);opacity:.4;}to{transform:none;opacity:1;}}
+  .picker .pk-ctl{display:flex;align-items:center;gap:6px;flex:none;margin-top:4px;}
+  .picker .pk-go{flex:1;font-size:13px;padding:6px 8px;}
+  .picker .pk-meta{display:flex;align-items:center;gap:8px;flex:none;margin-top:6px;font-size:10.5px;color:var(--muted);}
+  .picker .pk-meta label{display:inline-flex;align-items:center;gap:4px;cursor:pointer;}
+  .picker .pk-meta input{accent-color:var(--board);margin:0;}
+  .picker .pk-meta .left{font-family:var(--mono);margin-left:auto;}
+  .picker textarea.pk-names{flex:1;min-height:60px;width:100%;resize:none;border:1px solid var(--line);
+    border-radius:7px;background:var(--panel-2);font-size:12.5px;padding:6px 8px;line-height:1.4;}
+  .picker .pk-help{font-size:10px;color:var(--muted);margin:4px 0 0;flex:none;}
+
+  /* ---- text box (frameless; text auto-fits or fixed size) ---- */
+  .card.text{min-width:80px;min-height:44px;box-shadow:none;border-radius:8px;background:transparent;}
+  .card.text.lift{box-shadow:0 0 0 2px rgba(255,255,255,.55);}
+  .card.text:hover,.card.text:focus-within{box-shadow:0 0 0 1.5px rgba(255,255,255,.65),0 0 0 3px rgba(40,24,8,.25);}
+  .card.text.back-white{background:rgba(255,255,255,.94);box-shadow:var(--paper-shadow);}
+  .card.text.back-dark{background:rgba(22,36,31,.88);box-shadow:var(--paper-shadow);}
+  .card.text .inner{padding:8px 10px;}
+  .card.text .pin{opacity:0;transition:opacity .12s;top:-11px;}
+  .card.text:hover .pin,.card.text:focus-within .pin{opacity:1;}
+  .text .tx-area{flex:1;width:100%;min-height:0;border:none;background:transparent;resize:none;padding:0;
+    font-family:var(--sans);line-height:1.15;color:var(--tc,#16241f);overflow:hidden;white-space:pre-wrap;
+    overflow-wrap:break-word;}
+  .text .tx-area:focus{outline:none;}
+  .text .tx-area::placeholder{color:currentColor;opacity:.45;}
+  .text.bold .tx-area{font-weight:800;}
+  .text.al-center .tx-area{text-align:center;} .text.al-right .tx-area{text-align:right;}
+  .text .tx-bar{position:absolute;left:0;top:calc(100% - 1px);display:none;gap:3px;align-items:center;
+    background:#fff;border:1px solid var(--line);border-radius:9px;padding:3px;box-shadow:var(--shadow);
+    z-index:4;white-space:nowrap;}
+  .card.text:hover .tx-bar,.card.text:focus-within .tx-bar{display:flex;}
+  .text .tx-bar .mini{padding:2px 7px;font-size:11px;}
+  .text .tx-bar .sep{width:1px;height:16px;background:var(--line);margin:0 2px;}
+  .text .tx-bar .fsz{font-family:var(--mono);font-size:10.5px;color:var(--muted);min-width:30px;text-align:center;}
+  .text .tx-bar .dot{width:15px;height:15px;border-radius:50%;border:1px solid rgba(0,0,0,.25);cursor:pointer;padding:0;}
+  .text .tx-bar .dot.on{box-shadow:0 0 0 2px var(--accent);}
+  .tx-measure{position:absolute;visibility:hidden;left:-99999px;top:0;white-space:pre-wrap;
+    overflow-wrap:normal;word-break:normal;line-height:1.15;font-family:var(--sans);}
+
+  /* ---- background picker ---- */
+  .bgpop{position:fixed;z-index:1200;width:292px;background:#fff;border:1px solid var(--line);border-radius:12px;
+    box-shadow:0 12px 32px rgba(20,40,33,.22);padding:12px;}
+  .bgpop h4{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+  .bg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px;}
+  .bg-opt{border:1px solid var(--line);border-radius:8px;cursor:pointer;padding:0;background:none;
+    display:flex;flex-direction:column;overflow:hidden;font-size:10px;font-weight:600;color:var(--ink);}
+  .bg-opt .sw{height:38px;display:block;border-bottom:1px solid var(--line);}
+  .bg-opt span.n{padding:3px 2px;text-align:center;}
+  .bg-opt.on{border-color:var(--board);box-shadow:0 0 0 2px var(--board);}
+  .bg-row{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
+  .bg-row input[type=color]{width:38px;height:30px;border:1px solid var(--line);border-radius:7px;padding:2px;background:#fff;cursor:pointer;}
+  .bg-row .hint{font-size:11px;color:var(--muted);flex:1;}
+
+  /* background presets (applied to the surface; cork is the default above) */
+  .bgv.bg-chalk{background-color:#2c4a3e;background-image:
+      radial-gradient(ellipse at 30% 20%, rgba(255,255,255,.07), transparent 60%),
+      radial-gradient(ellipse at 75% 70%, rgba(255,255,255,.05), transparent 55%);
+    background-size:auto;background-position:0 0;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.4),inset 0 0 60px rgba(0,0,0,.35);}
+  .bgv.bg-black{background-color:#26292b;background-image:
+      radial-gradient(ellipse at 40% 30%, rgba(255,255,255,.06), transparent 60%);
+    background-size:auto;background-position:0 0;box-shadow:inset 0 0 60px rgba(0,0,0,.45);}
+  .bgv.bg-white{background-color:#f7f8f8;background-image:
+      linear-gradient(115deg, rgba(255,255,255,0) 30%, rgba(255,255,255,.9) 45%, rgba(255,255,255,0) 60%),
+      linear-gradient(#f3f5f5,#e8ecec);
+    background-size:auto;background-position:0 0;box-shadow:inset 0 0 0 1px #c9cfd1,inset 0 0 30px rgba(0,0,0,.08);}
+  .bgv.bg-grid{background-color:#fbfcfa;background-image:
+      linear-gradient(rgba(47,111,159,.16) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(47,111,159,.16) 1px, transparent 1px);
+    background-size:24px 24px;background-position:0 0;box-shadow:inset 0 0 0 1px #c9cfd1;}
+  .bgv.bg-felt,.bgv.bg-blue,.bgv.bg-red{background-image:
+      radial-gradient(rgba(0,0,0,.10) 15%, transparent 16%),
+      radial-gradient(rgba(255,255,255,.06) 12%, transparent 13%);
+    background-size:5px 5px, 7px 7px;background-position:0 0, 2px 3px;
+    box-shadow:inset 0 0 50px rgba(0,0,0,.30);}
+  .bgv.bg-felt{background-color:#3e7a4f;}
+  .bgv.bg-blue{background-color:#2f5d8a;}
+  .bgv.bg-red{background-color:#8c3b36;}
+  .bgv.bg-solid{background-image:none;box-shadow:inset 0 0 40px rgba(0,0,0,.12);}
+  .bgv.bg-image{background-color:#333;background-repeat:no-repeat;background-position:center;
+    background-size:cover;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3);}
+  .surface.light .emptyhint{color:var(--muted);text-shadow:none;}
+
   /* ---- empty hint ---- */
   .emptyhint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
     text-align:center;color:rgba(255,255,255,.85);text-shadow:0 1px 2px rgba(40,24,8,.5);
@@ -284,9 +425,9 @@
     .card.pop{animation:none;} .btn:active{transform:none;} *{scroll-behavior:auto;}
   }
   @media print{
-    .toolbar,.toast-wrap,.pin,.x,.swatches,.rs,.daypop{display:none !important;}
+    .toolbar,.toast-wrap,.pin,.x,.swatches,.rs,.daypop,.bgpop,.hov,.tx-bar{display:none !important;}
     body{overflow:visible;} .board-wrap{overflow:visible;background:#fff;padding:0;}
-    .surface{box-shadow:none;background:#fff;transform:none !important;}
+    .surface{box-shadow:none;background:#fff !important;transform:none !important;}
     .card{box-shadow:0 0 0 1px #ccc;}
   }
 </style>
@@ -294,13 +435,17 @@
 <body>
 <div class="app">
   <header class="toolbar">
-    <div class="brand"><span class="mark"></span>Class Board <small>corkboard · notes &amp; lists</small></div>
+    <div class="brand"><span class="mark"></span>Class Board <small>corkboard · class display</small></div>
     <div class="spacer"></div>
     <button class="btn" id="addNote"><span class="ic">📝</span><span class="lbl">Sticky note</span></button>
     <button class="btn" id="addList"><span class="ic">✓</span><span class="lbl">Checklist</span></button>
     <button class="btn" id="addCal"><span class="ic">📅</span><span class="lbl">Calendar</span></button>
     <button class="btn" id="addCount"><span class="ic">⏳</span><span class="lbl">Countdown</span></button>
     <button class="btn" id="addAgenda"><span class="ic">📋</span><span class="lbl">Agenda</span></button>
+    <button class="btn" id="addText" title="Text box — text grows to fill the box"><span class="ic">🔤</span><span class="lbl">Text</span></button>
+    <button class="btn" id="addClock" title="Clock — current time, analog or digital"><span class="ic">🕒</span><span class="lbl">Clock</span></button>
+    <button class="btn" id="addTimer" title="Countdown timer"><span class="ic">⏱</span><span class="lbl">Timer</span></button>
+    <button class="btn" id="addPicker" title="Random student picker"><span class="ic">🎲</span><span class="lbl">Picker</span></button>
     <div class="zoom" role="group" aria-label="Zoom">
       <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
       <button class="lvl" id="zoomLvl" title="Reset to 100%" aria-label="Reset zoom">100%</button>
@@ -308,18 +453,20 @@
       <button class="fit" id="fitBtn" title="Fit everything on screen" aria-label="Fit to screen">⤢</button>
       <button class="fs" id="fsBtn" title="Fullscreen" aria-label="Toggle fullscreen">⛶</button>
     </div>
+    <button class="btn small" id="bgBtn" title="Change the board background">Background</button>
     <button class="btn small" id="exportBtn" title="Download this board as a file">Export</button>
     <button class="btn small" id="importBtn" title="Load a board file">Import</button>
     <button class="btn small danger" id="clearBtn" title="Clear the whole board">Clear</button>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <input type="file" id="bgFile" accept="image/*" hidden>
   </header>
 
   <div class="board-wrap" id="boardWrap">
     <div class="board" id="board">
-      <div class="surface" id="surface">
+      <div class="surface bgv bg-cork" id="surface">
         <div class="emptyhint" id="emptyHint">
           <b>The board is empty.</b><br>
-          Add a sticky note, checklist, calendar, countdown or agenda — or double-click the cork.
+          Add a sticky note, checklist, text box, clock, timer or picker — or double-click the board.
         </div>
       </div>
     </div>
@@ -331,6 +478,20 @@
   <div class="dp-date"></div>
   <textarea placeholder="Note for this day…" aria-label="Day note" rows="3"></textarea>
   <div class="dp-hint">Esc / click away to save</div>
+</div>
+
+<!-- board background chooser -->
+<div id="bgPop" class="bgpop" style="display:none" role="dialog" aria-label="Board background">
+  <h4>Background</h4>
+  <div class="bg-grid" id="bgGrid"></div>
+  <div class="bg-row">
+    <input type="color" id="bgColor" value="#dfe6e9" aria-label="Solid colour">
+    <span class="hint">Any solid colour</span>
+  </div>
+  <div class="bg-row">
+    <button class="btn small" id="bgUpload" type="button">Upload image…</button>
+    <span class="hint">A photo or picture, saved in this browser</span>
+  </div>
 </div>
 
 <div class="toast-wrap" id="toastWrap"></div>
@@ -359,6 +520,12 @@
      school, using the hardcoded CBE 2026–27 calendar (holidays/breaks/PD
      days). A day that has begun no longer counts. Those closures are also
      shaded grey on the month calendar.
+   • Text boxes are frameless; text auto-fits the box as it's resized, or
+     switch to a fixed size (A−/A+). Clock = current time (analog/digital/
+     both). Timer = digital countdown with a chime. Picker = random student
+     from the shared Class Lists (teachingtools:rosters) or pasted names.
+   • Board background: preset (cork, chalkboard, whiteboard, felt…), a solid
+     colour, or an uploaded image (downscaled; stored under its own key).
    • State auto-saves to this browser (localStorage). No network, no
      accounts. Export/Import moves a board between machines as a file.
    ===================================================================== */
@@ -456,10 +623,15 @@ const SIZE = {
   cal:    { w:308, h:300, minW:252, minH:248 },
   count:  { w:226, h:188, minW:172, minH:132 },
   agenda: { w:248, h:300, minW:200, minH:150 },
+  text:   { w:340, h:110, minW:80,  minH:44  },
+  clock:  { w:220, h:250, minW:150, minH:160 },
+  timer:  { w:250, h:210, minW:190, minH:170 },
+  picker: { w:270, h:240, minW:200, minH:190 },
 };
 
 /* ---- state ---- */
-let state = { items:[], z:10, seq:1, zoom:1 };
+const DEFAULT_BG = { kind:'preset', id:'cork' };
+let state = { items:[], z:10, seq:1, zoom:1, bg:DEFAULT_BG };
 const els = new Map();           // id -> card element
 let saveTimer = null;
 let placeIx = 0;                 // cascade counter for new items
@@ -468,6 +640,8 @@ let placeIx = 0;                 // cascade counter for new items
 const countdownEls = new Set();  // {render} — refreshed across midnight
 const calEls       = new Set();  // {render} — re-render dots when notes change
 const agendaEls    = new Set();  // {render} — re-list when notes change
+const liveEls      = new Set();  // {render} — clocks + timers, ticked 4×/second
+const pickerEls    = new Set();  // {render} — re-read Class Lists when they change
 function refreshCalendars(){ calEls.forEach(c=>c.render()); }
 function refreshAgendas(){ agendaEls.forEach(a=>a.render()); }
 
@@ -512,7 +686,7 @@ function load(){
     try{
       const s = JSON.parse(raw);
       if(s && Array.isArray(s.items)){
-        state = Object.assign({items:[],z:10,seq:1,zoom:1}, s);
+        state = Object.assign({items:[],z:10,seq:1,zoom:1,bg:DEFAULT_BG}, s);
         state.zoom = clamp(state.zoom||1, ZOOM_MIN, ZOOM_MAX);
         return true;
       }
@@ -665,6 +839,21 @@ function addAgenda(){
   return item;
 }
 
+// Generic creator for the newer card types.
+function addItem(type, extra){
+  const pos = nextPos(), d = SIZE[type];
+  const item = Object.assign({ id:uid(), type, x:pos.x, y:pos.y, w:d.w, h:d.h,
+    rot:rand(-2,2), z:++state.z, pin:pickPin() }, extra);
+  state.items.push(item);
+  mountCard(item, true);
+  updateEmpty(); fitBoard(); save();
+  return item;
+}
+const addText   = ()=> addItem('text',   { rot:0, text:'', fit:true, fs:40, color:'#16241f', back:'white', bold:true, align:'left' });
+const addClock  = ()=> addItem('clock',  { face:'analog' });
+const addTimer  = ()=> addItem('timer',  { title:'Timer', dur:300, left:300, endAt:null, running:false });
+const addPicker = ()=> addItem('picker', { title:'Random picker', src:defaultRosterName(), names:[], noRepeat:true, picked:[], last:'' });
+
 function removeItem(item){
   const el = els.get(item.id);
   if(el) el.remove();
@@ -679,7 +868,7 @@ function removeItem(item){
 /* ---------------- card scaffolding ---------------- */
 function mountCard(item, animate){
   const el = document.createElement('div');
-  el.className = 'card ' + (item.type==='note' ? 'note' : 'paper ' + item.type);
+  el.className = 'card ' + (item.type==='note' ? 'note' : item.type==='text' ? 'text' : 'paper ' + item.type);
   if(animate) el.classList.add('pop');
   el.dataset.id = item.id;
   el.style.left = item.x + 'px';
@@ -714,6 +903,10 @@ function mountCard(item, animate){
   else if(item.type==='cal')    buildCal(item, inner);
   else if(item.type==='count')  buildCount(item, inner);
   else if(item.type==='agenda') buildAgenda(item, inner);
+  else if(item.type==='text')   buildText(item, inner, el);
+  else if(item.type==='clock')  buildClock(item, inner, el);
+  else if(item.type==='timer')  buildTimer(item, inner, el);
+  else if(item.type==='picker') buildPicker(item, inner);
 
   // resize grip (bottom-right corner)
   const rs = document.createElement('div');
@@ -1060,6 +1253,583 @@ function buildCount(item, inner){
   item._reg = { set: countdownEls, entry };
 }
 
+/* ---------------- shared helpers for the newer cards ---------------- */
+const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+function mk(tag, cls, txt){
+  const e = document.createElement(tag);
+  if(cls) e.className = cls;
+  if(txt != null) e.textContent = txt;
+  return e;
+}
+function miniBtn(label, title, cls){
+  const b = mk('button', 'mini' + (cls ? ' '+cls : ''), label);
+  b.type = 'button';
+  if(title){ b.title = title; b.setAttribute('aria-label', title); }
+  return b;
+}
+function titleInput(item, ph){
+  const t = mk('input', 'title');
+  t.value = item.title || ''; t.placeholder = ph; t.setAttribute('aria-label', ph + ' title');
+  t.addEventListener('input', ()=>{ item.title = t.value; save(); });
+  return t;
+}
+
+// Largest font size (px) at which `text` fits a w×h box without overflowing
+// either way. Words are never broken, so a long word caps the size.
+const measurer = mk('div', 'tx-measure');
+document.body.appendChild(measurer);
+function fitFont(text, w, h, weight, max){
+  if(w < 4 || h < 4) return 8;
+  measurer.style.width = w + 'px';
+  measurer.style.fontWeight = weight;
+  measurer.textContent = (text || ' ') + '​';   // keeps a trailing blank line
+  let lo = 8, hi = Math.max(9, Math.min(max || 600, h + 1));
+  while(hi - lo > 1){
+    const mid = (lo + hi) >> 1;
+    measurer.style.fontSize = mid + 'px';
+    if(measurer.scrollHeight <= h && measurer.scrollWidth <= w) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+
+/* ---------------- text box (frameless, auto-fit or fixed size) ---------------- */
+const TEXT_COLORS = ['#16241f','#ffffff','#c43d35','#2f6f9f','#3f9e6b','#e0982e','#7a52c0'];
+function buildText(item, inner, el){
+  const ta = mk('textarea', 'tx-area');
+  ta.value = item.text || '';
+  ta.placeholder = 'Type here…';
+  ta.setAttribute('aria-label', 'Text box');
+  inner.appendChild(ta);
+
+  const bar = mk('div', 'tx-bar');
+  const bFit = miniBtn('Auto-fit', 'Text grows and shrinks to fill the box');
+  const bDn  = miniBtn('A−', 'Smaller text');
+  const fsz  = mk('span', 'fsz');
+  const bUp  = miniBtn('A+', 'Larger text');
+  const bB   = miniBtn('B', 'Bold');
+  const bAl  = miniBtn('', 'Alignment');
+  const bBk  = miniBtn('', 'Backing');
+  bar.append(bFit, bDn, fsz, bUp, mk('span','sep'), bB, bAl, bBk, mk('span','sep'));
+  const dots = TEXT_COLORS.map(c=>{
+    const d = mk('button', 'dot'); d.type = 'button'; d.style.background = c;
+    d.setAttribute('aria-label', 'Text colour');
+    d.addEventListener('click', ()=>{ item.color = c; paint(); save(); });
+    bar.appendChild(d); return d;
+  });
+  inner.appendChild(bar);
+
+  const ALIGNS = { left:'⇤', center:'↔', right:'⇥' }, BACKS = { none:'Clear', white:'White', dark:'Dark' };
+  function size(){
+    if(item.fit){
+      item.fs = fitFont(ta.value || ta.placeholder, ta.clientWidth, ta.clientHeight, item.bold ? 800 : 400);
+    }
+    ta.style.fontSize = item.fs + 'px';
+    ta.style.overflowY = item.fit ? 'hidden' : 'auto';
+    fsz.textContent = item.fs + 'px';
+  }
+  function paint(){
+    el.classList.toggle('bold', !!item.bold);
+    el.classList.remove('al-left','al-center','al-right','back-none','back-white','back-dark');
+    el.classList.add('al-' + item.align, 'back-' + item.back);
+    el.style.setProperty('--tc', item.color);
+    bFit.classList.toggle('on', !!item.fit);
+    bB.classList.toggle('on', !!item.bold);
+    bAl.textContent = ALIGNS[item.align]; bBk.textContent = BACKS[item.back];
+    dots.forEach((d,i)=> d.classList.toggle('on', TEXT_COLORS[i] === item.color));
+    size();
+  }
+  // A−/A+ switch to a fixed size starting from whatever auto-fit chose.
+  const step = f => { item.fit = false; item.fs = clamp(Math.round(item.fs * f), 8, 600); paint(); save(); };
+  bDn.addEventListener('click', ()=> step(1/1.15));
+  bUp.addEventListener('click', ()=> step(1.15));
+  bFit.addEventListener('click', ()=>{ item.fit = !item.fit; paint(); save(); });
+  bB.addEventListener('click', ()=>{ item.bold = !item.bold; paint(); save(); });
+  bAl.addEventListener('click', ()=>{ const k = Object.keys(ALIGNS); item.align = k[(k.indexOf(item.align)+1)%k.length]; paint(); save(); });
+  bBk.addEventListener('click', ()=>{ const k = Object.keys(BACKS); item.back = k[(k.indexOf(item.back)+1)%k.length]; paint(); save(); });
+  ta.addEventListener('input', ()=>{ item.text = ta.value; size(); save(); });
+  ta.addEventListener('keydown', e=>{ if(e.key === 'Escape') ta.blur(); });
+  // refit whenever the box changes size (corner drag, mount, fullscreen…)
+  if(window.ResizeObserver) new ResizeObserver(()=> size()).observe(ta);
+  paint();
+}
+
+/* ---------------- clock (current time) ---------------- */
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs){
+  const e = document.createElementNS(SVGNS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function clockFace(){
+  const svg = svgEl('svg', { viewBox:'0 0 200 200', 'aria-hidden':'true' });
+  svg.appendChild(svgEl('circle', { cx:100, cy:100, r:96, fill:'#fff', stroke:'#1f3d35', 'stroke-width':5 }));
+  for(let i=0;i<60;i++){
+    const hour = i % 5 === 0;
+    svg.appendChild(svgEl('line', { x1:100, y1:hour?10:9, x2:100, y2:hour?22:15,
+      stroke:hour?'#16241f':'#8a958f', 'stroke-width':hour?3.4:1.4, 'stroke-linecap':'round',
+      transform:'rotate(' + i*6 + ' 100 100)' }));
+  }
+  for(let n=1;n<=12;n++){
+    const a = n * Math.PI / 6;
+    const t = svgEl('text', { x:100 + 64*Math.sin(a), y:100 - 64*Math.cos(a) + 6.5, 'text-anchor':'middle',
+      'font-size':19, 'font-weight':700, fill:'#16241f', 'font-family':'ui-sans-serif, system-ui, sans-serif' });
+    t.textContent = n; svg.appendChild(t);
+  }
+  const hand = (len, w, col, tail) => svgEl('line', { x1:100, y1:100 + tail, x2:100, y2:100 - len,
+    stroke:col, 'stroke-width':w, 'stroke-linecap':'round' });
+  const h = hand(46, 7, '#16241f', 10), m = hand(70, 4.5, '#16241f', 12), s = hand(78, 2, '#c43d35', 18);
+  svg.append(h, m, s, svgEl('circle', { cx:100, cy:100, r:5, fill:'#c43d35' }));
+  return { svg, h, m, s };
+}
+function buildClock(item, inner, el){
+  const body = mk('div', 'cl-body');
+  const faceBox = mk('div', 'cl-face');
+  const face = clockFace(); faceBox.appendChild(face.svg);
+  const dig = mk('div', 'cl-dig');
+  const date = mk('div', 'cl-date');
+  body.append(faceBox, dig, date);
+  inner.appendChild(body);
+
+  const foot = mk('div', 'cl-foot hov');
+  const seg = mk('div', 'seg');
+  const FACES = { analog:'Analog', digital:'Digital', both:'Both' };
+  const segBtns = {};
+  for(const k in FACES){
+    const b = mk('button', null, FACES[k]); b.type = 'button';
+    b.addEventListener('click', ()=>{ item.face = k; layout(); render(); save(); });
+    seg.appendChild(b); segBtns[k] = b;
+  }
+  foot.appendChild(seg); inner.appendChild(foot);
+
+  const tf = new Intl.DateTimeFormat(undefined, { hour:'numeric', minute:'2-digit' });
+  const hm = tf;
+  const df = new Intl.DateTimeFormat(undefined, { weekday:'long', month:'long', day:'numeric' });
+  function layout(){
+    faceBox.style.display = item.face === 'digital' ? 'none' : '';
+    dig.style.display = item.face === 'analog' ? 'none' : '';
+    el.classList.toggle('both', item.face === 'both');
+    for(const k in segBtns) segBtns[k].classList.toggle('active', item.face === k);
+  }
+  let lastSec = -1;
+  function render(){
+    const now = new Date(), sec = now.getSeconds();
+    if(sec === lastSec) return;
+    lastSec = sec;
+    const hr = now.getHours() % 12, mi = now.getMinutes();
+    face.h.setAttribute('transform', 'rotate(' + (hr*30 + mi*0.5) + ' 100 100)');
+    face.m.setAttribute('transform', 'rotate(' + (mi*6 + sec*0.1) + ' 100 100)');
+    face.s.setAttribute('transform', 'rotate(' + sec*6 + ' 100 100)');
+    // digital: "10:42" + small ":07" + small "AM" (when the locale uses one)
+    let main = '', ap = '';
+    hm.formatToParts(now).forEach(p=>{ if(p.type === 'dayPeriod') ap = p.value; else main += p.value; });
+    main = main.trim();
+    const secs = String(sec).padStart(2, '0');
+    dig.innerHTML = '';
+    dig.append(main, mk('span', 'sec', ':' + secs));
+    if(ap) dig.appendChild(mk('span', 'ap', ap));
+    date.textContent = df.format(now);
+    el.setAttribute('aria-label', 'Clock: ' + tf.format(now));
+  }
+  layout(); render();
+  const entry = { render };
+  liveEls.add(entry);
+  item._reg = { set: liveEls, entry };
+}
+
+/* ---------------- countdown timer (digital) ---------------- */
+let audioCtx = null;
+function audio(){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+  }catch(e){ audioCtx = null; }
+  return audioCtx;
+}
+// Three soft bell tones — synthesized, so it works offline.
+function chime(){
+  const ac = audio(); if(!ac) return;
+  const t0 = ac.currentTime + 0.02;
+  [0, 0.45, 0.9].forEach((dt, i)=>{
+    [880, 1320].forEach((f, j)=>{
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = f * (i === 2 ? 1.122 : 1);
+      g.gain.setValueAtTime(0.0001, t0 + dt);
+      g.gain.exponentialRampToValueAtTime(j ? 0.08 : 0.25, t0 + dt + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 1.1);
+      o.connect(g).connect(ac.destination);
+      o.start(t0 + dt); o.stop(t0 + dt + 1.2);
+    });
+  });
+}
+function fmtDur(sec){
+  sec = Math.max(0, Math.ceil(sec));
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec % 60;
+  const p = n => String(n).padStart(2, '0');
+  return h ? h + ':' + p(m) + ':' + p(s) : p(m) + ':' + p(s);
+}
+// "5" = 5 min, "1:30" = 1 min 30 s, "1:00:00" = 1 hour.
+function parseDur(str){
+  const parts = String(str).trim().split(/[:.\s]+/).filter(Boolean).map(Number);
+  if(!parts.length || parts.some(n => !isFinite(n) || n < 0)) return null;
+  let sec;
+  if(parts.length === 1) sec = parts[0] * 60;
+  else if(parts.length === 2) sec = parts[0]*60 + parts[1];
+  else sec = parts[0]*3600 + parts[1]*60 + parts[2];
+  sec = Math.round(sec);
+  return sec > 0 ? Math.min(sec, 24*3600 - 1) : null;
+}
+const TIMER_PRESETS = [1, 2, 3, 5, 10, 15, 20, 30];
+function buildTimer(item, inner, el){
+  const head = mk('div', 'head');
+  head.appendChild(titleInput(item, 'Timer'));
+  inner.appendChild(head);
+
+  const body = mk('div', 'tm-body');
+  const dig = mk('button', 'tm-dig'); dig.type = 'button';
+  dig.title = 'Click to type a time (e.g. 5 or 2:30)';
+  body.appendChild(dig);
+  inner.appendChild(body);
+
+  const barBox = mk('div', 'tm-bar'), bar = mk('i');
+  barBox.appendChild(bar); inner.appendChild(barBox);
+
+  const ctl = mk('div', 'tm-ctl');
+  const bMinus = miniBtn('−1m', 'One minute less');
+  const bGo = miniBtn('Start', 'Start / pause', 'go');
+  const bReset = miniBtn('Reset', 'Reset to the starting time');
+  const bPlus = miniBtn('+1m', 'One minute more');
+  ctl.append(bMinus, bGo, bReset, bPlus);
+  inner.appendChild(ctl);
+
+  const pre = mk('div', 'tm-pre hov');
+  TIMER_PRESETS.forEach(m=>{
+    const b = miniBtn(m + 'm', 'Set ' + m + ' minute' + (m===1?'':'s'));
+    b.addEventListener('click', ()=> setDur(m * 60));
+    pre.appendChild(b);
+  });
+  inner.appendChild(pre);
+
+  const remaining = () => item.running ? Math.max(0, (item.endAt - Date.now()) / 1000) : (item.left ?? item.dur);
+  function setDur(sec){
+    item.dur = item.left = sec; item.running = false; item.endAt = null;
+    el.classList.remove('done'); render(); save();
+  }
+  function start(){
+    audio();                                          // unlock sound on this click
+    if(remaining() <= 0) item.left = item.dur;
+    item.endAt = Date.now() + item.left * 1000; item.running = true;
+    el.classList.remove('done'); render(); save();
+  }
+  function pause(){ item.left = remaining(); item.running = false; item.endAt = null; render(); save(); }
+  function nudge(sec){
+    if(item.running){
+      item.endAt = Math.max(Date.now() + 1000, item.endAt + sec * 1000);
+      if(sec > 0) item.dur += sec;
+    }else{
+      const atStart = item.left === item.dur || remaining() <= 0;
+      const v = clamp(Math.round(remaining()) + sec, 0, 24*3600 - 1);
+      if(v <= 0) return;
+      item.left = v; if(atStart || v > item.dur) item.dur = v;
+    }
+    el.classList.remove('done'); render(); save();
+  }
+  bGo.addEventListener('click', ()=> item.running ? pause() : start());
+  bReset.addEventListener('click', ()=> setDur(item.dur));
+  bMinus.addEventListener('click', ()=> nudge(-60));
+  bPlus.addEventListener('click', ()=> nudge(60));
+
+  // click the digits (while stopped) to type a time
+  dig.addEventListener('click', ()=>{
+    if(item.running) return;
+    const inp = mk('input', 'tm-edit');
+    inp.value = fmtDur(remaining() || item.dur);
+    inp.setAttribute('aria-label', 'Timer length, minutes or m:ss');
+    dig.replaceWith(inp); inp.focus(); inp.select();
+    let done = false;
+    const finish = ok => {
+      if(done) return; done = true;
+      const v = ok ? parseDur(inp.value) : null;
+      inp.replaceWith(dig);
+      if(v) setDur(v); else render();
+      if(ok && !v) toast('Type minutes (5), m:ss (2:30) or h:mm:ss.', 'err');
+    };
+    inp.addEventListener('keydown', e=>{
+      if(e.key === 'Enter'){ e.preventDefault(); finish(true); }
+      else if(e.key === 'Escape'){ e.preventDefault(); finish(false); }
+    });
+    inp.addEventListener('blur', ()=> finish(true));
+  });
+
+  let shown = '';
+  function render(){
+    if(item.running && Date.now() >= item.endAt){
+      const late = Date.now() - item.endAt;
+      item.running = false; item.left = 0; item.endAt = null;
+      el.classList.remove('done'); void el.offsetWidth; el.classList.add('done');
+      if(late < 5000) chime();               // don't ring for one that ended while the board was closed
+      save();
+    }
+    const rem = remaining();
+    const txt = fmtDur(rem);
+    if(txt !== shown){ shown = txt; dig.textContent = txt; }
+    bGo.textContent = item.running ? 'Pause' : (rem > 0 && rem < item.dur ? 'Resume' : 'Start');
+    bar.style.width = (item.dur ? clamp(rem / item.dur, 0, 1) * 100 : 0) + '%';
+    el.classList.toggle('running', !!item.running);
+    el.classList.toggle('low', rem > 0 && rem <= Math.min(60, item.dur * 0.2));
+    if(rem <= 0) el.classList.add('done');
+    dig.setAttribute('aria-label', txt + ' remaining' + (item.running ? '' : ', click to change'));
+  }
+  if(!item.running && remaining() <= 0) el.classList.add('done');
+  render();
+  const entry = { render };
+  liveEls.add(entry);
+  item._reg = { set: liveEls, entry };
+}
+
+/* ---------------- random student picker ---------------- */
+// Shared Class Lists, written by the home page / Seating Chart.
+const ROSTER_LS = 'teachingtools:rosters';
+function readRosters(){
+  try{
+    const d = JSON.parse(localStorage.getItem(ROSTER_LS) || 'null');
+    if(d && Array.isArray(d.classes)) return d.classes.filter(c => c && c.name && Array.isArray(c.students));
+  }catch(e){}
+  return [];
+}
+function defaultRosterName(){ const r = readRosters(); return r.length ? r[0].name : ''; }
+function buildPicker(item, inner){
+  const head = mk('div', 'head');
+  const src = mk('select', 'pk-src');
+  src.setAttribute('aria-label', 'Names from');
+  head.append(titleInput(item, 'Random picker'), src);
+  inner.appendChild(head);
+
+  const stage = mk('div', 'pk-stage');
+  const name = mk('div', 'pk-name');
+  stage.appendChild(name);
+  const names = mk('textarea', 'pk-names');
+  names.placeholder = 'One name per line (or separated by commas)';
+  names.setAttribute('aria-label', 'Names to pick from');
+  const help = mk('p', 'pk-help', 'Tip: save classes once in Class Lists on the Teaching Tools home page and every tool can use them.');
+  inner.append(stage, names, help);
+
+  const ctl = mk('div', 'pk-ctl');
+  const bGo = miniBtn('🎲 Pick a name', 'Pick a random name', 'go pk-go');
+  const bEdit = miniBtn('✎', 'Edit names');
+  ctl.append(bGo, bEdit);
+  inner.appendChild(ctl);
+
+  const meta = mk('div', 'pk-meta');
+  const lab = mk('label'); const nr = mk('input'); nr.type = 'checkbox';
+  lab.append(nr, 'No repeats');
+  lab.title = 'Everyone gets a turn before anyone is picked twice';
+  const left = mk('span', 'left');
+  const bReset = miniBtn('↺', 'Put everyone back in');
+  meta.append(lab, left, bReset);
+  inner.appendChild(meta);
+
+  let editing = false, spinning = false;
+  const pool = () => {
+    if(item.src){
+      const c = readRosters().find(c => c.name === item.src);
+      if(c) return [...new Set(c.students.map(s => String(s).trim()).filter(Boolean))];
+    }
+    return [...new Set((item.names || []).map(s => String(s).trim()).filter(Boolean))];
+  };
+  const avail = () => { const all = pool(), p = new Set(item.picked); return item.noRepeat ? all.filter(n => !p.has(n)) : all; };
+
+  function fillSources(){
+    const r = readRosters();
+    src.innerHTML = '';
+    r.forEach(c=>{ const o = mk('option', null, c.name + ' (' + c.students.length + ')'); o.value = c.name; src.appendChild(o); });
+    const o = mk('option', null, 'My own list…'); o.value = ''; src.appendChild(o);
+    // a class that has since been removed from Class Lists: fall back to own list
+    if(item.src && !r.some(c => c.name === item.src)) item.src = '';
+    src.value = item.src || '';
+  }
+  function show(txt, cls){
+    name.className = 'pk-name' + (cls ? ' ' + cls : '');
+    name.textContent = txt;
+    fitName();
+  }
+  function fitName(){
+    if(name.classList.contains('idle')){ name.style.fontSize = ''; return; }
+    name.style.fontSize = fitFont(name.textContent, stage.clientWidth - 6, stage.clientHeight - 6, 800, 150) + 'px';
+  }
+  function render(){
+    fillSources();
+    const all = pool();
+    const showEdit = editing || (!item.src && !all.length);
+    stage.style.display = showEdit ? 'none' : '';
+    names.style.display = help.style.display = showEdit ? '' : 'none';
+    help.style.display = showEdit && !readRosters().length ? '' : 'none';
+    if(showEdit) names.value = (item.names || []).join('\n');
+    bEdit.style.display = item.src ? 'none' : '';
+    bEdit.classList.toggle('on', editing);
+    nr.checked = !!item.noRepeat;
+    bReset.style.display = item.noRepeat ? '' : 'none';
+    left.textContent = item.noRepeat ? avail().length + ' of ' + all.length + ' left' : all.length + ' names';
+    bGo.disabled = !all.length || spinning;
+    if(!showEdit && !spinning){
+      if(item.last && all.includes(item.last)) show(item.last);
+      else show(all.length ? 'Press Pick to choose a student' : 'No names yet', 'idle');
+    }
+  }
+  function pick(){
+    if(spinning) return;
+    if(editing){ editing = false; }
+    let cand = avail();
+    if(!cand.length){
+      item.picked = []; cand = pool();
+      if(!cand.length) return;
+      toast('Everyone has had a turn — starting again.');
+    }
+    const chosen = cand[Math.floor(Math.random() * cand.length)];
+    const finish = () => {
+      spinning = false;
+      item.last = chosen;
+      if(item.noRepeat && !item.picked.includes(chosen)) item.picked.push(chosen);
+      render(); name.classList.add('land'); save();
+    };
+    stage.style.display = ''; names.style.display = help.style.display = 'none';
+    if(REDUCED || cand.length < 2){ finish(); return; }
+    // flick through names, slowing down, then land on the chosen one
+    spinning = true; bGo.disabled = true;
+    const all = pool();
+    let delay = 45, prev = '';
+    const step = () => {
+      if(delay > 260){ finish(); return; }
+      let n; do{ n = all[Math.floor(Math.random() * all.length)]; }while(all.length > 1 && n === prev);
+      prev = n; show(n, 'spin');
+      delay *= 1.14;
+      setTimeout(step, delay);
+    };
+    step();
+  }
+  bGo.addEventListener('click', pick);
+  bEdit.addEventListener('click', ()=>{ editing = !editing; render(); if(editing) names.focus(); });
+  names.addEventListener('input', ()=>{
+    item.names = names.value.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+    const all = new Set(item.names);
+    item.picked = item.picked.filter(n => all.has(n));
+    left.textContent = item.noRepeat ? avail().length + ' of ' + pool().length + ' left' : pool().length + ' names';
+    bGo.disabled = !pool().length;
+    save();
+  });
+  src.addEventListener('mousedown', fillSources);        // pick up classes added in another tab
+  src.addEventListener('change', ()=>{
+    item.src = src.value; item.picked = []; item.last = '';
+    editing = !item.src && !pool().length;
+    render(); save();
+    if(editing) names.focus();
+  });
+  nr.addEventListener('change', ()=>{ item.noRepeat = nr.checked; if(!nr.checked) item.picked = []; render(); save(); });
+  bReset.addEventListener('click', ()=>{ item.picked = []; item.last = ''; render(); save(); toast('Everyone is back in.'); });
+  if(window.ResizeObserver) new ResizeObserver(()=> fitName()).observe(stage);
+  render();
+  const entry = { render: ()=>{ if(!spinning && !editing) render(); } };
+  pickerEls.add(entry);
+  item._reg = { set: pickerEls, entry };
+}
+// another tab (home page / Seating Chart) changed Class Lists
+window.addEventListener('storage', e=>{ if(e.key === ROSTER_LS) pickerEls.forEach(p => p.render()); });
+
+/* ---------------- board background ---------------- */
+const BG_IMG_KEY = STORE_KEY + '.bgimage';
+const BG_PRESETS = [
+  { id:'cork',  name:'Cork' },
+  { id:'chalk', name:'Chalkboard' },
+  { id:'black', name:'Blackboard' },
+  { id:'white', name:'Whiteboard', light:true },
+  { id:'grid',  name:'Grid paper', light:true },
+  { id:'felt',  name:'Green felt' },
+  { id:'blue',  name:'Blue felt' },
+  { id:'red',   name:'Red felt' },
+];
+let bgImage = null;                    // data: URL of an uploaded background
+try{ bgImage = localStorage.getItem(BG_IMG_KEY); }catch(e){}
+
+function isLightColor(hex){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if(!m) return false;
+  const n = parseInt(m[1], 16), r = n >> 16, g = n >> 8 & 255, b = n & 255;
+  return (0.299*r + 0.587*g + 0.114*b) / 255 > 0.62;
+}
+function applyBg(){
+  const bg = state.bg || DEFAULT_BG;
+  surface.style.backgroundColor = ''; surface.style.backgroundImage = '';
+  let cls = 'bg-cork', light = false;
+  if(bg.kind === 'color'){ cls = 'bg-solid'; surface.style.backgroundColor = bg.color; light = isLightColor(bg.color); }
+  else if(bg.kind === 'image' && bgImage){ cls = 'bg-image'; surface.style.backgroundImage = 'url("' + bgImage + '")'; }
+  else if(bg.kind === 'preset'){
+    const p = BG_PRESETS.find(p => p.id === bg.id) || BG_PRESETS[0];
+    cls = 'bg-' + p.id; light = !!p.light;
+  }
+  surface.className = 'surface bgv ' + cls + (light ? ' light' : '');
+  renderBgGrid();
+}
+function setBg(bg){ state.bg = bg; applyBg(); save(); }
+function renderBgGrid(){
+  const grid = $('bgGrid'); grid.innerHTML = '';
+  const bg = state.bg || DEFAULT_BG;
+  BG_PRESETS.forEach(p=>{
+    const b = mk('button', 'bg-opt' + (bg.kind === 'preset' && bg.id === p.id ? ' on' : ''));
+    b.type = 'button';
+    b.append(mk('span', 'sw bgv bg-' + p.id), mk('span', 'n', p.name));
+    b.addEventListener('click', ()=> setBg({ kind:'preset', id:p.id }));
+    grid.appendChild(b);
+  });
+  if(bgImage){
+    const b = mk('button', 'bg-opt' + (bg.kind === 'image' ? ' on' : ''));
+    b.type = 'button';
+    const sw = mk('span', 'sw'); sw.style.background = 'center/cover url("' + bgImage + '")';
+    b.append(sw, mk('span', 'n', 'My image'));
+    b.addEventListener('click', ()=> setBg({ kind:'image' }));
+    grid.appendChild(b);
+  }
+  if(bg.kind === 'color') $('bgColor').value = bg.color;
+}
+// Downscale an uploaded picture so it fits comfortably in browser storage.
+function loadBgFile(file){
+  if(!file || !/^image\//.test(file.type)){ toast('That isn’t an image file.', 'err'); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = ()=>{
+    URL.revokeObjectURL(url);
+    let stored = false, data = null;
+    for(const [max, q] of [[2200, .85], [1600, .78], [1100, .7]]){
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);    // flatten transparency
+      g.drawImage(img, 0, 0, c.width, c.height);
+      data = c.toDataURL('image/jpeg', q);
+      try{ localStorage.setItem(BG_IMG_KEY, data); stored = true; break; }catch(e){}
+    }
+    bgImage = data;
+    setBg({ kind:'image' });
+    toast(stored ? 'Background set.' : 'Background set for now — the browser had no room to save it.', stored ? 'ok' : 'err');
+  };
+  img.onerror = ()=>{ URL.revokeObjectURL(url); toast('Couldn’t open that image.', 'err'); };
+  img.src = url;
+}
+function openBgPop(){
+  const pop = $('bgPop');
+  if(pop.style.display !== 'none'){ closeBgPop(); return; }
+  renderBgGrid();
+  pop.style.display = 'block';
+  const r = $('bgBtn').getBoundingClientRect();
+  pop.style.left = clamp(r.right - pop.offsetWidth, 8, window.innerWidth - pop.offsetWidth - 8) + 'px';
+  pop.style.top = (r.bottom + 6) + 'px';
+  setTimeout(()=> document.addEventListener('pointerdown', bgOutside, true), 0);
+}
+function bgOutside(e){ if(!e.target.closest('#bgPop') && !e.target.closest('#bgBtn')) closeBgPop(); }
+function closeBgPop(){
+  $('bgPop').style.display = 'none';
+  document.removeEventListener('pointerdown', bgOutside, true);
+}
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && $('bgPop').style.display !== 'none') closeBgPop(); });
+
 /* ---------------- dragging ---------------- */
 function attachDrag(item, el, pin){
   let downX=0,downY=0,offX=0,offY=0,moved=false,dragging=false;
@@ -1096,7 +1866,7 @@ function attachDrag(item, el, pin){
     if(t.closest('.x') || t.closest('.rs')) return;               // delete / resize handle themselves
     // Edit controls handle their own pointer events; the pin (and bare
     // paper chrome) start a drag.
-    if(t.closest('input,textarea,select,.swatch,.cal-day,.cal-nav,.mtitle,.add,.rm,.seg') && !t.closest('.pin')) return;
+    if(t.closest('input,textarea,select,label,button:not(.pin),.swatch,.cal-day,.cal-nav,.mtitle,.add,.rm,.seg,.tx-bar') && !t.closest('.pin')) return;
 
     bringToFront(item, el);
     moved=false; dragging=true; zoomAtDown = state.zoom||1;
@@ -1190,7 +1960,9 @@ function attachResize(item, el, handle){
 /* ---------------- import / export / clear ---------------- */
 function exportBoard(){
   if(!state.items.length){ toast('The board is empty — nothing to export.','err'); return; }
-  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const out = Object.assign({}, state);
+  if(state.bg && state.bg.kind==='image' && bgImage) out.bgImage = bgImage;
+  const blob = new Blob([JSON.stringify(out,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href=url; a.download='class-board.json'; a.click();
@@ -1203,7 +1975,12 @@ function importBoard(file){
     try{
       const s = JSON.parse(reader.result);
       if(!s || !Array.isArray(s.items)) throw new Error('not a board file');
-      state = Object.assign({items:[],z:10,seq:1}, s);
+      if(typeof s.bgImage === 'string' && /^data:image\//.test(s.bgImage)){
+        bgImage = s.bgImage;
+        try{ localStorage.setItem(BG_IMG_KEY, bgImage); }catch(e){}
+      }
+      delete s.bgImage;
+      state = Object.assign({items:[],z:10,seq:1,bg:DEFAULT_BG}, s);
       renderAll();
       save();
       toast('Loaded ' + state.items.length + ' item' + (state.items.length===1?'':'s') + '.','ok');
@@ -1223,7 +2000,7 @@ function clearBoard(){
 function renderAll(){
   els.forEach(el=>el.remove());
   els.clear();
-  countdownEls.clear(); calEls.clear(); agendaEls.clear();
+  countdownEls.clear(); calEls.clear(); agendaEls.clear(); liveEls.clear(); pickerEls.clear();
   // keep the z counter ahead of any restored item
   state.z = Math.max(10, ...state.items.map(i=>i.z||0));
   state.zoom = clamp(state.zoom||1, ZOOM_MIN, ZOOM_MAX);
@@ -1243,6 +2020,7 @@ function renderAll(){
     mountCard(item, false);
   });
   applyZoom();
+  applyBg();
   fitBoard();
   refreshAgendas();
   updateEmpty();
@@ -1277,6 +2055,14 @@ $('addList').addEventListener('click', ()=> addList());
 $('addCal').addEventListener('click', ()=> addCal());
 $('addCount').addEventListener('click', ()=> addCount());
 $('addAgenda').addEventListener('click', ()=> addAgenda());
+$('addText').addEventListener('click', ()=> addText());
+$('addClock').addEventListener('click', ()=> addClock());
+$('addTimer').addEventListener('click', ()=> addTimer());
+$('addPicker').addEventListener('click', ()=> addPicker());
+$('bgBtn').addEventListener('click', openBgPop);
+$('bgColor').addEventListener('input', e=> setBg({ kind:'color', color:e.target.value }));
+$('bgUpload').addEventListener('click', ()=> $('bgFile').click());
+$('bgFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) loadBgFile(f); e.target.value=''; closeBgPop(); });
 $('exportBtn').addEventListener('click', exportBoard);
 $('importBtn').addEventListener('click', ()=> $('importFile').click());
 $('importFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importBoard(f); e.target.value=''; });
@@ -1301,11 +2087,14 @@ surface.addEventListener('dblclick', e=>{
 /* ---------------- boot ---------------- */
 if(load()){ renderAll(); }
 else { seed(); }
+applyBg();
 applyZoom();
 fitBoard();
 
 // keep day countdowns current if the board is left open across midnight
 setInterval(()=>{ countdownEls.forEach(c=>c.render()); }, 60000);
+// clocks + timers
+setInterval(()=>{ liveEls.forEach(c=>c.render()); }, 250);
 </script>
 </body>
 </html>
