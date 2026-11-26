@@ -71,6 +71,7 @@
   .seg button{flex:1;border:none;background:#fff;padding:6px 4px;cursor:pointer;font-size:12.5px;
     font-weight:600;color:var(--muted);}
   .seg button.active{background:var(--board);color:#fff;}
+  #sidesSeg{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);}
 
   .drop{display:block;border:1px dashed var(--line);border-radius:10px;padding:16px;
     background:var(--panel-2);color:var(--muted);font-size:12.5px;line-height:1.55;
@@ -244,6 +245,7 @@
           <button data-v="1">1 · 1-sided</button>
           <button data-v="2" class="active">2 · 2-sided</button>
           <button data-v="4">4 · 2 per side</button>
+          <button data-v="half">½ · Half sheets</button>
         </div>
         <p class="hint" id="sidesHint"></p>
         <div id="paperRow" hidden style="margin-top:10px;">
@@ -252,6 +254,14 @@
             <button data-v="letter" class="active">Letter</button>
             <button data-v="a4">A4</button>
           </div>
+        </div>
+        <div id="flipRow" hidden style="margin-top:10px;">
+          <span class="field-label">Two-sided printing</span>
+          <div class="seg" id="flipSeg">
+            <button data-v="long" class="active">Long edge</button>
+            <button data-v="short">Short edge</button>
+          </div>
+          <p class="hint">Match the “Two-sided” option in your print dialog (long edge is the usual default). Each cut half is meant to be turned over like a book page, so its back can look upside down in the preview: that is on purpose. If a printed back still comes out upside down, switch this.</p>
         </div>
         <div class="summary" style="margin-top:12px;">
           <div class="stat"><b id="sStudents">0</b><span>Students</span></div>
@@ -338,36 +348,47 @@
 
   const COLORS = ['#1f3d35', '#2f6f9f', '#b9781f', '#7b5ea7', '#3f9e6b', '#5c7c8a'];
   const BOX = { w:106, h:130 }, THUMB_PX = 2;
-  // sides = student pages on each sheet of paper: 1 (one-sided), 2 (two-sided) or 4 (two-sided, two per side).
-  const SIDES_LS = 'teachingtools:printByStudent:sides', PAPER_LS = 'teachingtools:printByStudent:paper';
+  // sides = student pages on each sheet of paper: 1 (one-sided), 2 (two-sided) or 4 (two-sided, two per side),
+  // or 'half': two-sided, cut in half, each half one student's page on the front and their next page on the back.
+  const SIDES_LS = 'teachingtools:printByStudent:sides', PAPER_LS = 'teachingtools:printByStudent:paper',
+        FLIP_LS = 'teachingtools:printByStudent:flip';
   const PAPER = { letter:{ w:612, h:792 }, a4:{ w:595.28, h:841.89 } };   // PDF points, portrait
   const MARGIN = 14;   // pt kept clear inside each half of a 4-per-sheet side
-  const state = { file:null, bytes:null, cuts:new Set(), unit:'pages', sides:2, paper:'letter', view:'group', out:null, outFor:'', busy:false };
+  const state = { file:null, bytes:null, cuts:new Set(), unit:'pages', sides:2, paper:'letter', flip:'long', view:'group', out:null, outFor:'', busy:false };
   try {
-    const v = +localStorage.getItem(SIDES_LS); if ([1, 2, 4].includes(v)) state.sides = v;
+    const raw = localStorage.getItem(SIDES_LS), v = +raw;
+    if (raw === 'half') state.sides = 'half'; else if ([1, 2, 4].includes(v)) state.sides = v;
     if (localStorage.getItem(PAPER_LS) === 'a4') state.paper = 'a4';
+    if (localStorage.getItem(FLIP_LS) === 'short') state.flip = 'short';
   } catch(e){}
 
   /* ---------- groups and padding ---------- */
 
   // Each group: { pages:[0,1,2], blanks:n }. blanks = how many empty pages follow so the next student
-  // starts on a fresh sheet. One-sided printing never needs any.
+  // starts on a fresh sheet (or, for half sheets, a fresh half). One-sided printing never needs any.
   function groups(){
     const f = state.file; if (!f) return [];
     const out = []; let start = 0;
     for (let i = 0; i < f.count; i++){
       if (state.cuts.has(i) || i === f.count - 1){
         const pages = []; for (let p = start; p <= i; p++) pages.push(p);
-        out.push({ pages, blanks:(state.sides - pages.length % state.sides) % state.sides });
+        const per = perSheet();
+        out.push({ pages, blanks:(per - pages.length % per) % per });
         start = i + 1;
       }
     }
     return out;
   }
-  const keyOf = () => state.file ? state.file.count + ':' + state.sides + ':' + state.paper + ':' + [...state.cuts].sort((a, b) => a - b).join(',') : '';
+  const perSheet = () => state.sides === 'half' ? 2 : state.sides;   // student pages before the next student may start
+  // Sheets of paper: half-sheet students share sheets, two halves to a sheet; the others get their own.
+  const sheetCount = gs => state.sides === 'half'
+    ? Math.ceil(gs.reduce((a, g) => a + (g.pages.length + g.blanks) / 2, 0) / 2)
+    : gs.reduce((a, g) => a + Math.ceil(g.pages.length / state.sides), 0);
+  const keyOf = () => state.file ? state.file.count + ':' + state.sides + ':' + state.paper + ':' + state.flip + ':' + [...state.cuts].sort((a, b) => a - b).join(',') : '';
 
   async function buildOutput(gs){
     if (state.sides === 4) return buildFourUp(gs);
+    if (state.sides === 'half') return buildHalves(gs);
     const src = state.file.lib, out = await PDFLib.PDFDocument.create();
     const all = await out.copyPages(src, src.getPageIndices());
     for (const g of gs){
@@ -416,6 +437,59 @@
       for (let slot = 0; slot < 2; slot++) if (seq[i + slot] >= 0) place(side, embedded.get(seq[i + slot]), slot);
     }
     out.setTitle(state.file.name + ' (print by student)');
+    return out.save();
+  }
+  // Half sheets: every student's pages are paired (1 with 2, 3 with 4, a blank after an odd last page),
+  // and each pair is one half of a sheet: the first page on the front, the second right behind it.
+  // Halves fill the sheets in order, so students share sheets; cut the stack in half after printing.
+  // Portrait pages sit side by side on a landscape sheet, landscape pages one above the other.
+  // Each half is turned over like a book page, so its back is behind the mirrored half. That turn is
+  // a flip over the SHORT edge of a landscape sheet but the LONG edge of a portrait one; when the
+  // printer's setting is the other edge, its backs come out upside down, so they are drawn turned
+  // 180° to make up for it (which puts each back behind its own half instead of the mirrored one).
+  async function buildHalves(gs){
+    const { PDFDocument, degrees, rgb } = PDFLib;
+    const src = state.file.lib, out = await PDFDocument.create();
+    const seq = []; for (const g of gs){ seq.push(...g.pages); for (let b = 0; b < g.blanks; b++) seq.push(-1); }
+    const embedded = new Map();
+    for (const i of new Set(seq)){
+      if (i < 0) continue;
+      const p = src.getPage(i), cb = p.getCropBox();   // the box viewers display
+      const emb = await out.embedPage(p, { left:cb.x, bottom:cb.y, right:cb.x + cb.width, top:cb.y + cb.height });
+      const rot = ((p.getRotation().angle % 360) + 360) % 360;   // embedPage ignores /Rotate
+      const swap = rot === 90 || rot === 270;
+      embedded.set(i, { emb, rot, cw:cb.width, ch:cb.height, w:swap ? cb.height : cb.width, h:swap ? cb.width : cb.height });
+    }
+    const first = state.file.sizes[seq.find(i => i >= 0)], tall = first.h >= first.w;
+    const paper = PAPER[state.paper] || PAPER.letter;
+    const sw = tall ? paper.h : paper.w, sh = tall ? paper.w : paper.h;
+    // slot 0 = left (or top) half, slot 1 = right (or bottom) half
+    const cell = slot => tall ? { x:slot * sw / 2, y:0, w:sw / 2, h:sh } : { x:0, y:slot ? 0 : sh / 2, w:sw, h:sh / 2 };
+    const turned = tall ? state.flip === 'long' : state.flip === 'short';
+    function place(side, pg, slot, turn){
+      const cl = cell(slot), rot = turn ? (pg.rot + 180) % 360 : pg.rot;
+      const k = Math.min((cl.w - 2 * MARGIN) / pg.w, (cl.h - 2 * MARGIN) / pg.h);
+      const dw = pg.w * k, dh = pg.h * k, cw = pg.cw * k, ch = pg.ch * k;
+      const X = cl.x + (cl.w - dw) / 2, Y = cl.y + (cl.h - dh) / 2;
+      // pdf-lib rotates counter-clockwise about the lower-left corner; /Rotate is clockwise.
+      const o = rot === 90 ? [X, Y + dh] : rot === 180 ? [X + cw, Y + ch] : rot === 270 ? [X + dw, Y] : [X, Y];
+      side.drawPage(pg.emb, { x:o[0], y:o[1], width:cw, height:ch, rotate:degrees(-rot) });
+    }
+    function cutLine(side){
+      const style = { thickness:0.5, color:rgb(0.6, 0.6, 0.6), dashArray:[4, 4] };
+      if (tall) side.drawLine({ start:{ x:sw / 2, y:0 }, end:{ x:sw / 2, y:sh }, ...style });
+      else side.drawLine({ start:{ x:0, y:sh / 2 }, end:{ x:sw, y:sh / 2 }, ...style });
+    }
+    for (let i = 0; i < seq.length; i += 4){             // 4 pages = 2 halves = 1 sheet
+      const front = out.addPage([sw, sh]), back = out.addPage([sw, sh]);
+      for (let slot = 0; slot < 2; slot++){
+        const f = seq[i + 2 * slot], b = seq[i + 2 * slot + 1];
+        if (f >= 0) place(front, embedded.get(f), slot);
+        if (b >= 0) place(back, embedded.get(b), turned ? slot : 1 - slot, turned);
+      }
+      cutLine(front);
+    }
+    out.setTitle(state.file.name + ' (print by student, half sheets)');
     return out.save();
   }
   async function getOutput(){
@@ -498,20 +572,21 @@
     const host = $('students');
     for (const t of tiles) t.remove();
     host.innerHTML = '';
-    let blanks = 0, outPages = 0;
+    const half = state.sides === 'half';
+    let blanks = 0, outPages = 0, halfAt = 0;   // halfAt = halves used by the students before this one
     gs.forEach((g, k) => {
       blanks += g.blanks; outPages += (g.pages.length + g.blanks) / (state.sides === 4 ? 2 : 1);
       const row = document.createElement('div'); row.className = 'stu'; row.style.setProperty('--fc', COLORS[k % COLORS.length]);
       row.innerHTML = '<div class="stu-head"><span class="stu-num"></span><span class="stu-meta"></span></div><div class="stu-pages"></div>';
       { const t = row.querySelector('.stu-num'); t.textContent = t.title = studentLabel(k, g); }
-      const sheets = Math.ceil(g.pages.length / state.sides);
+      const sheets = half ? (g.pages.length + g.blanks) / 2 : Math.ceil(g.pages.length / state.sides);
       row.querySelector('.stu-meta').textContent = plural(g.pages.length, 'page') +
-        (g.blanks ? ' + ' + plural(g.blanks, 'blank') : '') + ' · ' + plural(sheets, 'sheet');
+        (g.blanks ? ' + ' + plural(g.blanks, 'blank') : '') + ' · ' + plural(sheets, half ? 'half sheet' : 'sheet');
       const box = row.querySelector('.stu-pages');
       const n = g.pages.length + g.blanks;
       g.pages.forEach((p, j) => {
         const el = tiles[p];
-        el.querySelector('.side').textContent = sideLabel(j, n);
+        el.querySelector('.side').textContent = sideLabel(j, n, halfAt);
         const b = el.querySelector('.cutbtn'), cut = state.cuts.has(p), last = p === f.count - 1;
         b.hidden = last;
         b.classList.toggle('join', cut);
@@ -521,13 +596,15 @@
       });
       const s = f.sizes[g.pages[g.pages.length - 1]];
       for (let b = 0; b < g.blanks; b++){
-        const el = blankTile(s); el.querySelector('.side').textContent = sideLabel(g.pages.length + b, n);
+        const el = blankTile(s); el.querySelector('.side').textContent = sideLabel(g.pages.length + b, n, halfAt);
         box.appendChild(el);
       }
       host.appendChild(row);
+      halfAt += (g.pages.length + g.blanks) / 2;
     });
 
-    const sheets = gs.reduce((a, g) => a + Math.ceil(g.pages.length / state.sides), 0);
+    const sheets = sheetCount(gs);
+    if (half) outPages = sheets * 2;
     $('sStudents').textContent = gs.length; $('sBlanks').textContent = blanks;
     $('sPages').textContent = outPages; $('sSheets').textContent = sheets;
     const counts = new Map(); gs.forEach(g => counts.set(g.pages.length, (counts.get(g.pages.length) || 0) + 1));
@@ -537,15 +614,21 @@
       ? 'A blank back is added after any student who ends on the front of a sheet, so the next student never prints on their back.'
       : state.sides === 4
       ? 'Pages 1 | 2 on the front, 3 | 4 on the back. Blanks fill out each student’s last sheet, so the next student starts on fresh paper.'
+      : half
+      ? 'Each page is shrunk onto half a sheet, with the student’s next page on its back: pages 1 and 2 make one half, 3 and 4 the next. A blank back is added after an odd last page. Students share sheets: cut the printed stack in half.'
       : 'Printing one-sided, every page is its own sheet already, so no blanks are needed.';
     $('dialogHint').innerHTML = state.sides === 1
       ? 'In the print dialog, turn <b>two-sided off</b> and print <b>all pages</b>.'
+      : half
+      ? 'In the print dialog, choose <b>two-sided</b> (' + (state.flip === 'long' ? 'long' : 'short') + ' edge, as set above), paper <b>' + (state.paper === 'a4' ? 'A4' : 'Letter') + '</b> at 100% / actual size, and leave pages per sheet at 1. Then cut along the dashed line.'
       : state.sides === 4
       ? 'In the print dialog, choose <b>two-sided</b>, paper <b>' + (state.paper === 'a4' ? 'A4' : 'Letter') + '</b> at 100% / actual size, and leave pages per sheet at 1 (this file already has 2 per side). <b>Short edge</b>: the sheet turns like a book; <b>long edge</b>: it flips up like a calendar.'
       : 'In the print dialog, choose <b>two-sided</b> (long edge) and print <b>all pages</b> at 100% / actual size.';
-    $('paperRow').hidden = state.sides !== 4;
+    $('paperRow').hidden = state.sides !== 4 && !half;
+    $('flipRow').hidden = !half;
+    [...$('flipSeg').children].forEach(b => b.classList.toggle('active', b.dataset.v === state.flip));
     [...$('paperSeg').children].forEach(b => b.classList.toggle('active', b.dataset.v === state.paper));
-    [...$('sidesSeg').children].forEach(b => b.classList.toggle('active', +b.dataset.v === state.sides));
+    [...$('sidesSeg').children].forEach(b => b.classList.toggle('active', String(state.sides) === b.dataset.v));
     [...$('viewSeg').children].forEach(b => b.classList.toggle('active', b.dataset.v === state.view));
     $('empty').hidden = !!f;
     $('stPages').textContent = f ? f.count : 0; $('stStudents').textContent = gs.length; $('stOut').textContent = outPages;
@@ -564,7 +647,11 @@
     if (srcs.length < 2 || !srcs.some(x => x.start === first)) return 'Student ' + (k + 1);
     return (k + 1) + ' · ' + srcs.filter(x => x.start >= first && x.start <= last).map(x => x.name).join(' + ');
   }
-  const sideLabel = (j, n) => state.sides === 1 ? 'Sheet ' + (j + 1)
+  // halfAt: halves used before this student (half sheets only), as sheets are shared there
+  const halfName = (h, tall) => 'Sheet ' + (Math.floor(h / 2) + 1) + ' ' + (h % 2 ? (tall ? 'right' : 'bottom') : (tall ? 'left' : 'top'));
+  const sideLabel = (j, n, halfAt) => state.sides === 'half'
+    ? halfName(halfAt + Math.floor(j / 2), state.file.sizes[0].h >= state.file.sizes[0].w) + (j % 2 ? ' back' : ' front')
+    : state.sides === 1 ? 'Sheet ' + (j + 1)
     : state.sides === 2 ? 'Sheet ' + (Math.floor(j / 2) + 1) + (j % 2 ? ' back' : ' front')
     : 'Sheet ' + (Math.floor(j / 4) + 1) + (j % 4 < 2 ? ' front' : ' back') + ' ' + (j % 2 ? '2' : '1');
 
@@ -884,8 +971,14 @@
   });
   $('sidesSeg').addEventListener('click', e => {
     const b = e.target.closest('[data-v]'); if (!b) return;
-    state.sides = +b.dataset.v;
+    state.sides = b.dataset.v === 'half' ? 'half' : +b.dataset.v;
     try { localStorage.setItem(SIDES_LS, String(state.sides)); } catch(e){}
+    render();
+  });
+  $('flipSeg').addEventListener('click', e => {
+    const b = e.target.closest('[data-v]'); if (!b) return;
+    state.flip = b.dataset.v;
+    try { localStorage.setItem(FLIP_LS, state.flip); } catch(e){}
     render();
   });
   $('paperSeg').addEventListener('click', e => {
